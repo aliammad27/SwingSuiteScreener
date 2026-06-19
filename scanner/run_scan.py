@@ -11,6 +11,7 @@ from scanner.daily_command import calculate_command
 from scanner.data_quality import DataQualityError, require_completed_candles
 from scanner.entry_plan import build_entry_plan
 from scanner.grading import grade_candidate
+from scanner.indicators import ema
 from scanner.market_regime import classify_market_regime
 from scanner.models import Candidate, Grade, RejectedRecord, ScanResult, ScanType
 from scanner.momentum import calculate_momentum, strict_daily_filter
@@ -52,10 +53,10 @@ def _scan_symbol(
     benchmark = "QQQ"
     benchmark_daily = market.daily(benchmark)
     require_completed_candles(daily, minimum=220, label=f"{symbol} daily")
-    require_completed_candles(four_hour, minimum=80, label=f"{symbol} four_hour")
+    require_completed_candles(four_hour, minimum=60, label=f"{symbol} four_hour")
     require_completed_candles(weekly, minimum=30, label=f"{symbol} weekly")
     command = calculate_command(symbol, daily, benchmark_daily, weekly)
-    daily_htf = weekly[-1].close > command.ema21
+    daily_htf = weekly[-1].close > ema([c.close for c in weekly], 21)
     daily_momentum = calculate_momentum(symbol, daily, "1D", daily_htf)
     daily_filter = strict_daily_filter(daily_momentum)
     four_hour_momentum = calculate_momentum(symbol, four_hour, "4H", daily_filter)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from scanner.models import Candle, Catalyst, OptionQuote
@@ -47,9 +47,21 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
         return data
 
     def _bars(self, symbol: str, timeframe: str, limit: int) -> list[Candle]:
+        end = datetime.now(UTC) - timedelta(minutes=20)
+        lookback_days = {"1Day": 520, "4Hour": 240, "1Week": 900}.get(timeframe, 240)
+        start = end - timedelta(days=lookback_days)
         data = self._get(
             "/v2/stocks/bars",
-            {"symbols": symbol, "timeframe": timeframe, "limit": str(limit), "feed": self.feed},
+            {
+                "symbols": symbol,
+                "timeframe": timeframe,
+                "limit": str(limit),
+                "feed": self.feed,
+                "adjustment": "all",
+                "sort": "desc",
+                "start": start.isoformat().replace("+00:00", "Z"),
+                "end": end.isoformat().replace("+00:00", "Z"),
+            },
         )
         bars = data.get("bars", {}).get(symbol, [])
         candles: list[Candle] = []
@@ -68,7 +80,7 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
                     source="alpaca",
                 )
             )
-        return candles
+        return sorted(candles, key=lambda candle: candle.timestamp)
 
     def daily(self, symbol: str) -> list[Candle]:
         return self._bars(symbol, "1Day", 260)
