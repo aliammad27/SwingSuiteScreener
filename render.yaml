@@ -1,0 +1,16 @@
+services:
+  - type: cron
+    name: swingsuite-post-close
+    runtime: docker
+    schedule: "20 21 * * 1-5"
+    dockerCommand: "python -m scanner.run_scan post_close"
+  - type: cron
+    name: swingsuite-premarket
+    runtime: docker
+    schedule: "45 12 * * 1-5"
+    dockerCommand: "python -m scanner.run_scan premarket"
+  - type: cron
+    name: swingsuite-four-hour
+    runtime: docker
+    schedule: "35 17 * * 1-5"
+    dockerCommand: "python -m scanner.run_scan four_hour"

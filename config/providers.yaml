@@ -1,0 +1,8 @@
+market_data: fixture
+options: fixture
+catalysts: fixture
+notifications: telegram
+persistence: local_json
+alpaca:
+  data_base_url: https://data.alpaca.markets
+  feed: iex

@@ -1,0 +1,6 @@
+timezone: America/New_York
+post_close_time: "16:20"
+premarket_time: "08:45"
+four_hour_time: "13:35"
+respect_holidays: true
+respect_half_days: true

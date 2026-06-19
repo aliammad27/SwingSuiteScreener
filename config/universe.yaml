@@ -1,0 +1,20 @@
+country: US
+security_types:
+  - common_stock
+options_required: true
+minimum_price: 10
+minimum_market_cap_usd: 1000000000
+minimum_average_daily_dollar_volume_usd: 50000000
+average_volume_lookback_days: 30
+exclude_otc: true
+exclude_penny_stocks: true
+exclude_leveraged_etfs: true
+exclude_inverse_etfs: true
+exclude_shell_companies: true
+exclude_missing_data: true
+symbols:
+  - MSFT
+  - AAPL
+  - NVDA
+  - AMD
+  - META

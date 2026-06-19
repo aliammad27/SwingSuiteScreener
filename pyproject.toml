@@ -1,0 +1,26 @@
+[project]
+name = "swingsuite-screener"
+version = "1.0.0"
+description = "Deterministic bullish call swing-trading screener"
+requires-python = ">=3.12"
+dependencies = [
+  "requests>=2.31.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "S"]
+ignore = ["E501", "S101", "S310", "S603", "S607"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+exclude = ["tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

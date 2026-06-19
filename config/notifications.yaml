@@ -1,0 +1,27 @@
+enabled: true
+provider: telegram
+timezone: America/New_York
+send_post_close_completion: true
+send_zero_setup_completion: true
+send_premarket_only_on_change: true
+send_four_hour_only_on_change: true
+maximum_candidates_per_message: 5
+local_macos_fallback: true
+notify_on:
+  new_s_tier: true
+  new_a_plus: true
+  promotion_to_s_tier: true
+  demotion: true
+  rejection_of_active_candidate: true
+  breakout_trigger_confirmed: true
+  pullback_support_held: true
+  support_lost: true
+  invalidation_triggered: true
+  price_became_extended: true
+  catalyst_invalidated: true
+  earnings_risk_discovered: true
+  option_liquidity_deteriorated: true
+  market_regime_became_hostile: true
+  stale_data: true
+  scan_failure: true
+  unchanged_candidate: false

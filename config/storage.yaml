@@ -1,0 +1,3 @@
+backend: local_json
+local_state_path: data/state
+postgres_dsn_env: DATABASE_URL
