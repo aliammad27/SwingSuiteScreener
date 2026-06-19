@@ -15,3 +15,8 @@
 - Added free-first mode for Alpaca Basic: IEX equities and indicative options.
 - Added `Technical Watch` labeling when technical gates pass but paid-quality option liquidity is unavailable.
 - Added local `.env` autoloading and a June 22, 2026 readiness check command.
+
+## 1.0.2 - 2026-06-19
+
+- Added free GitHub Actions scheduled automation for premarket, four-hour, and post-close scans.
+- Added a manual GitHub Actions readiness workflow that validates secrets and sends a Telegram test.

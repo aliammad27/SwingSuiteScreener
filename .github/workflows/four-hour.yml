@@ -1,0 +1,53 @@
+name: Four Hour Refresh
+
+on:
+  schedule:
+    # 1:35 PM America/New_York during daylight saving time.
+    - cron: "35 17 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: swingsuite-four-hour
+  cancel-in-progress: false
+
+jobs:
+  four-hour:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+      ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+      ALPACA_DATA_BASE_URL: https://data.alpaca.markets
+      ALPACA_FEED: iex
+      ALPACA_OPTION_FEED: indicative
+      FREE_MODE: "true"
+      ALLOW_TECHNICAL_WATCH: "true"
+      TELEGRAM_BOT_USERNAME: AlisScreenerBot
+      TELEGRAM_BOT_URL: https://t.me/AlisScreenerBot
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      STORAGE_BACKEND: local_json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Run four hour refresh
+        run: python -m scanner.run_scan four_hour
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: four-hour-report
+          path: |
+            reports/four_hour/latest.md
+            reports/four_hour/latest.json
+            logs/notifications.log
+          if-no-files-found: ignore
+

@@ -149,14 +149,35 @@ The repository includes:
 - `Dockerfile`
 - `.dockerignore`
 - `render.yaml`
+- GitHub Actions schedules in `.github/workflows/`
 - scheduled shell scripts in `scripts/`
+
+Default free automation uses GitHub Actions:
+
+- Premarket validation: 8:45 AM ET during daylight saving time
+- Four-hour refresh: 1:35 PM ET during daylight saving time
+- Post-close scan: 4:20 PM ET during daylight saving time
+
+The workflow cron expressions are UTC because GitHub schedules run on GitHub's
+infrastructure. The app still validates market calendar rules internally.
 
 Render Cron Jobs can run the Docker commands in `render.yaml`. Google Cloud Run
 Jobs can build the same container and schedule equivalent commands with Cloud
 Scheduler. Do not create paid cloud resources without explicit approval.
 
 Estimated operating cost depends on provider plans, scan frequency, and selected
-cloud runtime. Fixture mode runs locally without paid services.
+cloud runtime. GitHub Actions is free for public repositories and includes a free
+minutes quota for private repositories. This scanner's three daily Linux jobs are
+intended to stay inside that included quota.
+
+Required GitHub Actions secrets:
+
+```text
+ALPACA_API_KEY_ID
+ALPACA_API_SECRET_KEY
+TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID
+```
 
 ## Security
 
@@ -185,3 +206,7 @@ python -m scanner.run_scan post_close --fixture
 
 Live scans require free Alpaca API keys in `.env`. Do not add paid plans unless
 you explicitly decide the OPRA/SIP upgrade is worth it.
+
+GitHub Actions scheduled runs require the same values as GitHub repository
+secrets. After secrets are set and workflows are pushed, the scanner runs while
+your laptop is off.

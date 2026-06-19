@@ -207,7 +207,7 @@ Alpaca Basic equities through IEX
 Alpaca Basic options through the indicative feed
 Telegram Bot API
 Local JSON state
-Local or user-controlled scheduled execution
+GitHub Actions scheduled execution
 ```
 
 Free Alpaca data is useful but limited. IEX does not represent full consolidated SIP market coverage, and indicative options are not OPRA-quality executable option liquidity.
@@ -224,6 +224,17 @@ Therefore:
 8. Never recommend a specific option contract from indicative, stale, unknown, or incomplete option data.
 
 Technical Watch may appear in reports and Telegram completion counts in free mode, but it is not S tier or A Plus.
+
+Free automation should use GitHub Actions by default. Required repository secrets are:
+
+```text
+ALPACA_API_KEY_ID
+ALPACA_API_SECRET_KEY
+TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID
+```
+
+The scheduled workflows must not print secret values. They should run on GitHub-hosted Linux runners using the included GitHub Actions minutes quota and should upload generated reports as workflow artifacts.
 
 ## 3. Notification Decision
 
