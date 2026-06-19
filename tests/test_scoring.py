@@ -27,3 +27,12 @@ def test_zero_candidate_rejected() -> None:
     candidate = _fixture_grade("ZERO")
     assert candidate.grade == Grade.REJECTED
     assert candidate.rejection_reasons
+
+
+def test_free_mode_technical_watch_when_option_liquidity_missing() -> None:
+    provider = FixtureDataProvider(scenario="technical_watch")
+    regime = classify_market_regime(provider.daily("SPY"), provider.daily("QQQ"), provider.weekly("SPY"))
+    candidate = _scan_symbol("SSTR", provider, provider, provider, regime)
+    assert candidate.grade == Grade.TECHNICAL_WATCH
+    assert candidate.option_liquidity == "Unknown"
+    assert "option liquidity" in (candidate.missing_confirmation or "").lower()

@@ -196,6 +196,35 @@ Hard avoids include:
 8. Elevated implied volatility that makes the premium unattractive.
 9. Unresolved earnings or event risk.
 
+## 2B. Free First Operating Mode
+
+The project should stay free unless the user explicitly approves a paid data, cloud, or database upgrade.
+
+Default free mode uses:
+
+```text
+Alpaca Basic equities through IEX
+Alpaca Basic options through the indicative feed
+Telegram Bot API
+Local JSON state
+Local or user-controlled scheduled execution
+```
+
+Free Alpaca data is useful but limited. IEX does not represent full consolidated SIP market coverage, and indicative options are not OPRA-quality executable option liquidity.
+
+Therefore:
+
+1. Do not label a live setup S tier unless current tradable option liquidity is Good.
+2. Do not label a live setup A Plus unless option liquidity is Good or Acceptable.
+3. When a setup passes technical gates but only indicative or unknown option data is available, label it Technical Watch.
+4. Technical Watch means research-worthy, not trade-ready.
+5. Technical Watch must include trigger, support, invalidation, and the exact missing option-liquidity reason.
+6. Never lower S tier or A Plus thresholds to compensate for free data limitations.
+7. Never represent indicative option quotes as current OPRA-quality liquidity.
+8. Never recommend a specific option contract from indicative, stale, unknown, or incomplete option data.
+
+Technical Watch may appear in reports and Telegram completion counts in free mode, but it is not S tier or A Plus.
+
 ## 3. Notification Decision
 
 Use Telegram as the notification destination for version one.
@@ -1159,6 +1188,35 @@ Permitted minor missing confirmations:
 
 Two meaningful missing confirmations disqualify A plus.
 
+### 16.2A Technical Watch
+
+Technical Watch is allowed only in free-first mode.
+
+Requirements:
+
+```text
+Daily Command Score is at least 75
+Daily momentum is at least 70
+Four hour momentum is at least 75
+Price is not extended
+Relative strength is leading or improving
+Market regime is not hostile
+No major unresolved risk exists
+Option liquidity is Unknown or Indicative because paid-quality option data is unavailable
+```
+
+Technical Watch must not be described as trade-ready.
+
+Technical Watch must state:
+
+```text
+Current tradable option liquidity is unavailable on the free data plan.
+Review the underlying technical setup only.
+Do not enter an option trade until current bid, ask, spread, volume, open interest, DTE, delta, and IV are verified in the broker.
+```
+
+Technical Watch is not a downgrade path for weak setups. It is only for technically qualified setups blocked by free data limitations.
+
 ### 16.3 Automatic Rejection
 
 Reject from the primary report when any condition applies:
@@ -1631,6 +1689,14 @@ Missing confirmation:
 Reason it is not S tier:
 ```
 
+When free mode produces Technical Watch candidates, add:
+
+```text
+FREE TECHNICAL WATCH
+```
+
+Each Technical Watch record must use the same fields and must clearly state that it is not trade-ready because current tradable option liquidity is unavailable or only indicative.
+
 End every report with:
 
 ```text
@@ -1673,6 +1739,7 @@ Use this top level structure:
   "research_count": 0,
   "s_tier": [],
   "a_plus": [],
+  "technical_watch": [],
   "rejected": []
 }
 ```

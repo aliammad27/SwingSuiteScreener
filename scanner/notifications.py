@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import ssl
 import subprocess
 import time
 from dataclasses import dataclass
@@ -10,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib import parse, request
 
-from scanner.config import ROOT
+from scanner.config import ROOT, load_local_env
 from scanner.models import Candidate, ScanResult
 
 TELEGRAM_TEST_MESSAGE = (
@@ -36,8 +37,9 @@ class DeliveryResult:
 
 class TelegramNotifier:
     def __init__(self, token: str | None = None, chat_id: str | None = None) -> None:
-        self.token = token or os.environ.get("TELEGRAM_BOT_TOKEN")
-        self.chat_id = chat_id or os.environ.get("TELEGRAM_CHAT_ID")
+        load_local_env()
+        self.token = token if token is not None else os.environ.get("TELEGRAM_BOT_TOKEN")
+        self.chat_id = chat_id if chat_id is not None else os.environ.get("TELEGRAM_CHAT_ID")
         self.username = os.environ.get("TELEGRAM_BOT_USERNAME", "AlisScreenerBot")
 
     def available(self) -> bool:
@@ -48,6 +50,14 @@ class TelegramNotifier:
             raise RuntimeError("Telegram token is not configured.")
         return f"https://api.telegram.org/bot{self.token}/{method}"
 
+    def _ssl_context(self) -> ssl.SSLContext | None:
+        try:
+            import certifi
+
+            return ssl.create_default_context(cafile=certifi.where())
+        except Exception:
+            return None
+
     def send(self, message: str) -> DeliveryResult:
         if not self.available():
             return DeliveryResult(False, "not_configured", "Telegram token or chat id is missing.")
@@ -55,7 +65,7 @@ class TelegramNotifier:
         for attempt in range(3):
             try:
                 req = request.Request(self._api("sendMessage"), data=payload, method="POST")
-                with request.urlopen(req, timeout=12) as response:
+                with request.urlopen(req, timeout=12, context=self._ssl_context()) as response:
                     body = json.loads(response.read().decode("utf-8"))
                 if body.get("ok") is True:
                     return DeliveryResult(True, "delivered")
@@ -73,12 +83,12 @@ class TelegramNotifier:
     def discover_chat_id(self) -> int:
         if not self.token:
             raise RuntimeError("Telegram token is not configured.")
-        with request.urlopen(self._api("getMe"), timeout=12) as response:
+        with request.urlopen(self._api("getMe"), timeout=12, context=self._ssl_context()) as response:
             identity = json.loads(response.read().decode("utf-8"))
         username = identity.get("result", {}).get("username")
         if username != self.username:
             raise RuntimeError("Configured Telegram bot username does not match Bot API identity.")
-        with request.urlopen(self._api("getUpdates"), timeout=12) as response:
+        with request.urlopen(self._api("getUpdates"), timeout=12, context=self._ssl_context()) as response:
             updates = json.loads(response.read().decode("utf-8"))
         for item in reversed(updates.get("result", [])):
             chat = item.get("message", {}).get("chat", {})
@@ -141,13 +151,14 @@ def candidate_message(candidate: Candidate, report_path: Path) -> str:
 
 
 def completion_message(result: ScanResult, report_path: Path) -> str:
-    if result.s_tier or result.a_plus:
-        top = (result.s_tier + result.a_plus)[0]
+    if result.s_tier or result.a_plus or result.technical_watch:
+        top = (result.s_tier + result.a_plus + result.technical_watch)[0]
         return (
             f"{result.scan_type.value.replace('_', ' ').upper()} SCAN COMPLETE\n\n"
             f"Market regime: {result.market_regime}\n"
             f"S tier: {len(result.s_tier)}\n"
             f"A plus: {len(result.a_plus)}\n"
+            f"Free technical watch: {len(result.technical_watch)}\n"
             f"Securities scanned: {result.universe_count}\n"
             f"Completed: {datetime.now(UTC).isoformat()}\n\n"
             f"Top setup: {top.symbol}\n"

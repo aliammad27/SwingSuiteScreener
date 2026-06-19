@@ -82,6 +82,8 @@ class FixtureDataProvider(MarketDataProvider, OptionDataProvider, CatalystProvid
         return "Technology" if symbol != "ZERO" else "Industrials"
 
     def option_quotes(self, symbol: str) -> list[OptionQuote]:
+        if self.scenario == "technical_watch":
+            return []
         if symbol == "ZERO":
             return [
                 OptionQuote("FIXTURE", 21, 0.30, 1.0, 1.4, 50, 10, 85, FIXTURE_TIMESTAMP)

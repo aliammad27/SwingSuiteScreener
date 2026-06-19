@@ -20,3 +20,13 @@ def test_zero_report_wording() -> None:
     text = md.read_text(encoding="utf-8")
     assert "No S tier or A plus setups qualified today." in text
     assert "Standards were not lowered." in text
+
+
+def test_technical_watch_report_section_and_json() -> None:
+    result = run_scan(ScanType.POST_CLOSE, fixture=True, scenario="technical_watch")
+    md, js = write_reports(result)
+    text = md.read_text(encoding="utf-8")
+    data = json.loads(js.read_text(encoding="utf-8"))
+    assert "FREE TECHNICAL WATCH" in text
+    assert "not trade-ready" in text
+    assert data["technical_watch"]

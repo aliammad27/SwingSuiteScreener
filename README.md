@@ -27,6 +27,7 @@ SIMULATED FIXTURE OUTPUT — NOT CURRENT MARKET DATA
 
 ```bash
 python -m scanner.run_scan validate_configuration
+python -m scanner.run_scan readiness_check
 python -m scanner.run_scan post_close --fixture
 python -m scanner.run_scan premarket --fixture
 python -m scanner.run_scan four_hour --fixture
@@ -42,8 +43,31 @@ Additional deterministic fixture scenarios:
 ```bash
 python -m scanner.run_scan post_close --fixture --scenario s_tier
 python -m scanner.run_scan post_close --fixture --scenario a_plus
+python -m scanner.run_scan post_close --fixture --scenario technical_watch
 python -m scanner.run_scan post_close --fixture --scenario zero
 ```
+
+## Free-First Provider Mode
+
+The default setup is designed to stay free:
+
+- Equities: Alpaca Basic / free IEX feed through `ALPACA_FEED=iex`
+- Options: Alpaca indicative options feed through `ALPACA_OPTION_FEED=indicative`
+- Notifications: Telegram Bot API
+- Storage: local JSON unless you later choose a free/paid external database
+
+Alpaca's Basic plan has important limits: IEX-only equity coverage, indicative
+options rather than OPRA, and latest-15-minute restrictions on historical data.
+Because of that, free mode is intentionally conservative:
+
+- True S tier still requires current good option liquidity.
+- True A Plus still requires good or acceptable option liquidity.
+- If a setup passes the technical gates but only indicative/unknown option data is
+  available, it is labeled `Technical Watch`, not trade-ready.
+
+This keeps the scanner useful without pretending free data is paid OPRA-quality.
+
+Source: https://docs.alpaca.markets/us/docs/about-market-data-api
 
 ## Providers
 
@@ -66,11 +90,12 @@ ALPACA_API_KEY_ID
 ALPACA_API_SECRET_KEY
 ALPACA_DATA_BASE_URL
 ALPACA_FEED
+ALPACA_OPTION_FEED
 ```
 
-Alpaca feed limitation: the default `.env.example` uses `iex`, which is available
-on many plans but does not include the full SIP consolidated feed. Use a permitted
-feed for the account and plan.
+Alpaca feed limitation: the default `.env.example` uses `iex` for equities and
+`indicative` for options so the project can stay free. SIP equities and OPRA
+options require paid access.
 
 ## Telegram Setup
 
@@ -96,6 +121,9 @@ Setup:
 9. Run `python -m scanner.run_scan validate_configuration`.
 
 The token is never printed by discovery, tests, reports, or logs.
+
+The application loads the local `.env` file automatically for scanner and
+notification commands. You do not need to run `source .env`.
 
 ## Reports
 
@@ -143,3 +171,17 @@ ruff check .
 mypy scanner
 docker build -t swingsuite-screener .
 ```
+
+## June 22, 2026 Readiness
+
+June 19, 2026 is a U.S. market holiday. The next regular market open is Monday,
+June 22, 2026. Run this before then:
+
+```bash
+python -m scanner.run_scan readiness_check
+python -m scanner.run_scan test_notification
+python -m scanner.run_scan post_close --fixture
+```
+
+Live scans require free Alpaca API keys in `.env`. Do not add paid plans unless
+you explicitly decide the OPRA/SIP upgrade is worth it.

@@ -78,6 +78,7 @@ def result_to_json(result: ScanResult) -> dict[str, Any]:
         "research_count": result.research_count,
         "s_tier": [asdict(c) for c in result.s_tier],
         "a_plus": [asdict(c) for c in result.a_plus],
+        "technical_watch": [asdict(c) for c in result.technical_watch],
         "rejected": [asdict(r) for r in result.rejected],
     }
 
@@ -99,6 +100,7 @@ def write_reports(result: ScanResult) -> tuple[Path, Path]:
             f"Securities scanned: {result.universe_count}",
             f"Passed deterministic filters: {result.deterministic_pass_count}",
             f"Received catalyst review: {result.research_count}",
+            f"Free technical watch: {len(result.technical_watch)}",
             "",
             "S TIER",
             "",
@@ -113,7 +115,19 @@ def write_reports(result: ScanResult) -> tuple[Path, Path]:
         for idx, candidate in enumerate(result.a_plus, 1):
             lines.extend(_candidate_block(candidate, idx, include_a_plus=True))
             lines.append("")
-    if not result.s_tier and not result.a_plus:
+    lines.extend(["FREE TECHNICAL WATCH", ""])
+    if result.technical_watch:
+        lines.extend(
+            [
+                "These are not trade-ready options setups. They passed the technical gates, "
+                "but current tradable option liquidity is unavailable or only indicative.",
+                "",
+            ]
+        )
+        for idx, candidate in enumerate(result.technical_watch, 1):
+            lines.extend(_candidate_block(candidate, idx, include_a_plus=True))
+            lines.append("")
+    if not result.s_tier and not result.a_plus and not result.technical_watch:
         lines.extend(["No S tier or A plus setups qualified today.", "", "Standards were not lowered.", ""])
     lines.extend(
         [

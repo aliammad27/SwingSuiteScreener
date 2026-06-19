@@ -6,3 +6,5 @@ persistence: local_json
 alpaca:
   data_base_url: https://data.alpaca.markets
   feed: iex
+  option_feed: indicative
+  free_mode: true

@@ -42,6 +42,7 @@ def grade_candidate(
     catalyst: Catalyst,
     market_regime: str,
     entry_plan: EntryPlan,
+    allow_technical_watch: bool = True,
 ) -> Candidate:
     rejection_reasons = automatic_rejections(
         command, daily_momentum, four_hour, option_liquidity, catalyst, market_regime
@@ -93,6 +94,22 @@ def grade_candidate(
             grade = Grade.A_PLUS
             missing = "; ".join(missing_labels) if missing_labels else "None"
             reason = "One or more S tier requirements did not pass."
+        elif allow_technical_watch and all(
+            [
+                command.score >= 75,
+                daily_momentum.score >= 70,
+                four_hour.score >= 75,
+                not command.extended,
+                command.relative_strength in {"Leading", "Improving"},
+                option_liquidity in {"Unknown", "Indicative"},
+                market_regime != "Hostile",
+                not catalyst.major_event_risk,
+                not rejection_reasons,
+            ]
+        ):
+            grade = Grade.TECHNICAL_WATCH
+            missing = "Current tradable option liquidity is unavailable on the free data plan"
+            reason = "Not S tier or A Plus because OPRA-quality option liquidity is unavailable."
         else:
             grade = Grade.REJECTED
             missing = None

@@ -10,3 +10,5 @@ minimum_contract_daily_volume: 100
 earnings_blackout_calendar_days: 7
 allow_earnings_event_trades: false
 maximum_report_candidates: 5
+allow_technical_watch_without_opra: true
+free_mode_option_liquidity_label: Indicative

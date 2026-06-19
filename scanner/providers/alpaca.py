@@ -24,6 +24,7 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
         self.secret = os.environ.get("ALPACA_API_SECRET_KEY")
         self.base_url = os.environ.get("ALPACA_DATA_BASE_URL", "https://data.alpaca.markets")
         self.feed = os.environ.get("ALPACA_FEED", "iex")
+        self.option_feed = os.environ.get("ALPACA_OPTION_FEED", "indicative")
         if not self.key or not self.secret:
             raise AlpacaConfigurationError("Alpaca data credentials are not configured.")
 
@@ -87,7 +88,7 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
     def option_quotes(self, symbol: str) -> list[OptionQuote]:
         data = self._get(
             f"/v1beta1/options/snapshots/{symbol}",
-            {"limit": "100", "feed": self.feed},
+            {"limit": "100", "feed": self.option_feed},
         )
         snapshots = data.get("snapshots", {})
         quotes: list[OptionQuote] = []

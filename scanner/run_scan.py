@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, datetime
+import os
+from datetime import UTC, date, datetime
 from pathlib import Path
 
-from scanner.config import ConfigurationError, validate_configuration
+from scanner.calendars import is_trading_day, market_close_for
+from scanner.config import ConfigurationError, load_local_env, validate_configuration
 from scanner.daily_command import calculate_command
 from scanner.data_quality import DataQualityError, require_completed_candles
 from scanner.entry_plan import build_entry_plan
@@ -57,7 +59,10 @@ def _scan_symbol(
     daily_momentum = calculate_momentum(symbol, daily, "1D", daily_htf)
     daily_filter = strict_daily_filter(daily_momentum)
     four_hour_momentum = calculate_momentum(symbol, four_hour, "4H", daily_filter)
-    option_liquidity = classify_option_liquidity(options.option_quotes(symbol))
+    option_quotes = options.option_quotes(symbol)
+    option_liquidity = classify_option_liquidity(option_quotes)
+    if option_quotes and getattr(options, "option_feed", "") == "indicative":
+        option_liquidity = "Indicative"
     catalyst = catalysts.catalyst(symbol)
     entry = build_entry_plan(command, four_hour_momentum)
     return grade_candidate(
@@ -72,6 +77,7 @@ def _scan_symbol(
         catalyst=catalyst,
         market_regime=market_regime,
         entry_plan=entry,
+        allow_technical_watch=os.environ.get("ALLOW_TECHNICAL_WATCH", "true").lower() == "true",
     )
 
 
@@ -86,6 +92,8 @@ def run_scan(scan_type: ScanType, *, fixture: bool = False, scenario: str = "def
         symbols = ["SSTR"]
     elif fixture and scenario == "a_plus":
         symbols = ["APLUS"]
+    elif fixture and scenario == "technical_watch":
+        symbols = ["SSTR"]
     else:
         symbols = configured_symbols(fixture=fixture)
     candidates: list[Candidate] = []
@@ -100,6 +108,8 @@ def run_scan(scan_type: ScanType, *, fixture: bool = False, scenario: str = "def
             candidates.append(candidate)
         elif candidate.grade == Grade.A_PLUS:
             candidates.append(candidate)
+        elif candidate.grade == Grade.TECHNICAL_WATCH:
+            candidates.append(candidate)
         else:
             rejected.append(
                 RejectedRecord(
@@ -112,6 +122,10 @@ def run_scan(scan_type: ScanType, *, fixture: bool = False, scenario: str = "def
     s_tier = [c for c in candidates if c.grade == Grade.S_TIER][:5]
     remaining_slots = max(0, 5 - len(s_tier))
     a_plus = [c for c in candidates if c.grade == Grade.A_PLUS][:remaining_slots]
+    remaining_slots = max(0, remaining_slots - len(a_plus))
+    technical_watch = [
+        c for c in candidates if c.grade == Grade.TECHNICAL_WATCH
+    ][:remaining_slots]
     timestamp = FIXTURE_TIMESTAMP if fixture else datetime.now(UTC)
     return ScanResult(
         scan_type=scan_type,
@@ -123,9 +137,34 @@ def run_scan(scan_type: ScanType, *, fixture: bool = False, scenario: str = "def
         research_count=len(candidates),
         s_tier=s_tier,
         a_plus=a_plus,
+        technical_watch=technical_watch,
         rejected=rejected,
         fixture=fixture,
     )
+
+
+def readiness_check() -> int:
+    load_local_env()
+    warnings = validate_configuration(fixture=False)
+    target_day = date(2026, 6, 22)
+    print("Readiness check for Monday 2026-06-22")
+    print(f"Trading day: {'yes' if is_trading_day(target_day) else 'no'}")
+    if is_trading_day(target_day):
+        print(f"Market close: {market_close_for(target_day).isoformat()}")
+    print(f"Free mode: {os.environ.get('FREE_MODE', 'true')}")
+    print(f"Equity feed: {os.environ.get('ALPACA_FEED', 'iex')}")
+    print(f"Option feed: {os.environ.get('ALPACA_OPTION_FEED', 'indicative')}")
+    print(
+        "Alpaca credentials: "
+        + ("configured" if os.environ.get("ALPACA_API_KEY_ID") and os.environ.get("ALPACA_API_SECRET_KEY") else "missing")
+    )
+    print(
+        "Telegram: "
+        + ("configured" if os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID") else "missing")
+    )
+    for warning in warnings:
+        print(f"WARNING: {warning}")
+    return 0
 
 
 def _maybe_notify(result: ScanResult, report_path: Path, fixture: bool) -> None:
@@ -142,10 +181,21 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "command",
-        choices=["post_close", "premarket", "four_hour", "test_notification", "validate_configuration"],
+        choices=[
+            "post_close",
+            "premarket",
+            "four_hour",
+            "test_notification",
+            "validate_configuration",
+            "readiness_check",
+        ],
     )
     parser.add_argument("--fixture", action="store_true")
-    parser.add_argument("--scenario", default="default", choices=["default", "s_tier", "a_plus", "zero"])
+    parser.add_argument(
+        "--scenario",
+        default="default",
+        choices=["default", "s_tier", "a_plus", "technical_watch", "zero"],
+    )
     args = parser.parse_args()
     try:
         if args.command == "validate_configuration":
@@ -154,6 +204,8 @@ def main() -> int:
             for warning in warnings:
                 print(f"WARNING: {warning}")
             return 0
+        if args.command == "readiness_check":
+            return readiness_check()
         if args.command == "test_notification":
             if args.fixture:
                 print(TELEGRAM_TEST_MESSAGE)

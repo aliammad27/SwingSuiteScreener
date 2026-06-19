@@ -9,3 +9,9 @@
 - Added Markdown and JSON reports with fixture labeling.
 - Added Docker, Render cron configuration, scripts, environment template, and cloud-readiness docs.
 - Added automated tests for scoring, grading, notifications, reports, state, data quality, and no brokerage execution.
+
+## 1.0.1 - 2026-06-19
+
+- Added free-first mode for Alpaca Basic: IEX equities and indicative options.
+- Added `Technical Watch` labeling when technical gates pass but paid-quality option liquidity is unavailable.
+- Added local `.env` autoloading and a June 22, 2026 readiness check command.

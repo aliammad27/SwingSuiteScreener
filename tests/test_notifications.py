@@ -14,7 +14,7 @@ def test_telegram_message_generation() -> None:
 
 
 def test_telegram_missing_credentials_safe() -> None:
-    notifier = TelegramNotifier(token=None, chat_id=None)
+    notifier = TelegramNotifier(token="", chat_id="")
     result = notifier.send("hello")
     assert result.delivered is False
     assert result.status == "not_configured"
