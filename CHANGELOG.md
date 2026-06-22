@@ -28,3 +28,5 @@
 - Updated nightly prep to include strict-scan ticker lists and watch levels.
 - Shortened nightly prep to a ticker-only watchlist format.
 - Made the nightly Watch bucket strategy-based instead of showing the broad universe.
+- Expanded the default live universe from 5 to 67 liquid optionable stock tickers.
+- Added provider caching to reduce repeated market-data calls during larger scans.

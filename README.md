@@ -71,6 +71,16 @@ This keeps the scanner useful without pretending free data is paid OPRA-quality.
 
 Source: https://docs.alpaca.markets/us/docs/about-market-data-api
 
+## Default Universe
+
+The live default universe is a broad seed list of 67 liquid, optionable U.S.-listed
+large-cap and mid-cap stocks across technology, financials, consumer, health care,
+industrials, and energy. The scanner still applies the full strategy gates before
+anything appears in `S`, `A+`, `TW`, or `Watch`.
+
+The nightly `Watch` bucket is not the whole universe. It includes only names that
+pass the strategy's daily watch-quality gates.
+
 ## Providers
 
 Provider interfaces exist for:

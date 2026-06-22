@@ -25,6 +25,7 @@ from scanner.notifications import (
 from scanner.option_liquidity import classify_option_liquidity
 from scanner.providers.alpaca import AlpacaDataProvider, NullCatalystProvider
 from scanner.providers.base import CatalystProvider, MarketDataProvider, OptionDataProvider
+from scanner.providers.cache import CachedMarketDataProvider, CachedOptionDataProvider
 from scanner.providers.fixtures import FIXTURE_TIMESTAMP, FixtureDataProvider
 from scanner.reports import write_reports
 from scanner.universe import configured_symbols
@@ -37,9 +38,9 @@ def _providers(
 ) -> tuple[MarketDataProvider, OptionDataProvider, CatalystProvider]:
     if fixture:
         provider = FixtureDataProvider(scenario=scenario)
-        return provider, provider, provider
+        return CachedMarketDataProvider(provider), CachedOptionDataProvider(provider), provider
     alpaca = AlpacaDataProvider()
-    return alpaca, alpaca, NullCatalystProvider()
+    return CachedMarketDataProvider(alpaca), CachedOptionDataProvider(alpaca), NullCatalystProvider()
 
 
 def _scan_symbol(

@@ -581,6 +581,12 @@ exclude_missing_data: true
 
 The universe may include liquid large cap and mid cap companies.
 
+The live seed universe should be broad enough to avoid empty watchlists caused by
+an overly narrow symbol list. Version one uses a curated 67-symbol liquid,
+optionable stock seed universe across multiple sectors. This expansion must not
+lower the strategy gates; symbols still qualify only through deterministic
+Command, Momentum, option-liquidity, risk, and Watch rules.
+
 Reject any symbol with stale, incomplete, inconsistent, or improperly adjusted critical data.
 
 ## 8. Data Quality
