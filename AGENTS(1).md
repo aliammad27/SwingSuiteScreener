@@ -432,8 +432,9 @@ Send daily prep
 Run the strict scanner and send one Telegram preparation message for the next
 market session. The message must include S tier, A Plus, and Technical Watch
 ticker lists, or explicitly state that no tickers qualified. The message must
-not fabricate market data, lower standards, or imply that any setup is
-trade-ready without verified option liquidity.
+stay concise, avoid strategy instructions, not fabricate market data, not lower
+standards, and not imply that any setup is trade-ready without verified option
+liquidity.
 
 When the user or Codex task says:
 
@@ -534,12 +535,11 @@ Purpose:
 
 1. Send one Telegram preparation message for the next market session.
 2. Run the strict scanner to produce S tier, A Plus, and Technical Watch ticker lists.
-3. Include trigger, support, invalidation, and entry status for each qualifying ticker.
+3. Keep the Telegram body short: date, S, A+, TW, and monitored tickers.
 4. Explicitly state when no tickers qualify and standards were not lowered.
 5. Include the broader monitored universe so the nightly message still contains tickers when no setup qualifies.
-6. Remind the user what to look for: daily Command quality, relative strength, breakout or pullback setup, four hour timing, option liquidity, event risk, and no-trade conditions.
-7. Use the exchange calendar to identify the next regular or half-day market session.
-8. Keep it free and runnable from GitHub Actions.
+6. Use the exchange calendar to identify the next regular or half-day market session.
+7. Keep it free and runnable from GitHub Actions.
 
 Do not include fabricated tickers, market data, option data, catalysts, or earnings dates.
 Do not describe Technical Watch as trade-ready.

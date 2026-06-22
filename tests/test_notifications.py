@@ -44,14 +44,15 @@ def test_nightly_prep_message_for_monday_open() -> None:
     md, _ = write_reports(result)
     message = nightly_prep_message(result, md, datetime(2026, 6, 21, 21, 0, tzinfo=NY))
 
-    assert "NIGHTLY PREP" in message
-    assert "Next market session: Monday, June 22, 2026" in message
-    assert "TICKERS TO WATCH THIS WEEK" in message
-    assert "S Tier: SSTR" in message
-    assert "Levels to watch:" in message
-    assert "Broader monitored universe this week: SSTR" in message
-    assert "8:45 AM ET: premarket validation" in message
-    assert "Technical Watch" in message
+    assert "NIGHTLY WATCHLIST" in message
+    assert "Next: Monday, June 22, 2026" in message
+    assert "S: SSTR" in message
+    assert "A+: None" in message
+    assert "TW: None" in message
+    assert "Monitoring: SSTR" in message
+    assert "What to look for:" not in message
+    assert "Levels to watch:" not in message
+    assert "Report:" not in message
 
 
 def test_nightly_prep_zero_candidate_message_keeps_standards() -> None:
@@ -59,8 +60,9 @@ def test_nightly_prep_zero_candidate_message_keeps_standards() -> None:
     md, _ = write_reports(result)
     message = nightly_prep_message(result, md, datetime(2026, 6, 21, 21, 0, tzinfo=NY))
 
-    assert "S Tier: None" in message
-    assert "A Plus: None" in message
-    assert "No S Tier, A Plus, or Technical Watch tickers qualified" in message
+    assert "S: None" in message
+    assert "A+: None" in message
+    assert "TW: None" in message
+    assert "No qualified tickers tonight." in message
     assert "Standards were not lowered." in message
-    assert "Broader monitored universe this week: ZERO" in message
+    assert "Monitoring: ZERO" in message
