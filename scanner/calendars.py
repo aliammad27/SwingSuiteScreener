@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 
 from scanner.clocks import NY
 
@@ -26,6 +26,13 @@ def is_trading_day(day: date) -> bool:
 
 def is_half_day(day: date) -> bool:
     return day in HALF_DAYS_2026
+
+
+def next_trading_day(after_day: date) -> date:
+    candidate = after_day + timedelta(days=1)
+    while not is_trading_day(candidate):
+        candidate += timedelta(days=1)
+    return candidate
 
 
 def market_close_for(day: date) -> datetime:

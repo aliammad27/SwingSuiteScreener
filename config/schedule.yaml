@@ -1,4 +1,5 @@
 timezone: America/New_York
+nightly_prep_time: "21:00"
 post_close_time: "16:20"
 premarket_time: "08:45"
 four_hour_time: "13:35"

@@ -15,6 +15,7 @@ python -m scanner.run_scan validate_configuration
 python -m scanner.run_scan post_close --fixture
 python -m scanner.run_scan premarket --fixture
 python -m scanner.run_scan four_hour --fixture
+python -m scanner.run_scan daily_prep --fixture
 ```
 
 Fixture reports are always labeled:
@@ -31,6 +32,7 @@ python -m scanner.run_scan readiness_check
 python -m scanner.run_scan post_close --fixture
 python -m scanner.run_scan premarket --fixture
 python -m scanner.run_scan four_hour --fixture
+python -m scanner.run_scan daily_prep --fixture
 python -m scanner.run_scan test_notification
 python -m scanner.notifications discover_chat_id
 pytest
@@ -125,6 +127,22 @@ The token is never printed by discovery, tests, reports, or logs.
 The application loads the local `.env` file automatically for scanner and
 notification commands. You do not need to run `source .env`.
 
+## Nightly Prep Telegram
+
+`python -m scanner.run_scan daily_prep` sends one Telegram prep note for the
+next market session. It does not run a market scan, promote tickers, or fabricate
+market data. The message summarizes what to look for tomorrow:
+
+- daily Command Center quality
+- relative strength
+- breakout or pullback setup type
+- four-hour timing requirements
+- option-liquidity checks before any call trade
+- no-trade conditions
+
+Use `python -m scanner.run_scan daily_prep --fixture` to print the message
+without sending Telegram.
+
 ## Reports
 
 Markdown and JSON reports are written to:
@@ -154,6 +172,7 @@ The repository includes:
 
 Default free automation uses GitHub Actions:
 
+- Nightly prep: 9:00 PM ET during daylight saving time
 - Premarket validation: 8:45 AM ET during daylight saving time
 - Four-hour refresh: 1:35 PM ET during daylight saving time
 - Post-close scan: 4:20 PM ET during daylight saving time

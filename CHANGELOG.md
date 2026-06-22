@@ -20,3 +20,8 @@
 
 - Added free GitHub Actions scheduled automation for premarket, four-hour, and post-close scans.
 - Added a manual GitHub Actions readiness workflow that validates secrets and sends a Telegram test.
+
+## 1.0.3 - 2026-06-21
+
+- Added a nightly 9 PM ET Telegram prep command for the next market session.
+- Added a GitHub Actions workflow to send the nightly prep message automatically.

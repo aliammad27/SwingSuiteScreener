@@ -393,6 +393,7 @@ Support these commands:
 python -m scanner.run_scan post_close
 python -m scanner.run_scan premarket
 python -m scanner.run_scan four_hour
+python -m scanner.run_scan daily_prep
 python -m scanner.run_scan test_notification
 python -m scanner.notifications discover_chat_id
 python -m scanner.run_scan validate_configuration
@@ -421,6 +422,16 @@ Run four hour refresh
 ```
 
 Execute the four hour entry refresh.
+
+When the user or Codex task says:
+
+```text
+Send daily prep
+```
+
+Send one Telegram preparation message for the next market session. This message
+must not run a market scan, promote tickers, fabricate market data, or imply that
+any setup is trade-ready.
 
 When the user or Codex task says:
 
@@ -508,6 +519,24 @@ Purpose:
 7. Send Telegram only when something actionable or material changed.
 
 Do not repeat deep catalyst research when no relevant news appeared.
+
+### 6.4 Nightly Next-Session Prep
+
+Default time:
+
+```text
+9:00 PM America/New_York every day
+```
+
+Purpose:
+
+1. Send one Telegram preparation message for the next market session.
+2. Remind the user what the scanner will look for: daily Command quality, relative strength, breakout or pullback setup, four hour timing, option liquidity, event risk, and no-trade conditions.
+3. Clearly state that the message is not a market scan and no ticker was promoted.
+4. Use the exchange calendar to identify the next regular or half-day market session.
+5. Keep it free and runnable from GitHub Actions.
+
+Do not include fabricated tickers, market data, option data, catalysts, or earnings dates.
 
 ## 7. Default Universe
 

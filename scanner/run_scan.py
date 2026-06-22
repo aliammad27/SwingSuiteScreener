@@ -8,6 +8,7 @@ from pathlib import Path
 from scanner.calendars import is_trading_day, market_close_for
 from scanner.config import ConfigurationError, load_local_env, validate_configuration
 from scanner.daily_command import calculate_command
+from scanner.daily_prep import nightly_prep_message
 from scanner.data_quality import DataQualityError, require_completed_candles
 from scanner.entry_plan import build_entry_plan
 from scanner.grading import grade_candidate
@@ -187,6 +188,7 @@ def main() -> int:
             "premarket",
             "four_hour",
             "test_notification",
+            "daily_prep",
             "validate_configuration",
             "readiness_check",
         ],
@@ -218,6 +220,19 @@ def main() -> int:
                 print(f"Telegram test notification not sent: {delivery.safe_error}")
                 return 0
             print("Telegram test notification delivered.")
+            return 0
+        if args.command == "daily_prep":
+            message = nightly_prep_message()
+            if args.fixture:
+                print(message)
+                return 0
+            notifier = TelegramNotifier()
+            delivery = notifier.send(message)
+            log_delivery("daily_prep", delivery.status, event_type="daily_prep", error=delivery.safe_error or "")
+            if not delivery.delivered:
+                print(f"Daily prep Telegram notification not sent: {delivery.safe_error}")
+                return 1
+            print("Daily prep Telegram notification delivered.")
             return 0
         scan_type = ScanType(args.command)
         result = run_scan(scan_type, fixture=args.fixture, scenario=args.scenario)

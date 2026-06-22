@@ -1,3 +1,7 @@
+from datetime import datetime
+
+from scanner.clocks import NY
+from scanner.daily_prep import nightly_prep_message
 from scanner.models import ScanType
 from scanner.notifications import (
     TELEGRAM_TEST_MESSAGE,
@@ -33,3 +37,13 @@ def test_post_close_zero_setup_notification() -> None:
     md, _ = write_reports(result)
     message = completion_message(result, md)
     assert "No S tier or A plus setups qualified today." in message
+
+
+def test_nightly_prep_message_for_monday_open() -> None:
+    message = nightly_prep_message(datetime(2026, 6, 21, 21, 0, tzinfo=NY))
+
+    assert "NIGHTLY PREP" in message
+    assert "Next market session: Monday, June 22, 2026" in message
+    assert "This is a prep note, not a market scan." in message
+    assert "8:45 AM ET: premarket validation" in message
+    assert "Technical Watch" in message
