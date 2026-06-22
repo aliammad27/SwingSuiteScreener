@@ -194,14 +194,18 @@ The repository includes:
 
 Default free automation uses GitHub Actions:
 
-- Nightly prep: 9:00 PM ET during daylight saving time
-- Weekly radar: Sunday 8:00 PM ET during daylight saving time
-- Premarket validation: 8:45 AM ET during daylight saving time
-- Four-hour refresh: 1:35 PM ET during daylight saving time
-- Post-close scan: 4:20 PM ET during daylight saving time
+- Nightly prep: sends at 9:00 PM ET
+- Weekly radar: sends Sunday at 8:00 PM ET
+- Premarket validation: runs at 8:45 AM ET
+- Four-hour refresh: runs at 1:35 PM ET
+- Post-close scan: runs at 4:20 PM ET
 
-The workflow cron expressions are UTC because GitHub schedules run on GitHub's
-infrastructure. The app still validates market calendar rules internally.
+GitHub scheduled events are best-effort and can start late. To reduce late
+market texts, each workflow now wakes several hours early during daylight saving
+time and uses `python -m scanner.schedule_gate` to wait inside the runner until
+the intended America/New_York time. If GitHub wakes the job more than 20 minutes
+after the intended time, the gate fails the job instead of sending a stale scan.
+The app still validates market calendar rules internally.
 
 Render Cron Jobs can run the Docker commands in `render.yaml`. Google Cloud Run
 Jobs can build the same container and schedule equivalent commands with Cloud
@@ -209,7 +213,7 @@ Scheduler. Do not create paid cloud resources without explicit approval.
 
 Estimated operating cost depends on provider plans, scan frequency, and selected
 cloud runtime. GitHub Actions is free for public repositories and includes a free
-minutes quota for private repositories. This scanner's three daily Linux jobs are
+minutes quota for private repositories. This scanner's scheduled Linux jobs are
 intended to stay inside that included quota.
 
 Required GitHub Actions secrets:

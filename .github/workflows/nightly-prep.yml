@@ -2,8 +2,8 @@ name: Nightly Prep
 
 on:
   schedule:
-    # 9:00 PM America/New_York during daylight saving time.
-    - cron: "0 1 * * *"
+    # Early EDT wakeup; the schedule gate waits until 9:00 PM America/New_York.
+    - cron: "22 19 * * *"
   workflow_dispatch:
 
 permissions:
@@ -16,7 +16,7 @@ concurrency:
 jobs:
   nightly-prep:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 360
     env:
       ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
       ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
@@ -38,6 +38,8 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
+      - name: Wait until 9:00 PM ET
+        run: python -m scanner.schedule_gate --target 21:00 --max-late-minutes 20
       - name: Send next-session prep
         run: python -m scanner.run_scan daily_prep
       - name: Upload notification log

@@ -236,6 +236,8 @@ TELEGRAM_CHAT_ID
 
 The scheduled workflows must not print secret values. They should run on GitHub-hosted Linux runners using the included GitHub Actions minutes quota and should upload generated reports as workflow artifacts.
 
+GitHub scheduled events are best-effort and may start late. Version one workflows should wake several hours before the intended market time during daylight saving time and run `python -m scanner.schedule_gate` before scanner execution. The gate must wait until the exact America/New_York target time when the runner starts early, and it must fail instead of sending a stale market alert when GitHub starts the job more than 20 minutes late.
+
 ## 3. Notification Decision
 
 Use Telegram as the notification destination for version one.

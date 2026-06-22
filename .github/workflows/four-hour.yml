@@ -2,8 +2,8 @@ name: Four Hour Refresh
 
 on:
   schedule:
-    # 1:35 PM America/New_York during daylight saving time.
-    - cron: "35 17 * * 1-5"
+    # Early EDT wakeup; the schedule gate waits until 1:35 PM America/New_York.
+    - cron: "57 11 * * 1-5"
   workflow_dispatch:
 
 permissions:
@@ -16,7 +16,7 @@ concurrency:
 jobs:
   four-hour:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 360
     env:
       ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
       ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
@@ -38,6 +38,8 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
+      - name: Wait until 1:35 PM ET
+        run: python -m scanner.schedule_gate --target 13:35 --max-late-minutes 20
       - name: Run four hour refresh
         run: python -m scanner.run_scan four_hour
       - name: Upload report artifact
@@ -50,4 +52,3 @@ jobs:
             reports/four_hour/latest.json
             logs/notifications.log
           if-no-files-found: ignore
-
