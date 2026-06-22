@@ -16,12 +16,20 @@ concurrency:
 jobs:
   nightly-prep:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     env:
+      ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
+      ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
+      ALPACA_DATA_BASE_URL: https://data.alpaca.markets
+      ALPACA_FEED: iex
+      ALPACA_OPTION_FEED: indicative
+      FREE_MODE: "true"
+      ALLOW_TECHNICAL_WATCH: "true"
       TELEGRAM_BOT_USERNAME: AlisScreenerBot
       TELEGRAM_BOT_URL: https://t.me/AlisScreenerBot
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      STORAGE_BACKEND: local_json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -36,6 +44,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: nightly-prep-log
-          path: logs/notifications.log
+          name: nightly-prep-report
+          path: |
+            reports/post_close/latest.md
+            reports/post_close/latest.json
+            logs/notifications.log
           if-no-files-found: ignore

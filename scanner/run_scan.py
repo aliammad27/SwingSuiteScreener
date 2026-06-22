@@ -222,9 +222,13 @@ def main() -> int:
             print("Telegram test notification delivered.")
             return 0
         if args.command == "daily_prep":
-            message = nightly_prep_message()
+            result = run_scan(ScanType.POST_CLOSE, fixture=args.fixture, scenario=args.scenario)
+            md_path, json_path = write_reports(result)
+            message = nightly_prep_message(result, md_path)
             if args.fixture:
                 print(message)
+                print(f"Markdown report: {md_path}")
+                print(f"JSON report: {json_path}")
                 return 0
             notifier = TelegramNotifier()
             delivery = notifier.send(message)

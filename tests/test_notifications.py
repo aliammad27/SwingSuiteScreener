@@ -40,10 +40,27 @@ def test_post_close_zero_setup_notification() -> None:
 
 
 def test_nightly_prep_message_for_monday_open() -> None:
-    message = nightly_prep_message(datetime(2026, 6, 21, 21, 0, tzinfo=NY))
+    result = run_scan(ScanType.POST_CLOSE, fixture=True, scenario="s_tier")
+    md, _ = write_reports(result)
+    message = nightly_prep_message(result, md, datetime(2026, 6, 21, 21, 0, tzinfo=NY))
 
     assert "NIGHTLY PREP" in message
     assert "Next market session: Monday, June 22, 2026" in message
-    assert "This is a prep note, not a market scan." in message
+    assert "TICKERS TO WATCH THIS WEEK" in message
+    assert "S Tier: SSTR" in message
+    assert "Levels to watch:" in message
+    assert "Broader monitored universe this week: SSTR" in message
     assert "8:45 AM ET: premarket validation" in message
     assert "Technical Watch" in message
+
+
+def test_nightly_prep_zero_candidate_message_keeps_standards() -> None:
+    result = run_scan(ScanType.POST_CLOSE, fixture=True, scenario="zero")
+    md, _ = write_reports(result)
+    message = nightly_prep_message(result, md, datetime(2026, 6, 21, 21, 0, tzinfo=NY))
+
+    assert "S Tier: None" in message
+    assert "A Plus: None" in message
+    assert "No S Tier, A Plus, or Technical Watch tickers qualified" in message
+    assert "Standards were not lowered." in message
+    assert "Broader monitored universe this week: ZERO" in message

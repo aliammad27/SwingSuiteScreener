@@ -25,3 +25,4 @@
 
 - Added a nightly 9 PM ET Telegram prep command for the next market session.
 - Added a GitHub Actions workflow to send the nightly prep message automatically.
+- Updated nightly prep to include strict-scan ticker lists and watch levels.

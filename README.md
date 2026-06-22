@@ -130,9 +130,13 @@ notification commands. You do not need to run `source .env`.
 ## Nightly Prep Telegram
 
 `python -m scanner.run_scan daily_prep` sends one Telegram prep note for the
-next market session. It does not run a market scan, promote tickers, or fabricate
-market data. The message summarizes what to look for tomorrow:
+next market session. It runs the same strict scanner, includes the S Tier, A Plus,
+and Technical Watch ticker lists, and explicitly says when no tickers qualified.
+The message also summarizes what to look for tomorrow:
 
+- ticker watchlist by grade
+- trigger, support, invalidation, and entry status for each ticker
+- broader monitored universe when no qualified ticker passes the strict gates
 - daily Command Center quality
 - relative strength
 - breakout or pullback setup type
