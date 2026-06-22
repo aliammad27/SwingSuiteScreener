@@ -28,6 +28,7 @@ from scanner.providers.base import CatalystProvider, MarketDataProvider, OptionD
 from scanner.providers.fixtures import FIXTURE_TIMESTAMP, FixtureDataProvider
 from scanner.reports import write_reports
 from scanner.universe import configured_symbols
+from scanner.watchlist import watch_details
 
 
 def _providers(
@@ -118,7 +119,7 @@ def run_scan(scan_type: ScanType, *, fixture: bool = False, scenario: str = "def
                     symbol,
                     "grading",
                     candidate.rejection_reasons or ["did_not_meet_primary_report_standard"],
-                    {"command_score": candidate.command.score},
+                    watch_details(candidate),
                 )
             )
     s_tier = [c for c in candidates if c.grade == Grade.S_TIER][:5]

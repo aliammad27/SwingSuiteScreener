@@ -19,12 +19,12 @@ def _symbols(candidates: list[Candidate]) -> str:
     return ", ".join(candidate.symbol for candidate in candidates)
 
 
-def _monitored_symbols(result: ScanResult) -> str:
-    symbols: list[str] = []
-    for candidate in result.s_tier + result.a_plus + result.technical_watch:
-        symbols.append(candidate.symbol)
-    for rejected in result.rejected:
-        symbols.append(rejected.symbol)
+def _watch_symbols(result: ScanResult) -> str:
+    symbols = [
+        rejected.symbol
+        for rejected in result.rejected
+        if rejected.details.get("watch_eligible") is True
+    ]
     deduped = list(dict.fromkeys(symbols))
     return ", ".join(deduped[:20]) if deduped else "None"
 
@@ -38,14 +38,19 @@ def ticker_watchlist_section(result: ScanResult, report_path: Path | None = None
             f"S: {_symbols(result.s_tier)}",
             f"A+: {_symbols(result.a_plus)}",
             f"TW: {_symbols(result.technical_watch)}",
-            f"Monitoring: {_monitored_symbols(result)}",
+            f"Watch: {_watch_symbols(result)}",
         ]
     )
-    if not result.s_tier and not result.a_plus and not result.technical_watch:
+    if (
+        not result.s_tier
+        and not result.a_plus
+        and not result.technical_watch
+        and _watch_symbols(result) == "None"
+    ):
         lines.extend(
             [
                 "",
-                "No qualified tickers tonight.",
+                "No qualified or watch tickers tonight.",
                 "Standards were not lowered.",
             ]
         )

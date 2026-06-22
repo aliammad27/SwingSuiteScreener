@@ -1,8 +1,9 @@
+from dataclasses import replace
 from datetime import datetime
 
 from scanner.clocks import NY
 from scanner.daily_prep import nightly_prep_message
-from scanner.models import ScanType
+from scanner.models import RejectedRecord, ScanType
 from scanner.notifications import (
     TELEGRAM_TEST_MESSAGE,
     TelegramNotifier,
@@ -49,7 +50,7 @@ def test_nightly_prep_message_for_monday_open() -> None:
     assert "S: SSTR" in message
     assert "A+: None" in message
     assert "TW: None" in message
-    assert "Monitoring: SSTR" in message
+    assert "Watch: None" in message
     assert "What to look for:" not in message
     assert "Levels to watch:" not in message
     assert "Report:" not in message
@@ -63,6 +64,33 @@ def test_nightly_prep_zero_candidate_message_keeps_standards() -> None:
     assert "S: None" in message
     assert "A+: None" in message
     assert "TW: None" in message
-    assert "No qualified tickers tonight." in message
+    assert "Watch: None" in message
+    assert "No qualified or watch tickers tonight." in message
     assert "Standards were not lowered." in message
-    assert "Monitoring: ZERO" in message
+    assert "ZERO" not in message
+
+
+def test_nightly_prep_watch_bucket_requires_strategy_flag() -> None:
+    result = run_scan(ScanType.POST_CLOSE, fixture=True, scenario="zero")
+    result = replace(
+        result,
+        rejected=[
+            RejectedRecord(
+                "AAPL",
+                "grading",
+                ["waiting_for_timing"],
+                {"watch_eligible": True},
+            ),
+            RejectedRecord(
+                "ZERO",
+                "grading",
+                ["weak_daily_structure"],
+                {"watch_eligible": False},
+            ),
+        ],
+    )
+    md, _ = write_reports(result)
+    message = nightly_prep_message(result, md, datetime(2026, 6, 21, 21, 0, tzinfo=NY))
+
+    assert "Watch: AAPL" in message
+    assert "ZERO" not in message

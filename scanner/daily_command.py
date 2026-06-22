@@ -98,7 +98,7 @@ def calculate_command(
         call_bias = "Avoid"
     elif extended:
         call_bias = "Extended"
-    elif breakout_confirmed and trend == "Uptrend":
+    elif breakout_confirmed and score >= 70 and rel_volume >= 1.0:
         call_bias = "Breakout confirmed"
     elif score >= 70 and pullback_setup and above_vwap:
         call_bias = "Pullback setup"

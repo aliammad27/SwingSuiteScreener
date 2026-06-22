@@ -32,6 +32,28 @@ def test_breakout_lookback_excludes_current_bar() -> None:
     assert result.breakout_level == previous_high
 
 
+def test_breakout_confirmed_bias_requires_volume() -> None:
+    provider = FixtureDataProvider()
+    daily = provider.daily("SSTR")
+    previous_high = max(c.high for c in daily[-21:-1])
+    daily[-2] = type(daily[-2])(
+        **{**daily[-2].__dict__, "close": previous_high - 1}
+    )
+    daily[-1] = type(daily[-1])(
+        **{
+            **daily[-1].__dict__,
+            "open": previous_high - 0.50,
+            "high": previous_high + 2,
+            "close": previous_high + 1,
+            "volume": 1,
+        }
+    )
+    result = calculate_command("SSTR", daily, provider.daily("QQQ"), provider.weekly("SSTR"))
+
+    assert result.breakout_confirmed is True
+    assert result.call_bias != "Breakout confirmed"
+
+
 def test_extended_price_detection() -> None:
     provider = FixtureDataProvider()
     result = calculate_command("ZERO", provider.daily("ZERO"), provider.daily("QQQ"), provider.weekly("ZERO"))

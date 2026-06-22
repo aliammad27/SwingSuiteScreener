@@ -27,3 +27,4 @@
 - Added a GitHub Actions workflow to send the nightly prep message automatically.
 - Updated nightly prep to include strict-scan ticker lists and watch levels.
 - Shortened nightly prep to a ticker-only watchlist format.
+- Made the nightly Watch bucket strategy-based instead of showing the broad universe.

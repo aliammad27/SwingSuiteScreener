@@ -135,8 +135,8 @@ and Technical Watch ticker lists, and explicitly says when no tickers qualified.
 The Telegram body is intentionally short:
 
 - next market session date
-- `S`, `A+`, and `TW` ticker buckets
-- broader monitored universe when no qualified ticker passes the strict gates
+- `S`, `A+`, `TW`, and `Watch` ticker buckets
+- `Watch` includes only strategy-qualified daily watch names, not the whole universe
 - a short note only when Technical Watch appears
 
 Use `python -m scanner.run_scan daily_prep --fixture` to print the message

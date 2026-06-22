@@ -430,11 +430,12 @@ Send daily prep
 ```
 
 Run the strict scanner and send one Telegram preparation message for the next
-market session. The message must include S tier, A Plus, and Technical Watch
-ticker lists, or explicitly state that no tickers qualified. The message must
-stay concise, avoid strategy instructions, not fabricate market data, not lower
-standards, and not imply that any setup is trade-ready without verified option
-liquidity.
+market session. The message must include S tier, A Plus, Technical Watch, and
+strategy-qualified Watch ticker lists, or explicitly state that no tickers
+qualified. Watch must not mean the whole configured universe; it must come from
+real daily strategy gates. The message must stay concise, avoid strategy
+instructions, not fabricate market data, not lower standards, and not imply that
+any setup is trade-ready without verified option liquidity.
 
 When the user or Codex task says:
 
@@ -535,11 +536,12 @@ Purpose:
 
 1. Send one Telegram preparation message for the next market session.
 2. Run the strict scanner to produce S tier, A Plus, and Technical Watch ticker lists.
-3. Keep the Telegram body short: date, S, A+, TW, and monitored tickers.
+3. Keep the Telegram body short: date, S, A+, TW, and Watch tickers.
 4. Explicitly state when no tickers qualify and standards were not lowered.
-5. Include the broader monitored universe so the nightly message still contains tickers when no setup qualifies.
-6. Use the exchange calendar to identify the next regular or half-day market session.
-7. Keep it free and runnable from GitHub Actions.
+5. Include Watch tickers only when the stock passes real strategy monitoring gates: Daily Command Score at least 60, watchable daily Call Bias, price above SMA 200, not extended, relative strength not lagging, above monthly anchored VWAP, weekly aligned, daily RSI at least 50, daily momentum not blocked or warning, no hostile regime, and no major event risk.
+6. Do not include broad universe tickers as Watch names when those gates fail.
+7. Use the exchange calendar to identify the next regular or half-day market session.
+8. Keep it free and runnable from GitHub Actions.
 
 Do not include fabricated tickers, market data, option data, catalysts, or earnings dates.
 Do not describe Technical Watch as trade-ready.
