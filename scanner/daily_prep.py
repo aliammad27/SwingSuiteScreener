@@ -7,6 +7,7 @@ from scanner.calendars import next_trading_day
 from scanner.clocks import NY
 from scanner.models import Candidate, ScanResult
 from scanner.reports import FIXTURE_LABEL
+from scanner.watchlist import WatchlistItem, ranked_watchlist_items
 
 
 def _format_day(value: date) -> str:
@@ -19,34 +20,41 @@ def _symbols(candidates: list[Candidate]) -> str:
     return ", ".join(candidate.symbol for candidate in candidates)
 
 
-def _watch_symbols(result: ScanResult) -> str:
-    symbols = [
-        rejected.symbol
-        for rejected in result.rejected
-        if rejected.details.get("watch_eligible") is True
-    ]
+def _item_symbols(items: list[WatchlistItem], bucket: str) -> str:
+    symbols = [item.symbol for item in items if item.bucket == bucket]
     deduped = list(dict.fromkeys(symbols))
-    return ", ".join(deduped[:20]) if deduped else "None"
+    return ", ".join(deduped) if deduped else "None"
+
+
+def ranked_nightly_items(result: ScanResult) -> list[WatchlistItem]:
+    candidates = result.s_tier + result.a_plus + result.technical_watch
+    rejected_details = [(record.symbol, record.details) for record in result.rejected]
+    return ranked_watchlist_items(candidates, rejected_details, limit=8)
+
+
+def _top_lines(items: list[WatchlistItem]) -> list[str]:
+    if not items:
+        return []
+    lines = ["", "Top:"]
+    for item in items[:5]:
+        lines.append(f"{item.symbol} {item.bucket} - {item.reason} - {item.tradingview_url}")
+    return lines
 
 
 def ticker_watchlist_section(result: ScanResult, report_path: Path | None = None) -> str:
+    items = ranked_nightly_items(result)
     lines: list[str] = []
     if result.fixture:
         lines.extend([FIXTURE_LABEL, ""])
     lines.extend(
         [
-            f"S: {_symbols(result.s_tier)}",
-            f"A+: {_symbols(result.a_plus)}",
-            f"TW: {_symbols(result.technical_watch)}",
-            f"Watch: {_watch_symbols(result)}",
+            f"S: {_item_symbols(items, 'S')}",
+            f"A+: {_item_symbols(items, 'A+')}",
+            f"TW: {_item_symbols(items, 'TW')}",
+            f"Watch: {_item_symbols(items, 'Watch')}",
         ]
     )
-    if (
-        not result.s_tier
-        and not result.a_plus
-        and not result.technical_watch
-        and _watch_symbols(result) == "None"
-    ):
+    if not items:
         lines.extend(
             [
                 "",
@@ -54,7 +62,9 @@ def ticker_watchlist_section(result: ScanResult, report_path: Path | None = None
                 "Standards were not lowered.",
             ]
         )
-    if result.technical_watch:
+    else:
+        lines.extend(_top_lines(items))
+    if any(item.bucket == "TW" for item in items):
         lines.extend(["", "TW = technical watch only; verify options."])
     return "\n".join(lines)
 
@@ -70,5 +80,20 @@ def nightly_prep_message(
     return (
         "NIGHTLY WATCHLIST\n"
         f"Next: {_format_day(session_day)}\n\n"
+        f"{ticker_watchlist_section(result, report_path)}"
+    )
+
+
+def weekly_radar_message(
+    result: ScanResult,
+    report_path: Path | None = None,
+    as_of: datetime | None = None,
+) -> str:
+    now = as_of.astimezone(NY) if as_of is not None else datetime.now(NY)
+    session_day = next_trading_day(now.date())
+    return (
+        "WEEKLY RADAR\n"
+        f"Next: {_format_day(session_day)}\n"
+        f"Scanned: {result.universe_count}\n\n"
         f"{ticker_watchlist_section(result, report_path)}"
     )

@@ -15,7 +15,7 @@ def test_configuration_valid_fixture() -> None:
 def test_live_universe_is_broad_and_unique() -> None:
     symbols = configured_symbols(fixture=False)
 
-    assert len(symbols) >= 50
+    assert len(symbols) >= 150
     assert len(symbols) == len(set(symbols))
     assert {"AAPL", "MSFT", "NVDA", "AMD", "JPM", "XOM"}.issubset(symbols)
 

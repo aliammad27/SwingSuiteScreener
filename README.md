@@ -16,6 +16,7 @@ python -m scanner.run_scan post_close --fixture
 python -m scanner.run_scan premarket --fixture
 python -m scanner.run_scan four_hour --fixture
 python -m scanner.run_scan daily_prep --fixture
+python -m scanner.run_scan weekly_radar --fixture
 ```
 
 Fixture reports are always labeled:
@@ -33,6 +34,7 @@ python -m scanner.run_scan post_close --fixture
 python -m scanner.run_scan premarket --fixture
 python -m scanner.run_scan four_hour --fixture
 python -m scanner.run_scan daily_prep --fixture
+python -m scanner.run_scan weekly_radar --fixture
 python -m scanner.run_scan test_notification
 python -m scanner.notifications discover_chat_id
 pytest
@@ -73,13 +75,16 @@ Source: https://docs.alpaca.markets/us/docs/about-market-data-api
 
 ## Default Universe
 
-The live default universe is a broad seed list of 67 liquid, optionable U.S.-listed
+The live default universe is a broad seed list of 161 liquid, optionable U.S.-listed
 large-cap and mid-cap stocks across technology, financials, consumer, health care,
 industrials, and energy. The scanner still applies the full strategy gates before
 anything appears in `S`, `A+`, `TW`, or `Watch`.
 
 The nightly `Watch` bucket is not the whole universe. It includes only names that
 pass the strategy's daily watch-quality gates.
+
+Nightly and weekly Telegram messages include compact reason lines, TradingView
+chart links, and daily chart image attachments for the top ranked names.
 
 ## Providers
 
@@ -147,10 +152,18 @@ The Telegram body is intentionally short:
 - next market session date
 - `S`, `A+`, `TW`, and `Watch` ticker buckets
 - `Watch` includes only strategy-qualified daily watch names, not the whole universe
+- top ranked ticker reasons and TradingView links
+- daily chart image attachments for the top ranked names
 - a short note only when Technical Watch appears
 
 Use `python -m scanner.run_scan daily_prep --fixture` to print the message
 without sending Telegram.
+
+## Weekly Radar Telegram
+
+`python -m scanner.run_scan weekly_radar` sends a Sunday radar note using the same
+strict scanner, ranked reasons, TradingView links, and chart attachments. It is a
+weekly planning view, not a separate strategy.
 
 ## Reports
 
@@ -182,6 +195,7 @@ The repository includes:
 Default free automation uses GitHub Actions:
 
 - Nightly prep: 9:00 PM ET during daylight saving time
+- Weekly radar: Sunday 8:00 PM ET during daylight saving time
 - Premarket validation: 8:45 AM ET during daylight saving time
 - Four-hour refresh: 1:35 PM ET during daylight saving time
 - Post-close scan: 4:20 PM ET during daylight saving time

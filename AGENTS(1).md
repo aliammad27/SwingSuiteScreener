@@ -394,6 +394,7 @@ python -m scanner.run_scan post_close
 python -m scanner.run_scan premarket
 python -m scanner.run_scan four_hour
 python -m scanner.run_scan daily_prep
+python -m scanner.run_scan weekly_radar
 python -m scanner.run_scan test_notification
 python -m scanner.notifications discover_chat_id
 python -m scanner.run_scan validate_configuration
@@ -537,14 +538,30 @@ Purpose:
 1. Send one Telegram preparation message for the next market session.
 2. Run the strict scanner to produce S tier, A Plus, and Technical Watch ticker lists.
 3. Keep the Telegram body short: date, S, A+, TW, and Watch tickers.
-4. Explicitly state when no tickers qualify and standards were not lowered.
-5. Include Watch tickers only when the stock passes real strategy monitoring gates: Daily Command Score at least 60, watchable daily Call Bias, price above SMA 200, not extended, relative strength not lagging, above monthly anchored VWAP, weekly aligned, daily RSI at least 50, daily momentum not blocked or warning, no hostile regime, and no major event risk.
-6. Do not include broad universe tickers as Watch names when those gates fail.
-7. Use the exchange calendar to identify the next regular or half-day market session.
-8. Keep it free and runnable from GitHub Actions.
+4. Include compact ranked reason lines and TradingView links for the top names.
+5. Send daily chart image attachments for the top ranked names when Telegram and chart rendering are available.
+6. Explicitly state when no tickers qualify and standards were not lowered.
+7. Include Watch tickers only when the stock passes real strategy monitoring gates: Daily Command Score at least 60, watchable daily Call Bias, price above SMA 200, not extended, relative strength not lagging, above monthly anchored VWAP, weekly aligned, daily RSI at least 50, daily momentum not blocked or warning, no hostile regime, and no major event risk.
+8. Do not include broad universe tickers as Watch names when those gates fail.
+9. Use the exchange calendar to identify the next regular or half-day market session.
+10. Keep it free and runnable from GitHub Actions.
 
 Do not include fabricated tickers, market data, option data, catalysts, or earnings dates.
 Do not describe Technical Watch as trade-ready.
+
+### 6.5 Weekly Radar
+
+Default time:
+
+```text
+8:00 PM America/New_York every Sunday
+```
+
+Purpose:
+
+1. Send one Telegram weekly radar message before the trading week.
+2. Use the same strict scanner, ranking, ticker reasons, TradingView links, and chart attachments as nightly prep.
+3. Keep the weekly radar as a planning view only; do not create a second strategy or lower qualification standards.
 
 ## 7. Default Universe
 
@@ -582,7 +599,7 @@ exclude_missing_data: true
 The universe may include liquid large cap and mid cap companies.
 
 The live seed universe should be broad enough to avoid empty watchlists caused by
-an overly narrow symbol list. Version one uses a curated 67-symbol liquid,
+an overly narrow symbol list. Version one uses a curated 161-symbol liquid,
 optionable stock seed universe across multiple sectors. This expansion must not
 lower the strategy gates; symbols still qualify only through deterministic
 Command, Momentum, option-liquidity, risk, and Watch rules.

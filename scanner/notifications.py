@@ -80,6 +80,36 @@ class TelegramNotifier:
                 time.sleep(0.5 * (2**attempt))
         return DeliveryResult(False, "temporary_failure", "unknown failure")
 
+    def send_photo(self, photo_path: Path, caption: str = "") -> DeliveryResult:
+        if not self.available():
+            return DeliveryResult(False, "not_configured", "Telegram token or chat id is missing.")
+        if not photo_path.exists():
+            return DeliveryResult(False, "missing_file", f"Chart file not found: {photo_path}")
+        for attempt in range(3):
+            try:
+                import requests
+
+                with photo_path.open("rb") as handle:
+                    response = requests.post(
+                        self._api("sendPhoto"),
+                        data={"chat_id": self.chat_id or "", "caption": caption},
+                        files={"photo": (photo_path.name, handle, "image/png")},
+                        timeout=20,
+                    )
+                body = response.json()
+                if body.get("ok") is True:
+                    return DeliveryResult(True, "delivered")
+                description = redact_secret(str(body.get("description", "Telegram rejected photo")))
+                if "Unauthorized" in description:
+                    return DeliveryResult(False, "invalid_credentials", description)
+                return DeliveryResult(False, "rejected", description)
+            except Exception as exc:
+                safe = redact_secret(str(exc))
+                if attempt == 2:
+                    return DeliveryResult(False, "temporary_failure", safe)
+                time.sleep(0.5 * (2**attempt))
+        return DeliveryResult(False, "temporary_failure", "unknown failure")
+
     def discover_chat_id(self) -> int:
         if not self.token:
             raise RuntimeError("Telegram token is not configured.")

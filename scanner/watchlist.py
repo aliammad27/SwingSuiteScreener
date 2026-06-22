@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from scanner.models import Candidate
 
 WATCHABLE_CALL_BIASES = {
@@ -16,6 +18,17 @@ BLOCKING_DAILY_MOMENTUM_STATES = {
     "Bearish",
     "Weakening",
 }
+
+
+@dataclass(frozen=True)
+class WatchlistItem:
+    symbol: str
+    bucket: str
+    rank_score: int
+    reason: str
+    tradingview_url: str
+    trigger: float | None = None
+    support: float | None = None
 
 
 def is_strategy_watch_candidate(candidate: Candidate) -> bool:
@@ -53,5 +66,112 @@ def watch_details(candidate: Candidate) -> dict[str, object]:
         "four_hour_momentum_score": four_hour.score,
         "four_hour_momentum_state": four_hour.state,
         "option_liquidity": candidate.option_liquidity,
+        "trigger": candidate.entry_plan.trigger,
+        "support": candidate.entry_plan.support,
+        "invalidation": candidate.entry_plan.invalidation,
+        "entry_status": candidate.entry_plan.status,
         "watch_eligible": is_strategy_watch_candidate(candidate),
     }
+
+
+def tradingview_url(symbol: str) -> str:
+    return f"https://www.tradingview.com/chart/?symbol={symbol}"
+
+
+def rank_candidate(candidate: Candidate) -> int:
+    command = candidate.command.score
+    daily = candidate.daily_momentum.score
+    four_hour = candidate.four_hour_momentum.score
+    rs_bonus = 10 if candidate.command.relative_strength == "Leading" else 5
+    bias_bonus = 5 if candidate.command.call_bias in {"Breakout confirmed", "Pullback setup"} else 0
+    return command + daily + four_hour + rs_bonus + bias_bonus
+
+
+def _grade_bucket(candidate: Candidate) -> str:
+    if candidate.grade.value == "S":
+        return "S"
+    if candidate.grade.value == "A+":
+        return "A+"
+    return "TW"
+
+
+def _missing_confirmation_reason(value: str | None) -> str:
+    if value is None:
+        return "minor gap"
+    normalized = value.strip()
+    if not normalized or normalized.lower() == "none":
+        return "minor gap"
+    return normalized
+
+
+def reason_for_candidate(candidate: Candidate) -> str:
+    command = candidate.command
+    daily = candidate.daily_momentum
+    four_hour = candidate.four_hour_momentum
+    if candidate.grade.value == "S":
+        return f"C{command.score} D{daily.score} 4H{four_hour.score}, RS {command.relative_strength}"
+    if candidate.grade.value == "A+":
+        missing = _missing_confirmation_reason(candidate.missing_confirmation)
+        return f"C{command.score} D{daily.score} 4H{four_hour.score}, {missing}"
+    if candidate.grade.value == "Technical Watch":
+        return f"C{command.score} D{daily.score} 4H{four_hour.score}, options need broker check"
+    return f"C{command.score}, {command.call_bias}, D{daily.score}, 4H{four_hour.score}"
+
+
+def reason_for_rejected(symbol: str, details: dict[str, object]) -> str:
+    command_score = details.get("command_score", "?")
+    call_bias = details.get("call_bias", "Watch")
+    daily_score = details.get("daily_momentum_score", "?")
+    four_hour_score = details.get("four_hour_momentum_score", "?")
+    return f"C{command_score}, {call_bias}, D{daily_score}, 4H{four_hour_score}"
+
+
+def _optional_float(value: object) -> float | None:
+    if isinstance(value, int | float):
+        return float(value)
+    return None
+
+
+def _int_value(value: object) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    return 0
+
+
+def ranked_watchlist_items(
+    candidates: list[Candidate],
+    rejected_details: list[tuple[str, dict[str, object]]],
+    limit: int = 10,
+) -> list[WatchlistItem]:
+    items: list[WatchlistItem] = []
+    for candidate in candidates:
+        items.append(
+            WatchlistItem(
+                symbol=candidate.symbol,
+                bucket=_grade_bucket(candidate),
+                rank_score=rank_candidate(candidate),
+                reason=reason_for_candidate(candidate),
+                tradingview_url=tradingview_url(candidate.symbol),
+                trigger=candidate.entry_plan.trigger,
+                support=candidate.entry_plan.support,
+            )
+        )
+    for symbol, details in rejected_details:
+        if details.get("watch_eligible") is True:
+            rank = _int_value(details.get("command_score"))
+            rank += _int_value(details.get("daily_momentum_score"))
+            rank += _int_value(details.get("four_hour_momentum_score"))
+            items.append(
+                WatchlistItem(
+                    symbol=symbol,
+                    bucket="Watch",
+                    rank_score=rank,
+                    reason=reason_for_rejected(symbol, details),
+                    tradingview_url=tradingview_url(symbol),
+                    trigger=_optional_float(details.get("trigger")),
+                    support=_optional_float(details.get("support")),
+                )
+            )
+    return sorted(items, key=lambda item: item.rank_score, reverse=True)[:limit]

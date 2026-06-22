@@ -30,3 +30,5 @@
 - Made the nightly Watch bucket strategy-based instead of showing the broad universe.
 - Expanded the default live universe from 5 to 67 liquid optionable stock tickers.
 - Added provider caching to reduce repeated market-data calls during larger scans.
+- Added ranked reason lines, TradingView links, chart image attachments, and Sunday weekly radar.
+- Expanded the live universe further to 161 liquid optionable stock tickers.

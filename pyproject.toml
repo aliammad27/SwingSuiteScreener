@@ -5,6 +5,7 @@ description = "Deterministic bullish call swing-trading screener"
 requires-python = ">=3.12"
 dependencies = [
   "requests>=2.31.0",
+  "matplotlib>=3.8.0",
 ]
 
 [tool.ruff]

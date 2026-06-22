@@ -2,7 +2,7 @@ from dataclasses import replace
 from datetime import datetime
 
 from scanner.clocks import NY
-from scanner.daily_prep import nightly_prep_message
+from scanner.daily_prep import nightly_prep_message, weekly_radar_message
 from scanner.models import RejectedRecord, ScanType
 from scanner.notifications import (
     TELEGRAM_TEST_MESSAGE,
@@ -51,9 +51,21 @@ def test_nightly_prep_message_for_monday_open() -> None:
     assert "A+: None" in message
     assert "TW: None" in message
     assert "Watch: None" in message
+    assert "Top:" in message
+    assert "SSTR S -" in message
+    assert "https://www.tradingview.com/chart/?symbol=SSTR" in message
     assert "What to look for:" not in message
     assert "Levels to watch:" not in message
     assert "Report:" not in message
+
+
+def test_nightly_prep_a_plus_reason_does_not_render_none() -> None:
+    result = run_scan(ScanType.POST_CLOSE, fixture=True)
+    md, _ = write_reports(result)
+    message = nightly_prep_message(result, md, datetime(2026, 6, 21, 21, 0, tzinfo=NY))
+
+    assert "APLUS A+ - C100 D84 4H84, minor gap" in message
+    assert "APLUS A+ - C100 D84 4H84, None" not in message
 
 
 def test_nightly_prep_zero_candidate_message_keeps_standards() -> None:
@@ -94,3 +106,25 @@ def test_nightly_prep_watch_bucket_requires_strategy_flag() -> None:
 
     assert "Watch: AAPL" in message
     assert "ZERO" not in message
+
+
+def test_weekly_radar_uses_same_ranked_watchlist() -> None:
+    result = run_scan(ScanType.POST_CLOSE, fixture=True, scenario="technical_watch")
+    md, _ = write_reports(result)
+    message = weekly_radar_message(result, md, datetime(2026, 6, 21, 20, 0, tzinfo=NY))
+
+    assert "WEEKLY RADAR" in message
+    assert "TW: SSTR" in message
+    assert "SSTR TW -" in message
+    assert "https://www.tradingview.com/chart/?symbol=SSTR" in message
+
+
+def test_telegram_photo_missing_credentials_safe(tmp_path) -> None:
+    image = tmp_path / "chart.png"
+    image.write_bytes(b"not-a-real-image")
+    notifier = TelegramNotifier(token="", chat_id="")
+
+    result = notifier.send_photo(image, "chart")
+
+    assert result.delivered is False
+    assert result.status == "not_configured"

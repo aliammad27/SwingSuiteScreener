@@ -16,10 +16,12 @@ reports/premarket/*
 reports/four_hour/*
 reports/archive/*
 reports/engineering/*
+reports/charts/*
 !reports/post_close/.gitkeep
 !reports/premarket/.gitkeep
 !reports/four_hour/.gitkeep
 !reports/archive/.gitkeep
 !reports/engineering/.gitkeep
+!reports/charts/.gitkeep
 logs/*
 !logs/.gitkeep

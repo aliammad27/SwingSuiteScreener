@@ -6,9 +6,10 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 from scanner.calendars import is_trading_day, market_close_for
+from scanner.charts import render_watchlist_chart
 from scanner.config import ConfigurationError, load_local_env, validate_configuration
 from scanner.daily_command import calculate_command
-from scanner.daily_prep import nightly_prep_message
+from scanner.daily_prep import nightly_prep_message, ranked_nightly_items, weekly_radar_message
 from scanner.data_quality import DataQualityError, require_completed_candles
 from scanner.entry_plan import build_entry_plan
 from scanner.grading import grade_candidate
@@ -181,6 +182,43 @@ def _maybe_notify(result: ScanResult, report_path: Path, fixture: bool) -> None:
     log_delivery("completion", delivery.status, event_type="completion", error=delivery.safe_error or "")
 
 
+def _send_watchlist_charts(
+    result: ScanResult,
+    market: MarketDataProvider,
+    notifier: TelegramNotifier,
+    *,
+    fixture: bool,
+) -> None:
+    if fixture:
+        return
+    for item in ranked_nightly_items(result)[:5]:
+        try:
+            candles = market.daily(item.symbol)
+            chart_path = render_watchlist_chart(
+                item.symbol,
+                candles,
+                f"{item.symbol} daily | {item.bucket} | {item.reason}",
+                item.trigger,
+                item.support,
+            )
+            delivery = notifier.send_photo(chart_path, caption=f"{item.symbol} {item.bucket}")
+            log_delivery(
+                f"daily_chart_{item.symbol}",
+                delivery.status,
+                ticker=item.symbol,
+                event_type="daily_chart",
+                error=delivery.safe_error or "",
+            )
+        except Exception as exc:
+            log_delivery(
+                f"daily_chart_{item.symbol}",
+                "chart_failed",
+                ticker=item.symbol,
+                event_type="daily_chart",
+                error=str(exc),
+            )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -191,6 +229,7 @@ def main() -> int:
             "four_hour",
             "test_notification",
             "daily_prep",
+            "weekly_radar",
             "validate_configuration",
             "readiness_check",
         ],
@@ -238,7 +277,28 @@ def main() -> int:
             if not delivery.delivered:
                 print(f"Daily prep Telegram notification not sent: {delivery.safe_error}")
                 return 1
+            market, _, _ = _providers(False, args.scenario)
+            _send_watchlist_charts(result, market, notifier, fixture=args.fixture)
             print("Daily prep Telegram notification delivered.")
+            return 0
+        if args.command == "weekly_radar":
+            result = run_scan(ScanType.POST_CLOSE, fixture=args.fixture, scenario=args.scenario)
+            md_path, json_path = write_reports(result)
+            message = weekly_radar_message(result, md_path)
+            if args.fixture:
+                print(message)
+                print(f"Markdown report: {md_path}")
+                print(f"JSON report: {json_path}")
+                return 0
+            notifier = TelegramNotifier()
+            delivery = notifier.send(message)
+            log_delivery("weekly_radar", delivery.status, event_type="weekly_radar", error=delivery.safe_error or "")
+            if not delivery.delivered:
+                print(f"Weekly radar Telegram notification not sent: {delivery.safe_error}")
+                return 1
+            market, _, _ = _providers(False, args.scenario)
+            _send_watchlist_charts(result, market, notifier, fixture=args.fixture)
+            print("Weekly radar Telegram notification delivered.")
             return 0
         scan_type = ScanType(args.command)
         result = run_scan(scan_type, fixture=args.fixture, scenario=args.scenario)
