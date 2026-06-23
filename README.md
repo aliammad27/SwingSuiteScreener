@@ -202,10 +202,12 @@ Default free automation uses GitHub Actions:
 
 GitHub scheduled events are best-effort and can start late. To reduce late
 market texts, each workflow now wakes several hours early during daylight saving
-time and uses `python -m scanner.schedule_gate` to wait inside the runner until
-the intended America/New_York time. If GitHub wakes the job more than 20 minutes
-after the intended time, the gate fails the job instead of sending a stale scan.
-The app still validates market calendar rules internally.
+time, has a near-target backup wakeup, and uses `python -m scanner.schedule_gate`
+to wait inside the runner until the intended America/New_York time. After a
+successful alert, the workflow holds the concurrency window open until stale
+backup runs would be blocked. If GitHub wakes the job more than 20 minutes after
+the intended time, the gate fails the job instead of sending a stale scan. The
+app still validates market calendar rules internally.
 
 Render Cron Jobs can run the Docker commands in `render.yaml`. Google Cloud Run
 Jobs can build the same container and schedule equivalent commands with Cloud

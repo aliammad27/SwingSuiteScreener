@@ -33,3 +33,4 @@
 - Added ranked reason lines, TradingView links, chart image attachments, and Sunday weekly radar.
 - Expanded the live universe further to 161 liquid optionable stock tickers.
 - Added an Eastern-time schedule gate and early GitHub Actions wakeups to reduce delayed market alerts.
+- Added near-target backup wakeups and post-alert schedule holds to reduce missed alerts without duplicating texts.

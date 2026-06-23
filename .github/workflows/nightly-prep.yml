@@ -4,6 +4,8 @@ on:
   schedule:
     # Early EDT wakeup; the schedule gate waits until 9:00 PM America/New_York.
     - cron: "22 19 * * *"
+    # Backup EDT wakeup in case GitHub misses the early trigger.
+    - cron: "40 0 * * *"
   workflow_dispatch:
 
 permissions:
@@ -42,6 +44,8 @@ jobs:
         run: python -m scanner.schedule_gate --target 21:00 --max-late-minutes 20
       - name: Send next-session prep
         run: python -m scanner.run_scan daily_prep
+      - name: Hold schedule window
+        run: python -m scanner.schedule_gate --target 21:00 --max-late-minutes 20 --hold-window-open
       - name: Upload notification log
         if: always()
         uses: actions/upload-artifact@v4
