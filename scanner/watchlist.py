@@ -19,6 +19,8 @@ BLOCKING_DAILY_MOMENTUM_STATES = {
     "Weakening",
 }
 
+SETUP_BUCKETS = {"S", "A+", "TW"}
+
 
 @dataclass(frozen=True)
 class WatchlistItem:
@@ -35,6 +37,30 @@ class WatchlistItem:
     preferred_dte_maximum: int | None = None
     intended_hold_days_minimum: int | None = None
     intended_hold_days_maximum: int | None = None
+
+
+def is_setup_bucket(bucket: str) -> bool:
+    return bucket in SETUP_BUCKETS
+
+
+def watchlist_level_summary(item: WatchlistItem) -> str:
+    if not is_setup_bucket(item.bucket):
+        return ""
+    parts: list[str] = []
+    if item.target_price is not None:
+        parts.append(f"Tgt {item.target_price:.2f}")
+    if item.research_call_strike is not None:
+        parts.append(f"Strike {item.research_call_strike:.2f}")
+    if item.preferred_dte_minimum is not None and item.preferred_dte_maximum is not None:
+        parts.append(f"{item.preferred_dte_minimum}-{item.preferred_dte_maximum}DTE")
+    if (
+        item.intended_hold_days_minimum is not None
+        and item.intended_hold_days_maximum is not None
+    ):
+        parts.append(
+            f"hold {item.intended_hold_days_minimum}-{item.intended_hold_days_maximum}d"
+        )
+    return " | ".join(parts)
 
 
 def is_strategy_watch_candidate(candidate: Candidate) -> bool:
@@ -158,9 +184,10 @@ def ranked_watchlist_items(
     rejected_details: list[tuple[str, dict[str, object]]],
     limit: int = 10,
 ) -> list[WatchlistItem]:
-    items: list[WatchlistItem] = []
+    setup_items: list[WatchlistItem] = []
+    watch_items: list[WatchlistItem] = []
     for candidate in candidates:
-        items.append(
+        setup_items.append(
             WatchlistItem(
                 symbol=candidate.symbol,
                 bucket=_grade_bucket(candidate),
@@ -182,7 +209,7 @@ def ranked_watchlist_items(
             rank = _int_value(details.get("command_score"))
             rank += _int_value(details.get("daily_momentum_score"))
             rank += _int_value(details.get("four_hour_momentum_score"))
-            items.append(
+            watch_items.append(
                 WatchlistItem(
                     symbol=symbol,
                     bucket="Watch",
@@ -191,18 +218,9 @@ def ranked_watchlist_items(
                     tradingview_url=tradingview_url(symbol),
                     trigger=_optional_float(details.get("trigger")),
                     support=_optional_float(details.get("support")),
-                    target_price=_optional_float(details.get("target_price")),
-                    research_call_strike=_optional_float(details.get("research_call_strike")),
-                    preferred_dte_minimum=_int_value(details.get("preferred_dte_minimum")) or None,
-                    preferred_dte_maximum=_int_value(details.get("preferred_dte_maximum")) or None,
-                    intended_hold_days_minimum=_int_value(
-                        details.get("intended_hold_days_minimum")
-                    )
-                    or None,
-                    intended_hold_days_maximum=_int_value(
-                        details.get("intended_hold_days_maximum")
-                    )
-                    or None,
                 )
             )
-    return sorted(items, key=lambda item: item.rank_score, reverse=True)[:limit]
+    ranked_setup = sorted(setup_items, key=lambda item: item.rank_score, reverse=True)
+    ranked_watch = sorted(watch_items, key=lambda item: item.rank_score, reverse=True)
+    remaining = max(0, limit - len(ranked_setup))
+    return ranked_setup + ranked_watch[:remaining]

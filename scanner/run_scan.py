@@ -30,7 +30,7 @@ from scanner.providers.cache import CachedMarketDataProvider, CachedOptionDataPr
 from scanner.providers.fixtures import FIXTURE_TIMESTAMP, FixtureDataProvider
 from scanner.reports import write_reports
 from scanner.universe import configured_symbols
-from scanner.watchlist import watch_details
+from scanner.watchlist import SETUP_BUCKETS, watch_details, watchlist_level_summary
 
 
 def _providers(
@@ -191,16 +191,23 @@ def _send_watchlist_charts(
 ) -> None:
     if fixture:
         return
-    for item in ranked_nightly_items(result)[:5]:
+    items = ranked_nightly_items(result)
+    setup_items = [item for item in items if item.bucket in SETUP_BUCKETS]
+    watch_items = [item for item in items if item.bucket == "Watch"]
+    for item in (setup_items + watch_items)[:5]:
         try:
             candles = market.daily(item.symbol)
+            levels = watchlist_level_summary(item)
+            chart_title = f"{item.symbol} daily | {item.bucket} | {item.reason}"
+            if levels:
+                chart_title = f"{chart_title} | {levels}"
             chart_path = render_watchlist_chart(
                 item.symbol,
                 candles,
-                f"{item.symbol} daily | {item.bucket} | {item.reason}",
+                chart_title,
                 item.trigger,
                 item.support,
-                item.target_price,
+                item.target_price if item.bucket in SETUP_BUCKETS else None,
             )
             delivery = notifier.send_photo(chart_path, caption=f"{item.symbol} {item.bucket}")
             log_delivery(

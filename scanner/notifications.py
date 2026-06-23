@@ -153,6 +153,18 @@ def _entry_plan_lines(candidate: Candidate) -> str:
     )
 
 
+def _compact_plan_line(candidate: Candidate) -> str:
+    entry = candidate.entry_plan
+    bucket = "TW" if candidate.grade.value == "Technical Watch" else candidate.grade.value
+    return (
+        f"{candidate.symbol} {bucket} | "
+        f"Tgt {entry.target_price:.2f} | "
+        f"Strike {entry.research_call_strike:.2f} | "
+        f"{entry.preferred_dte_minimum}-{entry.preferred_dte_maximum}DTE | "
+        f"hold {entry.intended_hold_days_minimum}-{entry.intended_hold_days_maximum}d"
+    )
+
+
 def candidate_message(candidate: Candidate, report_path: Path) -> str:
     if candidate.grade.value == "S":
         return (
@@ -175,6 +187,20 @@ def candidate_message(candidate: Candidate, report_path: Path) -> str:
             f"Status: {candidate.entry_plan.status}\n\n"
             f"Report: {report_path}"
         )
+    if candidate.grade.value == "Technical Watch":
+        return (
+            "TECHNICAL WATCH\n\n"
+            f"Ticker: {candidate.symbol}\n"
+            f"Current price: {candidate.command.close:.2f}\n\n"
+            f"Daily Command: {candidate.command.score}\n"
+            f"Daily Momentum: {candidate.daily_momentum.score}\n"
+            f"Four Hour Momentum: {candidate.four_hour_momentum.score}\n\n"
+            f"{_entry_plan_lines(candidate)}\n\n"
+            f"Option Liquidity: {candidate.option_liquidity}\n"
+            f"Missing Confirmation: {candidate.missing_confirmation or 'None'}\n"
+            "Status: technical watch only; verify live option chain before entry.\n\n"
+            f"Report: {report_path}"
+        )
     return (
         "A PLUS SETUP\n\n"
         f"Ticker: {candidate.symbol}\n"
@@ -192,6 +218,10 @@ def candidate_message(candidate: Candidate, report_path: Path) -> str:
 def completion_message(result: ScanResult, report_path: Path) -> str:
     if result.s_tier or result.a_plus or result.technical_watch:
         top = (result.s_tier + result.a_plus + result.technical_watch)[0]
+        setup_lines = [
+            _compact_plan_line(candidate)
+            for candidate in (result.s_tier + result.a_plus + result.technical_watch)
+        ]
         return (
             f"{result.scan_type.value.replace('_', ' ').upper()} SCAN COMPLETE\n\n"
             f"Market regime: {result.market_regime}\n"
@@ -208,6 +238,8 @@ def completion_message(result: ScanResult, report_path: Path) -> str:
             f"Research Call Strike: {top.entry_plan.research_call_strike:.2f}\n"
             f"DTE Window: {top.entry_plan.preferred_dte_minimum}-{top.entry_plan.preferred_dte_maximum}\n"
             f"Hold Window: {top.entry_plan.intended_hold_days_minimum}-{top.entry_plan.intended_hold_days_maximum} days\n\n"
+            "Setups:\n"
+            f"{chr(10).join(setup_lines)}\n\n"
             f"Full report: {report_path}"
         )
     return (

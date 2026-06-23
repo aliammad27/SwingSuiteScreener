@@ -2,7 +2,7 @@ from dataclasses import replace
 from datetime import datetime
 
 from scanner.clocks import NY
-from scanner.daily_prep import nightly_prep_message, weekly_radar_message
+from scanner.daily_prep import nightly_prep_message, ranked_nightly_items, weekly_radar_message
 from scanner.models import RejectedRecord, ScanType
 from scanner.notifications import (
     TELEGRAM_TEST_MESSAGE,
@@ -38,6 +38,23 @@ def test_candidate_and_completion_messages() -> None:
     assert "POST CLOSE SCAN COMPLETE" in completion_text
     assert "Target Stock Price:" in completion_text
     assert "Research Call Strike:" in completion_text
+    assert "Setups:" in completion_text
+    assert "SSTR S | Tgt " in completion_text
+    assert "45-60DTE" in completion_text
+
+
+def test_technical_watch_messages_include_option_plan() -> None:
+    result = run_scan(ScanType.POST_CLOSE, fixture=True, scenario="technical_watch")
+    md, _ = write_reports(result)
+    candidate_text = candidate_message(result.technical_watch[0], md)
+    completion_text = completion_message(result, md)
+
+    assert "TECHNICAL WATCH" in candidate_text
+    assert "Target Stock Price:" in candidate_text
+    assert "Research Call Strike:" in candidate_text
+    assert "DTE Window: 45-60" in candidate_text
+    assert "SSTR TW | Tgt " in completion_text
+    assert "Strike " in completion_text
 
 
 def test_post_close_zero_setup_notification() -> None:
@@ -116,6 +133,9 @@ def test_nightly_prep_watch_bucket_requires_strategy_flag() -> None:
     message = nightly_prep_message(result, md, datetime(2026, 6, 21, 21, 0, tzinfo=NY))
 
     assert "Watch: AAPL" in message
+    assert "AAPL Watch -" in message
+    assert "Tgt " not in message
+    assert "Strike " not in message
     assert "ZERO" not in message
 
 
@@ -128,6 +148,34 @@ def test_weekly_radar_uses_same_ranked_watchlist() -> None:
     assert "TW: SSTR" in message
     assert "SSTR TW -" in message
     assert "https://www.tradingview.com/chart/?symbol=SSTR" in message
+
+
+def test_setup_items_survive_watch_ranking_limit() -> None:
+    result = run_scan(ScanType.POST_CLOSE, fixture=True, scenario="technical_watch")
+    result = replace(
+        result,
+        rejected=[
+            RejectedRecord(
+                f"WATCH{idx}",
+                "grading",
+                ["waiting_for_timing"],
+                {
+                    "watch_eligible": True,
+                    "command_score": 100,
+                    "daily_momentum_score": 100,
+                    "four_hour_momentum_score": 100,
+                },
+            )
+            for idx in range(12)
+        ],
+    )
+
+    items = ranked_nightly_items(result)
+
+    assert items[0].bucket == "TW"
+    assert items[0].target_price is not None
+    assert items[0].research_call_strike is not None
+    assert len(items) == 8
 
 
 def test_telegram_photo_missing_credentials_safe(tmp_path) -> None:
