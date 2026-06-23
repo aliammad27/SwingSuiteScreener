@@ -25,6 +25,8 @@ jobs:
       ALPACA_DATA_BASE_URL: https://data.alpaca.markets
       ALPACA_FEED: iex
       ALPACA_OPTION_FEED: indicative
+      ALPACA_MIN_REQUEST_INTERVAL_SECONDS: "0.45"
+      ALPACA_MAX_RETRIES: "8"
       FREE_MODE: "true"
       ALLOW_TECHNICAL_WATCH: "true"
       TELEGRAM_BOT_USERNAME: AlisScreenerBot
@@ -41,10 +43,12 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
       - name: Wait until 8:45 AM ET
+        if: github.event_name == 'schedule'
         run: python -m scanner.schedule_gate --target 08:45 --max-late-minutes 20
       - name: Run premarket validation
         run: python -m scanner.run_scan premarket
       - name: Hold schedule window
+        if: github.event_name == 'schedule'
         run: python -m scanner.schedule_gate --target 08:45 --max-late-minutes 20 --hold-window-open
       - name: Upload report artifact
         if: always()

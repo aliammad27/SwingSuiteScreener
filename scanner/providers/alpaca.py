@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -12,6 +13,20 @@ class AlpacaConfigurationError(RuntimeError):
     pass
 
 
+def _float_env(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)))
+    except ValueError:
+        return default
+
+
 class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
     """Direct production provider using Alpaca's HTTP APIs.
 
@@ -20,31 +35,81 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
     """
 
     def __init__(self) -> None:
-        self.key = os.environ.get("ALPACA_API_KEY_ID")
-        self.secret = os.environ.get("ALPACA_API_SECRET_KEY")
-        self.base_url = os.environ.get("ALPACA_DATA_BASE_URL", "https://data.alpaca.markets")
-        self.feed = os.environ.get("ALPACA_FEED", "iex")
-        self.option_feed = os.environ.get("ALPACA_OPTION_FEED", "indicative")
+        self.key: str | None = os.environ.get("ALPACA_API_KEY_ID")
+        self.secret: str | None = os.environ.get("ALPACA_API_SECRET_KEY")
+        self.base_url: str = os.environ.get("ALPACA_DATA_BASE_URL", "https://data.alpaca.markets")
+        self.feed: str = os.environ.get("ALPACA_FEED", "iex")
+        self.option_feed: str = os.environ.get("ALPACA_OPTION_FEED", "indicative")
+        self.min_request_interval_seconds: float = _float_env(
+            "ALPACA_MIN_REQUEST_INTERVAL_SECONDS",
+            0.45,
+        )
+        self.max_retries: int = _int_env("ALPACA_MAX_RETRIES", 8)
+        self.retry_base_seconds: float = _float_env("ALPACA_RETRY_BASE_SECONDS", 2.0)
+        self._last_request_at: float = 0.0
         if not self.key or not self.secret:
             raise AlpacaConfigurationError("Alpaca data credentials are not configured.")
 
     def _headers(self) -> dict[str, str]:
         return {"APCA-API-KEY-ID": self.key or "", "APCA-API-SECRET-KEY": self.secret or ""}
 
+    def _throttle(self) -> None:
+        if self.min_request_interval_seconds <= 0:
+            return
+        elapsed = time.monotonic() - self._last_request_at
+        wait_seconds = self.min_request_interval_seconds - elapsed
+        if wait_seconds > 0:
+            time.sleep(wait_seconds)
+
+    def _retry_wait_seconds(self, response: Any, attempt: int) -> float:
+        headers = getattr(response, "headers", {})
+        retry_after = str(headers.get("Retry-After", "")) if isinstance(headers, dict) else ""
+        if retry_after:
+            try:
+                wait_seconds = max(float(retry_after), self.retry_base_seconds)
+                return min(wait_seconds, 90.0)
+            except ValueError:
+                pass
+        exponential_wait = self.retry_base_seconds * float(2**attempt)
+        return min(exponential_wait, 90.0)
+
     def _get(self, path: str, params: dict[str, str]) -> dict[str, Any]:
         import requests
 
-        response = requests.get(
-            f"{self.base_url}{path}",
-            headers=self._headers(),
-            params=params,
-            timeout=20,
-        )
-        response.raise_for_status()
-        data = response.json()
-        if not isinstance(data, dict):
-            raise RuntimeError("Unexpected Alpaca response shape.")
-        return data
+        last_status = "unknown"
+        for attempt in range(self.max_retries + 1):
+            try:
+                self._throttle()
+                response = requests.get(
+                    f"{self.base_url}{path}",
+                    headers=self._headers(),
+                    params=params,
+                    timeout=20,
+                )
+                self._last_request_at = time.monotonic()
+                last_status = str(response.status_code)
+                if response.status_code == 429 or response.status_code >= 500:
+                    if attempt == self.max_retries:
+                        break
+                    wait_seconds = self._retry_wait_seconds(response, attempt)
+                    print(
+                        f"Alpaca transient HTTP {response.status_code}; retrying in {wait_seconds:.1f}s.",
+                        flush=True,
+                    )
+                    time.sleep(wait_seconds)
+                    continue
+                response.raise_for_status()
+                data = response.json()
+                if not isinstance(data, dict):
+                    raise RuntimeError("Unexpected Alpaca response shape.")
+                return data
+            except requests.RequestException as exc:
+                if attempt == self.max_retries:
+                    raise RuntimeError(f"Alpaca request failed after retries for {path}.") from exc
+                wait_seconds = min(self.retry_base_seconds * (2**attempt), 90.0)
+                print(f"Alpaca network error; retrying in {wait_seconds:.1f}s.", flush=True)
+                time.sleep(wait_seconds)
+        raise RuntimeError(f"Alpaca request failed after retries with HTTP {last_status} for {path}.")
 
     def _bars(self, symbol: str, timeframe: str, limit: int) -> list[Candle]:
         end = datetime.now(UTC) - timedelta(minutes=20)

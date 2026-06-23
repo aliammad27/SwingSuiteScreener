@@ -101,6 +101,11 @@ The production `AlpacaDataProvider` uses Alpaca's market data HTTP API directly
 through environment credentials. Production code does not depend on Codex, MCP, or
 the Alpaca plugin.
 
+Free Alpaca plans can return `429 Too Many Requests` during broad scans. The
+provider throttles requests with `ALPACA_MIN_REQUEST_INTERVAL_SECONDS` and retries
+transient `429`/`5xx` responses with `ALPACA_MAX_RETRIES` before marking a symbol
+as unavailable.
+
 Required live market variables:
 
 ```text
@@ -210,6 +215,8 @@ successful alert, the workflow holds the concurrency window open until stale
 backup runs would be blocked. If GitHub wakes the job more than 20 minutes after
 the intended time, the gate fails the job instead of sending a stale scan. The
 app still validates market calendar rules internally.
+
+Manual workflow runs skip the schedule gate and start immediately.
 
 Render Cron Jobs can run the Docker commands in `render.yaml`. Google Cloud Run
 Jobs can build the same container and schedule equivalent commands with Cloud

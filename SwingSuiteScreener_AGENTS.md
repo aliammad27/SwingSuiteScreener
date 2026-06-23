@@ -212,6 +212,8 @@ GitHub Actions scheduled execution
 
 Free Alpaca data is useful but limited. IEX does not represent full consolidated SIP market coverage, and indicative options are not OPRA-quality executable option liquidity.
 
+The direct Alpaca provider must throttle live requests and retry transient HTTP `429` and `5xx` responses. A free-plan rate limit must slow a scan down or mark an individual symbol unavailable; it must not crash every scheduled job before a report can be written.
+
 Therefore:
 
 1. Do not label a live setup S tier unless current tradable option liquidity is Good.
@@ -237,6 +239,8 @@ TELEGRAM_CHAT_ID
 The scheduled workflows must not print secret values. They should run on GitHub-hosted Linux runners using the included GitHub Actions minutes quota and should upload generated reports as workflow artifacts.
 
 GitHub scheduled events are best-effort and may start late. Version one workflows should wake several hours before the intended market time during daylight saving time, include a near-target backup wakeup, and run `python -m scanner.schedule_gate` before scanner execution. The gate must wait until the exact America/New_York target time when the runner starts early, and it must fail instead of sending a stale market alert when GitHub starts the job more than 20 minutes late. After a successful alert, the workflow should hold the schedule window open so queued backup wakeups cannot send duplicate alerts.
+
+Manual workflow dispatch runs should skip the schedule gate and execute immediately for testing and catch-up sends.
 
 ## 3. Notification Decision
 
