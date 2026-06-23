@@ -84,7 +84,8 @@ The nightly `Watch` bucket is not the whole universe. It includes only names tha
 pass the strategy's daily watch-quality gates.
 
 Nightly and weekly Telegram messages include compact reason lines, TradingView
-chart links, and daily chart image attachments for the top ranked names.
+chart links, target stock prices, research call strikes, 45-60 DTE windows, and
+daily chart image attachments for the top ranked names.
 
 ## Providers
 
@@ -153,6 +154,7 @@ The Telegram body is intentionally short:
 - `S`, `A+`, `TW`, and `Watch` ticker buckets
 - `Watch` includes only strategy-qualified daily watch names, not the whole universe
 - top ranked ticker reasons and TradingView links
+- target stock price, research call strike, 45-60 DTE window, and 5-14 day swing window
 - daily chart image attachments for the top ranked names
 - a short note only when Technical Watch appears
 

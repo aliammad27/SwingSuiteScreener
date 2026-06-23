@@ -112,6 +112,13 @@ class EntryPlan:
     support: float
     invalidation: float
     nearest_resistance: float
+    target_price: float
+    target_gain_percent: float
+    research_call_strike: float
+    preferred_dte_minimum: int
+    preferred_dte_maximum: int
+    intended_hold_days_minimum: int
+    intended_hold_days_maximum: int
     distance_to_trigger: float
     distance_to_support: float
     reward_to_risk: float | None

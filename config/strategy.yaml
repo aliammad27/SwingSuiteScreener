@@ -1,5 +1,5 @@
-preferred_dte_target_minimum: 30
-preferred_dte_target_maximum: 45
+preferred_dte_target_minimum: 45
+preferred_dte_target_maximum: 60
 preferred_dte_hard_minimum: 30
 preferred_dte_maximum: 60
 preferred_delta_minimum: 0.45

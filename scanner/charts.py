@@ -57,6 +57,7 @@ def render_watchlist_chart(
     title: str,
     trigger: float | None = None,
     support: float | None = None,
+    target: float | None = None,
     output_dir: Path | None = None,
 ) -> Path:
     import matplotlib
@@ -100,6 +101,8 @@ def render_watchlist_chart(
         price_axis.axhline(trigger, color="#16a34a", linestyle="--", linewidth=1)
     if support is not None:
         price_axis.axhline(support, color="#0f766e", linestyle=":", linewidth=1)
+    if target is not None:
+        price_axis.axhline(target, color="#7c3aed", linestyle="-.", linewidth=1)
     price_axis.set_title(title)
     price_axis.legend(loc="upper left", fontsize=8)
     price_axis.grid(True, alpha=0.2)
@@ -125,9 +128,10 @@ def render_daily_chart(candidate: Candidate, candles: list[Candle], output_dir: 
         (
             f"{candidate.symbol} daily | {candidate.grade.value} | "
             f"C{candidate.command.score} D{candidate.daily_momentum.score} "
-            f"4H{candidate.four_hour_momentum.score}"
+        f"4H{candidate.four_hour_momentum.score}"
         ),
         candidate.entry_plan.trigger,
         candidate.entry_plan.support,
+        candidate.entry_plan.target_price,
         output_dir,
     )

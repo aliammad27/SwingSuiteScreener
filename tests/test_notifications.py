@@ -29,8 +29,15 @@ def test_candidate_and_completion_messages() -> None:
     result = run_scan(ScanType.POST_CLOSE, fixture=True, scenario="s_tier")
     md, _ = write_reports(result)
     assert result.s_tier
-    assert "S TIER SETUP" in candidate_message(result.s_tier[0], md)
-    assert "POST CLOSE SCAN COMPLETE" in completion_message(result, md)
+    candidate_text = candidate_message(result.s_tier[0], md)
+    completion_text = completion_message(result, md)
+    assert "S TIER SETUP" in candidate_text
+    assert "Target Stock Price:" in candidate_text
+    assert "Research Call Strike:" in candidate_text
+    assert "DTE Window: 45-60" in candidate_text
+    assert "POST CLOSE SCAN COMPLETE" in completion_text
+    assert "Target Stock Price:" in completion_text
+    assert "Research Call Strike:" in completion_text
 
 
 def test_post_close_zero_setup_notification() -> None:
@@ -53,6 +60,10 @@ def test_nightly_prep_message_for_monday_open() -> None:
     assert "Watch: None" in message
     assert "Top:" in message
     assert "SSTR S -" in message
+    assert "Tgt " in message
+    assert "Strike " in message
+    assert "45-60DTE" in message
+    assert "hold 5-14d" in message
     assert "https://www.tradingview.com/chart/?symbol=SSTR" in message
     assert "What to look for:" not in message
     assert "Levels to watch:" not in message

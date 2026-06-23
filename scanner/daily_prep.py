@@ -32,12 +32,36 @@ def ranked_nightly_items(result: ScanResult) -> list[WatchlistItem]:
     return ranked_watchlist_items(candidates, rejected_details, limit=8)
 
 
+def _level_summary(item: WatchlistItem) -> str:
+    parts: list[str] = []
+    if item.target_price is not None:
+        parts.append(f"Tgt {item.target_price:.2f}")
+    if item.research_call_strike is not None:
+        parts.append(f"Strike {item.research_call_strike:.2f}")
+    if item.preferred_dte_minimum is not None and item.preferred_dte_maximum is not None:
+        parts.append(f"{item.preferred_dte_minimum}-{item.preferred_dte_maximum}DTE")
+    if (
+        item.intended_hold_days_minimum is not None
+        and item.intended_hold_days_maximum is not None
+    ):
+        parts.append(
+            f"hold {item.intended_hold_days_minimum}-{item.intended_hold_days_maximum}d"
+        )
+    return " | ".join(parts)
+
+
 def _top_lines(items: list[WatchlistItem]) -> list[str]:
     if not items:
         return []
     lines = ["", "Top:"]
     for item in items[:5]:
-        lines.append(f"{item.symbol} {item.bucket} - {item.reason} - {item.tradingview_url}")
+        levels = _level_summary(item)
+        if levels:
+            lines.append(
+                f"{item.symbol} {item.bucket} - {item.reason} - {levels} - {item.tradingview_url}"
+            )
+        else:
+            lines.append(f"{item.symbol} {item.bucket} - {item.reason} - {item.tradingview_url}")
     return lines
 
 

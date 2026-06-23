@@ -1109,8 +1109,8 @@ A candidate cannot receive S tier or A plus when its options are not practically
 Create these initial defaults in `config/strategy.yaml`:
 
 ```yaml
-preferred_dte_target_minimum: 30
-preferred_dte_target_maximum: 45
+preferred_dte_target_minimum: 45
+preferred_dte_target_maximum: 60
 preferred_dte_hard_minimum: 30
 preferred_dte_maximum: 60
 
@@ -1149,7 +1149,7 @@ The intended holding period is several days to roughly two weeks.
 
 Prefer expiration dates that provide at least two to three times the expected holding period.
 
-The normal target is approximately 30 to 45 days to expiration. Contracts beyond 45 days may be used when liquidity, pricing, and the trade thesis justify them.
+The normal target is approximately 45 to 60 days to expiration for a swing intended to last several days to roughly two weeks.
 
 Avoid very short dated weekly contracts for the normal strategy.
 
@@ -1544,6 +1544,10 @@ Trigger: {breakout_trigger}
 Support: {support}
 Invalidation: {invalidation}
 Nearest Resistance: {nearest_resistance}
+Target Stock Price: {target_stock_price}
+Research Call Strike: {research_call_strike}
+DTE Window: 45-60
+Hold Window: 5-14 days
 
 Relative Strength: {relative_strength}
 Relative Volume: {relative_volume}
@@ -1734,10 +1738,13 @@ Breakout trigger:
 Pullback support:
 Invalidation:
 Nearest resistance:
+Target stock price:
+Research call strike:
 Entry mode:
 Entry status:
 Option liquidity:
-Preferred DTE range:
+Preferred DTE range: 45-60
+Intended hold window: 5-14 days
 Catalyst:
 Catalyst source:
 Earnings date:

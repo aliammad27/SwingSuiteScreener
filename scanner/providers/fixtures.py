@@ -90,10 +90,10 @@ class FixtureDataProvider(MarketDataProvider, OptionDataProvider, CatalystProvid
             ]
         if symbol == "APLUS":
             return [
-                OptionQuote("FIXTURE", 32, 0.50, 2.00, 2.22, 650, 180, 58, FIXTURE_TIMESTAMP)
+                OptionQuote("FIXTURE", 52, 0.50, 2.00, 2.22, 650, 180, 58, FIXTURE_TIMESTAMP)
             ]
         return [
-            OptionQuote("FIXTURE", 38, 0.55, 2.10, 2.26, 1200, 350, 42, FIXTURE_TIMESTAMP)
+            OptionQuote("FIXTURE", 52, 0.55, 2.10, 2.26, 1200, 350, 42, FIXTURE_TIMESTAMP)
         ]
 
     def catalyst(self, symbol: str) -> Catalyst:

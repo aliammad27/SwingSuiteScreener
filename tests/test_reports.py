@@ -29,4 +29,13 @@ def test_technical_watch_report_section_and_json() -> None:
     data = json.loads(js.read_text(encoding="utf-8"))
     assert "FREE TECHNICAL WATCH" in text
     assert "not trade-ready" in text
+    assert "Target stock price:" in text
+    assert "Research call strike:" in text
+    assert "Preferred DTE range: 45-60" in text
+    assert "Intended hold window: 5-14 days" in text
     assert data["technical_watch"]
+    entry = data["technical_watch"][0]["entry_plan"]
+    assert entry["target_price"] > 0
+    assert entry["research_call_strike"] >= entry["trigger"]
+    assert entry["preferred_dte_minimum"] == 45
+    assert entry["preferred_dte_maximum"] == 60

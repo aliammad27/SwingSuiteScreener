@@ -200,6 +200,7 @@ def _send_watchlist_charts(
                 f"{item.symbol} daily | {item.bucket} | {item.reason}",
                 item.trigger,
                 item.support,
+                item.target_price,
             )
             delivery = notifier.send_photo(chart_path, caption=f"{item.symbol} {item.bucket}")
             log_delivery(

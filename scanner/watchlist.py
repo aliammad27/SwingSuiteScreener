@@ -29,6 +29,12 @@ class WatchlistItem:
     tradingview_url: str
     trigger: float | None = None
     support: float | None = None
+    target_price: float | None = None
+    research_call_strike: float | None = None
+    preferred_dte_minimum: int | None = None
+    preferred_dte_maximum: int | None = None
+    intended_hold_days_minimum: int | None = None
+    intended_hold_days_maximum: int | None = None
 
 
 def is_strategy_watch_candidate(candidate: Candidate) -> bool:
@@ -69,6 +75,13 @@ def watch_details(candidate: Candidate) -> dict[str, object]:
         "trigger": candidate.entry_plan.trigger,
         "support": candidate.entry_plan.support,
         "invalidation": candidate.entry_plan.invalidation,
+        "target_price": candidate.entry_plan.target_price,
+        "target_gain_percent": candidate.entry_plan.target_gain_percent,
+        "research_call_strike": candidate.entry_plan.research_call_strike,
+        "preferred_dte_minimum": candidate.entry_plan.preferred_dte_minimum,
+        "preferred_dte_maximum": candidate.entry_plan.preferred_dte_maximum,
+        "intended_hold_days_minimum": candidate.entry_plan.intended_hold_days_minimum,
+        "intended_hold_days_maximum": candidate.entry_plan.intended_hold_days_maximum,
         "entry_status": candidate.entry_plan.status,
         "watch_eligible": is_strategy_watch_candidate(candidate),
     }
@@ -156,6 +169,12 @@ def ranked_watchlist_items(
                 tradingview_url=tradingview_url(candidate.symbol),
                 trigger=candidate.entry_plan.trigger,
                 support=candidate.entry_plan.support,
+                target_price=candidate.entry_plan.target_price,
+                research_call_strike=candidate.entry_plan.research_call_strike,
+                preferred_dte_minimum=candidate.entry_plan.preferred_dte_minimum,
+                preferred_dte_maximum=candidate.entry_plan.preferred_dte_maximum,
+                intended_hold_days_minimum=candidate.entry_plan.intended_hold_days_minimum,
+                intended_hold_days_maximum=candidate.entry_plan.intended_hold_days_maximum,
             )
         )
     for symbol, details in rejected_details:
@@ -172,6 +191,18 @@ def ranked_watchlist_items(
                     tradingview_url=tradingview_url(symbol),
                     trigger=_optional_float(details.get("trigger")),
                     support=_optional_float(details.get("support")),
+                    target_price=_optional_float(details.get("target_price")),
+                    research_call_strike=_optional_float(details.get("research_call_strike")),
+                    preferred_dte_minimum=_int_value(details.get("preferred_dte_minimum")) or None,
+                    preferred_dte_maximum=_int_value(details.get("preferred_dte_maximum")) or None,
+                    intended_hold_days_minimum=_int_value(
+                        details.get("intended_hold_days_minimum")
+                    )
+                    or None,
+                    intended_hold_days_maximum=_int_value(
+                        details.get("intended_hold_days_maximum")
+                    )
+                    or None,
                 )
             )
     return sorted(items, key=lambda item: item.rank_score, reverse=True)[:limit]

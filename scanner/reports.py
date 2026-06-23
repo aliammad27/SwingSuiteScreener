@@ -43,10 +43,18 @@ def _candidate_block(candidate: Candidate, index: int, include_a_plus: bool = Fa
         f"Pullback support: {entry.support:.2f}",
         f"Invalidation: {entry.invalidation:.2f}",
         f"Nearest resistance: {entry.nearest_resistance:.2f}",
+        f"Target stock price: {entry.target_price:.2f}",
+        f"Target gain from current price: {entry.target_gain_percent:.2f}%",
         f"Entry mode: {entry.entry_mode}",
         f"Entry status: {entry.status}",
         f"Option liquidity: {candidate.option_liquidity}",
-        "Preferred DTE range: 30-45 target, 30 hard minimum, 60 maximum",
+        f"Research call strike: {entry.research_call_strike:.2f}",
+        f"Preferred DTE range: {entry.preferred_dte_minimum}-{entry.preferred_dte_maximum}",
+        (
+            "Intended hold window: "
+            f"{entry.intended_hold_days_minimum}-{entry.intended_hold_days_maximum} days"
+        ),
+        "Contract note: verify live bid, ask, volume, open interest, IV, and expiration before entry.",
         f"Catalyst: {candidate.catalyst.summary}",
         f"Catalyst source: {candidate.catalyst.source_title} ({candidate.catalyst.source_url})",
         f"Earnings date: {candidate.catalyst.earnings_date or 'Unknown'}",

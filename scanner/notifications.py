@@ -140,6 +140,19 @@ def local_macos_fallback(summary: str) -> bool:
         return False
 
 
+def _entry_plan_lines(candidate: Candidate) -> str:
+    entry = candidate.entry_plan
+    return (
+        f"Trigger: {entry.trigger:.2f}\n"
+        f"Support: {entry.support:.2f}\n"
+        f"Invalidation: {entry.invalidation:.2f}\n"
+        f"Target Stock Price: {entry.target_price:.2f}\n"
+        f"Research Call Strike: {entry.research_call_strike:.2f}\n"
+        f"DTE Window: {entry.preferred_dte_minimum}-{entry.preferred_dte_maximum}\n"
+        f"Hold Window: {entry.intended_hold_days_minimum}-{entry.intended_hold_days_maximum} days"
+    )
+
+
 def candidate_message(candidate: Candidate, report_path: Path) -> str:
     if candidate.grade.value == "S":
         return (
@@ -152,9 +165,7 @@ def candidate_message(candidate: Candidate, report_path: Path) -> str:
             f"Four Hour Momentum: {candidate.four_hour_momentum.score}\n"
             f"Daily Filter: {'passed' if candidate.four_hour_momentum.daily_filter_passed else 'blocked'}\n\n"
             f"Entry Mode: {candidate.entry_plan.entry_mode}\n"
-            f"Trigger: {candidate.entry_plan.trigger:.2f}\n"
-            f"Support: {candidate.entry_plan.support:.2f}\n"
-            f"Invalidation: {candidate.entry_plan.invalidation:.2f}\n"
+            f"{_entry_plan_lines(candidate)}\n"
             f"Nearest Resistance: {candidate.entry_plan.nearest_resistance:.2f}\n\n"
             f"Relative Strength: {candidate.command.relative_strength}\n"
             f"Relative Volume: {candidate.command.relative_volume:.2f}\n"
@@ -171,9 +182,7 @@ def candidate_message(candidate: Candidate, report_path: Path) -> str:
         f"Daily Command: {candidate.command.score}\n"
         f"Daily Momentum: {candidate.daily_momentum.score}\n"
         f"Four Hour Momentum: {candidate.four_hour_momentum.score}\n\n"
-        f"Trigger: {candidate.entry_plan.trigger:.2f}\n"
-        f"Support: {candidate.entry_plan.support:.2f}\n"
-        f"Invalidation: {candidate.entry_plan.invalidation:.2f}\n\n"
+        f"{_entry_plan_lines(candidate)}\n\n"
         f"Missing Confirmation: {candidate.missing_confirmation or 'None'}\n"
         f"Reason It Is Not S Tier: {candidate.not_s_tier_reason or 'N/A'}\n\n"
         f"Report: {report_path}"
@@ -194,7 +203,11 @@ def completion_message(result: ScanResult, report_path: Path) -> str:
             f"Top setup: {top.symbol}\n"
             f"Grade: {top.grade.value}\n"
             f"Trigger: {top.entry_plan.trigger:.2f}\n"
-            f"Support: {top.entry_plan.support:.2f}\n\n"
+            f"Support: {top.entry_plan.support:.2f}\n"
+            f"Target Stock Price: {top.entry_plan.target_price:.2f}\n"
+            f"Research Call Strike: {top.entry_plan.research_call_strike:.2f}\n"
+            f"DTE Window: {top.entry_plan.preferred_dte_minimum}-{top.entry_plan.preferred_dte_maximum}\n"
+            f"Hold Window: {top.entry_plan.intended_hold_days_minimum}-{top.entry_plan.intended_hold_days_maximum} days\n\n"
             f"Full report: {report_path}"
         )
     return (
