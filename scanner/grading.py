@@ -60,7 +60,8 @@ def grade_candidate(
         not command.extended,
         command.weekly_alignment,
         option_liquidity == "Good",
-        catalyst_allows_primary_grade(catalyst) or catalyst.summary == "Technical continuation only",
+        catalyst_allows_primary_grade(catalyst)
+        or catalyst.summary == "Technical continuation only",
         market_regime != "Hostile",
         entry_plan.status in {"valid now", "approaching"},
         not rejection_reasons,
@@ -110,6 +111,23 @@ def grade_candidate(
             grade = Grade.TECHNICAL_WATCH
             missing = "Current tradable option liquidity is unavailable on the free data plan"
             reason = "Not S tier or A Plus because OPRA-quality option liquidity is unavailable."
+        elif all(
+            [
+                command.score >= 65,
+                daily_momentum.score >= 55,
+                four_hour.score >= 60,
+                not command.extended,
+                command.close > command.sma200,
+                command.relative_strength != "Lagging",
+                market_regime != "Hostile",
+                option_liquidity not in {"Poor"},
+                not catalyst.major_event_risk,
+                not rejection_reasons,
+            ]
+        ):
+            grade = Grade.B_TIER
+            missing = "Developing setup — scores below A+ thresholds"
+            reason = "Developing setup: does not yet meet A+ command, momentum, or confirmation requirements."
         else:
             grade = Grade.REJECTED
             missing = None

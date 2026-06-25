@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib import parse, request
 
+from scanner.clocks import NY
 from scanner.config import ROOT, load_local_env
 from scanner.models import Candidate, ScanResult
 
@@ -69,7 +70,9 @@ class TelegramNotifier:
                     body = json.loads(response.read().decode("utf-8"))
                 if body.get("ok") is True:
                     return DeliveryResult(True, "delivered")
-                description = redact_secret(str(body.get("description", "Telegram rejected message")))
+                description = redact_secret(
+                    str(body.get("description", "Telegram rejected message"))
+                )
                 if "Unauthorized" in description:
                     return DeliveryResult(False, "invalid_credentials", description)
                 return DeliveryResult(False, "rejected", description)
@@ -113,12 +116,16 @@ class TelegramNotifier:
     def discover_chat_id(self) -> int:
         if not self.token:
             raise RuntimeError("Telegram token is not configured.")
-        with request.urlopen(self._api("getMe"), timeout=12, context=self._ssl_context()) as response:
+        with request.urlopen(
+            self._api("getMe"), timeout=12, context=self._ssl_context()
+        ) as response:
             identity = json.loads(response.read().decode("utf-8"))
         username = identity.get("result", {}).get("username")
         if username != self.username:
             raise RuntimeError("Configured Telegram bot username does not match Bot API identity.")
-        with request.urlopen(self._api("getUpdates"), timeout=12, context=self._ssl_context()) as response:
+        with request.urlopen(
+            self._api("getUpdates"), timeout=12, context=self._ssl_context()
+        ) as response:
             updates = json.loads(response.read().decode("utf-8"))
         for item in reversed(updates.get("result", [])):
             chat = item.get("message", {}).get("chat", {})
@@ -130,7 +137,11 @@ class TelegramNotifier:
 def local_macos_fallback(summary: str) -> bool:
     try:
         subprocess.run(
-            ["osascript", "-e", f'display notification "{summary}" with title "SwingSuiteScreener"'],
+            [
+                "osascript",
+                "-e",
+                f'display notification "{summary}" with title "SwingSuiteScreener"',
+            ],
             check=False,
             timeout=5,
             capture_output=True,
@@ -140,119 +151,131 @@ def local_macos_fallback(summary: str) -> bool:
         return False
 
 
-def _entry_plan_lines(candidate: Candidate) -> str:
-    entry = candidate.entry_plan
-    return (
-        f"Trigger: {entry.trigger:.2f}\n"
-        f"Support: {entry.support:.2f}\n"
-        f"Invalidation: {entry.invalidation:.2f}\n"
-        f"Target Stock Price: {entry.target_price:.2f}\n"
-        f"Research Call Strike: {entry.research_call_strike:.2f}\n"
-        f"DTE Window: {entry.preferred_dte_minimum}-{entry.preferred_dte_maximum}\n"
-        f"Hold Window: {entry.intended_hold_days_minimum}-{entry.intended_hold_days_maximum} days"
-    )
+def _dist_to_trigger(candidate: Candidate) -> str:
+    price = candidate.command.close
+    trigger = candidate.entry_plan.trigger
+    if price <= 0:
+        return ""
+    pct = (trigger - price) / price * 100
+    sign = "+" if pct >= 0 else ""
+    return f"{sign}{pct:.1f}%"
 
 
 def _compact_plan_line(candidate: Candidate) -> str:
     entry = candidate.entry_plan
+    price = candidate.command.close
     bucket = "TW" if candidate.grade.value == "Technical Watch" else candidate.grade.value
+    dist = _dist_to_trigger(candidate)
+    dist_str = f" ({dist})" if dist else ""
     return (
         f"{candidate.symbol} {bucket} | "
-        f"Tgt {entry.target_price:.2f} | "
-        f"Strike {entry.research_call_strike:.2f} | "
+        f"${price:.2f} → ${entry.trigger:.2f}{dist_str} | "
+        f"Sup ${entry.support:.2f} | "
+        f"Tgt ${entry.target_price:.2f} | "
         f"{entry.preferred_dte_minimum}-{entry.preferred_dte_maximum}DTE | "
-        f"hold {entry.intended_hold_days_minimum}-{entry.intended_hold_days_maximum}d"
+        f"{entry.intended_hold_days_minimum}-{entry.intended_hold_days_maximum}d hold"
+    )
+
+
+def _levels_line(candidate: Candidate) -> str:
+    entry = candidate.entry_plan
+    price = candidate.command.close
+    dist = _dist_to_trigger(candidate)
+    dist_str = f" ({dist})" if dist else ""
+    return (
+        f"${price:.2f} → ${entry.trigger:.2f}{dist_str} | "
+        f"Sup ${entry.support:.2f} | "
+        f"Res ${entry.nearest_resistance:.2f} | "
+        f"Tgt ${entry.target_price:.2f}"
+    )
+
+
+def _scores_line(candidate: Candidate) -> str:
+    cmd = candidate.command
+    daily = candidate.daily_momentum
+    four = candidate.four_hour_momentum
+    return (
+        f"C{cmd.score} | D{daily.score} | 4H{four.score} | "
+        f"RS {cmd.relative_strength} | Liquidity {candidate.option_liquidity}"
+    )
+
+
+def _option_line(candidate: Candidate) -> str:
+    entry = candidate.entry_plan
+    return (
+        f"Strike ${entry.research_call_strike:.2f} | "
+        f"{entry.preferred_dte_minimum}-{entry.preferred_dte_maximum}DTE | "
+        f"{entry.intended_hold_days_minimum}-{entry.intended_hold_days_maximum}d hold"
     )
 
 
 def candidate_message(candidate: Candidate, report_path: Path) -> str:
-    if candidate.grade.value == "S":
+    grade = candidate.grade.value
+    if grade == "S":
         return (
-            "S TIER SETUP\n\n"
-            f"Ticker: {candidate.symbol}\n"
-            f"Company: {candidate.company}\n"
-            f"Current price: {candidate.command.close:.2f}\n\n"
-            f"Daily Command: {candidate.command.score}\n"
-            f"Daily Momentum: {candidate.daily_momentum.score}\n"
-            f"Four Hour Momentum: {candidate.four_hour_momentum.score}\n"
-            f"Daily Filter: {'passed' if candidate.four_hour_momentum.daily_filter_passed else 'blocked'}\n\n"
-            f"Entry Mode: {candidate.entry_plan.entry_mode}\n"
-            f"{_entry_plan_lines(candidate)}\n"
-            f"Nearest Resistance: {candidate.entry_plan.nearest_resistance:.2f}\n\n"
-            f"Relative Strength: {candidate.command.relative_strength}\n"
-            f"Relative Volume: {candidate.command.relative_volume:.2f}\n"
-            f"Option Liquidity: {candidate.option_liquidity}\n\n"
-            f"Catalyst: {candidate.catalyst.summary}\n"
-            f"Earnings: {candidate.catalyst.earnings_date or 'Unknown'}\n"
-            f"Status: {candidate.entry_plan.status}\n\n"
+            f"S TIER SETUP — {candidate.symbol}\n\n"
+            f"{_levels_line(candidate)}\n"
+            f"{_scores_line(candidate)}\n"
+            f"{_option_line(candidate)}\n"
+            f"Earnings: {candidate.catalyst.earnings_date or 'Unknown'} | "
+            f"Catalyst: {candidate.catalyst.summary[:60]}\n\n"
             f"Report: {report_path}"
         )
-    if candidate.grade.value == "Technical Watch":
+    if grade == "A+":
         return (
-            "TECHNICAL WATCH\n\n"
-            f"Ticker: {candidate.symbol}\n"
-            f"Current price: {candidate.command.close:.2f}\n\n"
-            f"Daily Command: {candidate.command.score}\n"
-            f"Daily Momentum: {candidate.daily_momentum.score}\n"
-            f"Four Hour Momentum: {candidate.four_hour_momentum.score}\n\n"
-            f"{_entry_plan_lines(candidate)}\n\n"
-            f"Option Liquidity: {candidate.option_liquidity}\n"
-            f"Missing Confirmation: {candidate.missing_confirmation or 'None'}\n"
-            "Status: technical watch only; verify live option chain before entry.\n\n"
+            f"A PLUS SETUP — {candidate.symbol}\n\n"
+            f"{_levels_line(candidate)}\n"
+            f"{_scores_line(candidate)}\n"
+            f"{_option_line(candidate)}\n"
+            f"Missing: {candidate.missing_confirmation or 'None'}\n\n"
+            f"Report: {report_path}"
+        )
+    if grade == "B":
+        return (
+            f"B TIER SETUP — {candidate.symbol}\n\n"
+            f"{_levels_line(candidate)}\n"
+            f"{_scores_line(candidate)}\n"
+            f"{_option_line(candidate)}\n"
+            "Status: Developing — verify levels before entry\n\n"
             f"Report: {report_path}"
         )
     return (
-        "A PLUS SETUP\n\n"
-        f"Ticker: {candidate.symbol}\n"
-        f"Current price: {candidate.command.close:.2f}\n\n"
-        f"Daily Command: {candidate.command.score}\n"
-        f"Daily Momentum: {candidate.daily_momentum.score}\n"
-        f"Four Hour Momentum: {candidate.four_hour_momentum.score}\n\n"
-        f"{_entry_plan_lines(candidate)}\n\n"
-        f"Missing Confirmation: {candidate.missing_confirmation or 'None'}\n"
-        f"Reason It Is Not S Tier: {candidate.not_s_tier_reason or 'N/A'}\n\n"
+        f"TECHNICAL WATCH — {candidate.symbol}\n\n"
+        f"{_levels_line(candidate)}\n"
+        f"{_scores_line(candidate)}\n"
+        f"{_option_line(candidate)}\n"
+        f"Option Liquidity: {candidate.option_liquidity} — verify live chain before entry\n\n"
         f"Report: {report_path}"
     )
 
 
 def completion_message(result: ScanResult, report_path: Path) -> str:
-    if result.s_tier or result.a_plus or result.technical_watch:
-        top = (result.s_tier + result.a_plus + result.technical_watch)[0]
-        setup_lines = [
-            _compact_plan_line(candidate)
-            for candidate in (result.s_tier + result.a_plus + result.technical_watch)
-        ]
+    now_et = datetime.now(NY).strftime("%-I:%M %p ET")
+    title = result.scan_type.value.replace("_", " ").upper()
+    all_setups = result.s_tier + result.a_plus + result.b_tier + result.technical_watch
+    if all_setups:
+        count_line = (
+            f"S: {len(result.s_tier)} | A+: {len(result.a_plus)} | "
+            f"B: {len(result.b_tier)} | TW: {len(result.technical_watch)}"
+        )
+        setup_lines = [_compact_plan_line(c) for c in all_setups]
         return (
-            f"{result.scan_type.value.replace('_', ' ').upper()} SCAN COMPLETE\n\n"
-            f"Market regime: {result.market_regime}\n"
-            f"S tier: {len(result.s_tier)}\n"
-            f"A plus: {len(result.a_plus)}\n"
-            f"Free technical watch: {len(result.technical_watch)}\n"
-            f"Securities scanned: {result.universe_count}\n"
-            f"Completed: {datetime.now(UTC).isoformat()}\n\n"
-            f"Top setup: {top.symbol}\n"
-            f"Grade: {top.grade.value}\n"
-            f"Trigger: {top.entry_plan.trigger:.2f}\n"
-            f"Support: {top.entry_plan.support:.2f}\n"
-            f"Target Stock Price: {top.entry_plan.target_price:.2f}\n"
-            f"Research Call Strike: {top.entry_plan.research_call_strike:.2f}\n"
-            f"DTE Window: {top.entry_plan.preferred_dte_minimum}-{top.entry_plan.preferred_dte_maximum}\n"
-            f"Hold Window: {top.entry_plan.intended_hold_days_minimum}-{top.entry_plan.intended_hold_days_maximum} days\n\n"
-            "Setups:\n"
+            f"{title} SCAN COMPLETE\n"
+            f"Market: {result.market_regime} | Scanned: {result.universe_count} | {now_et}\n\n"
+            f"{count_line}\n\n"
             f"{chr(10).join(setup_lines)}\n\n"
             f"Full report: {report_path}"
         )
     return (
-        f"{result.scan_type.value.replace('_', ' ').upper()} SCAN COMPLETE\n\n"
-        "No S tier or A plus setups qualified today.\n\n"
-        "Standards were not lowered.\n\n"
-        f"Market regime: {result.market_regime}\n"
-        f"Securities scanned: {result.universe_count}\n"
-        f"Completed: {datetime.now(UTC).isoformat()}"
+        f"{title} SCAN COMPLETE\n"
+        f"Market: {result.market_regime} | Scanned: {result.universe_count} | {now_et}\n\n"
+        "No setups qualified. Standards not lowered."
     )
 
 
-def log_delivery(identifier: str, status: str, ticker: str = "", event_type: str = "", error: str = "") -> None:
+def log_delivery(
+    identifier: str, status: str, ticker: str = "", event_type: str = "", error: str = ""
+) -> None:
     log_path = ROOT / "logs" / "notifications.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     line = json.dumps(

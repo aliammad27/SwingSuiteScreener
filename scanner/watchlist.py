@@ -19,7 +19,7 @@ BLOCKING_DAILY_MOMENTUM_STATES = {
     "Weakening",
 }
 
-SETUP_BUCKETS = {"S", "A+", "TW"}
+SETUP_BUCKETS = {"S", "A+", "B", "TW"}
 
 
 @dataclass(frozen=True)
@@ -53,13 +53,8 @@ def watchlist_level_summary(item: WatchlistItem) -> str:
         parts.append(f"Strike {item.research_call_strike:.2f}")
     if item.preferred_dte_minimum is not None and item.preferred_dte_maximum is not None:
         parts.append(f"{item.preferred_dte_minimum}-{item.preferred_dte_maximum}DTE")
-    if (
-        item.intended_hold_days_minimum is not None
-        and item.intended_hold_days_maximum is not None
-    ):
-        parts.append(
-            f"hold {item.intended_hold_days_minimum}-{item.intended_hold_days_maximum}d"
-        )
+    if item.intended_hold_days_minimum is not None and item.intended_hold_days_maximum is not None:
+        parts.append(f"hold {item.intended_hold_days_minimum}-{item.intended_hold_days_maximum}d")
     return " | ".join(parts)
 
 
@@ -131,6 +126,8 @@ def _grade_bucket(candidate: Candidate) -> str:
         return "S"
     if candidate.grade.value == "A+":
         return "A+"
+    if candidate.grade.value == "B":
+        return "B"
     return "TW"
 
 
@@ -148,10 +145,14 @@ def reason_for_candidate(candidate: Candidate) -> str:
     daily = candidate.daily_momentum
     four_hour = candidate.four_hour_momentum
     if candidate.grade.value == "S":
-        return f"C{command.score} D{daily.score} 4H{four_hour.score}, RS {command.relative_strength}"
+        return (
+            f"C{command.score} D{daily.score} 4H{four_hour.score}, RS {command.relative_strength}"
+        )
     if candidate.grade.value == "A+":
         missing = _missing_confirmation_reason(candidate.missing_confirmation)
         return f"C{command.score} D{daily.score} 4H{four_hour.score}, {missing}"
+    if candidate.grade.value == "B":
+        return f"C{command.score} D{daily.score} 4H{four_hour.score}, developing"
     if candidate.grade.value == "Technical Watch":
         return f"C{command.score} D{daily.score} 4H{four_hour.score}, options need broker check"
     return f"C{command.score}, {command.call_bias}, D{daily.score}, 4H{four_hour.score}"

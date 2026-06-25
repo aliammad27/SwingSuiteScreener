@@ -52,7 +52,11 @@ def _providers(
         provider = FixtureDataProvider(scenario=scenario)
         return CachedMarketDataProvider(provider), CachedOptionDataProvider(provider), provider
     alpaca = AlpacaDataProvider()
-    return CachedMarketDataProvider(alpaca), CachedOptionDataProvider(alpaca), NullCatalystProvider()
+    return (
+        CachedMarketDataProvider(alpaca),
+        CachedOptionDataProvider(alpaca),
+        NullCatalystProvider(),
+    )
 
 
 def _scan_symbol(
@@ -97,7 +101,9 @@ def _scan_symbol(
     )
 
 
-def run_scan(scan_type: ScanType, *, fixture: bool = False, scenario: str = "default") -> ScanResult:
+def run_scan(
+    scan_type: ScanType, *, fixture: bool = False, scenario: str = "default"
+) -> ScanResult:
     validate_configuration(fixture=fixture)
     market, options, catalysts = _providers(fixture, scenario)
     weekly = market.weekly("SPY")
@@ -108,6 +114,8 @@ def run_scan(scan_type: ScanType, *, fixture: bool = False, scenario: str = "def
         symbols = ["SSTR"]
     elif fixture and scenario == "a_plus":
         symbols = ["APLUS"]
+    elif fixture and scenario == "b_tier":
+        symbols = ["BTIER"]
     elif fixture and scenario == "technical_watch":
         symbols = ["SSTR"]
     else:
@@ -118,11 +126,15 @@ def run_scan(scan_type: ScanType, *, fixture: bool = False, scenario: str = "def
         try:
             candidate = _scan_symbol(symbol, market, options, catalysts, market_regime)
         except (DataQualityError, ValueError, RuntimeError) as exc:
-            rejected.append(RejectedRecord(symbol, "data_quality", ["scan_error"], {"error": str(exc)}))
+            rejected.append(
+                RejectedRecord(symbol, "data_quality", ["scan_error"], {"error": str(exc)})
+            )
             continue
         if candidate.grade == Grade.S_TIER:
             candidates.append(candidate)
         elif candidate.grade == Grade.A_PLUS:
+            candidates.append(candidate)
+        elif candidate.grade == Grade.B_TIER:
             candidates.append(candidate)
         elif candidate.grade == Grade.TECHNICAL_WATCH:
             candidates.append(candidate)
@@ -139,9 +151,9 @@ def run_scan(scan_type: ScanType, *, fixture: bool = False, scenario: str = "def
     remaining_slots = max(0, 5 - len(s_tier))
     a_plus = [c for c in candidates if c.grade == Grade.A_PLUS][:remaining_slots]
     remaining_slots = max(0, remaining_slots - len(a_plus))
-    technical_watch = [
-        c for c in candidates if c.grade == Grade.TECHNICAL_WATCH
-    ][:remaining_slots]
+    b_tier = [c for c in candidates if c.grade == Grade.B_TIER][:remaining_slots]
+    remaining_slots = max(0, remaining_slots - len(b_tier))
+    technical_watch = [c for c in candidates if c.grade == Grade.TECHNICAL_WATCH][:remaining_slots]
     timestamp = FIXTURE_TIMESTAMP if fixture else datetime.now(UTC)
     return ScanResult(
         scan_type=scan_type,
@@ -153,6 +165,7 @@ def run_scan(scan_type: ScanType, *, fixture: bool = False, scenario: str = "def
         research_count=len(candidates),
         s_tier=s_tier,
         a_plus=a_plus,
+        b_tier=b_tier,
         technical_watch=technical_watch,
         rejected=rejected,
         fixture=fixture,
@@ -172,11 +185,19 @@ def readiness_check() -> int:
     print(f"Option feed: {os.environ.get('ALPACA_OPTION_FEED', 'indicative')}")
     print(
         "Alpaca credentials: "
-        + ("configured" if os.environ.get("ALPACA_API_KEY_ID") and os.environ.get("ALPACA_API_SECRET_KEY") else "missing")
+        + (
+            "configured"
+            if os.environ.get("ALPACA_API_KEY_ID") and os.environ.get("ALPACA_API_SECRET_KEY")
+            else "missing"
+        )
     )
     print(
         "Telegram: "
-        + ("configured" if os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID") else "missing")
+        + (
+            "configured"
+            if os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID")
+            else "missing"
+        )
     )
     for warning in warnings:
         print(f"WARNING: {warning}")
@@ -190,7 +211,9 @@ def _maybe_notify(result: ScanResult, report_path: Path, fixture: bool) -> None:
         print(message)
         return
     delivery = notifier.send(message)
-    log_delivery("completion", delivery.status, event_type="completion", error=delivery.safe_error or "")
+    log_delivery(
+        "completion", delivery.status, event_type="completion", error=delivery.safe_error or ""
+    )
 
 
 def _send_watchlist_charts(
@@ -258,7 +281,7 @@ def main() -> int:
     parser.add_argument(
         "--scenario",
         default="default",
-        choices=["default", "s_tier", "a_plus", "technical_watch", "zero"],
+        choices=["default", "s_tier", "a_plus", "b_tier", "technical_watch", "zero"],
     )
     args = parser.parse_args()
     try:
@@ -276,7 +299,12 @@ def main() -> int:
                 return 0
             notifier = TelegramNotifier()
             delivery = notifier.send(TELEGRAM_TEST_MESSAGE)
-            log_delivery("test_notification", delivery.status, event_type="test", error=delivery.safe_error or "")
+            log_delivery(
+                "test_notification",
+                delivery.status,
+                event_type="test",
+                error=delivery.safe_error or "",
+            )
             if not delivery.delivered:
                 print(f"Telegram test notification not sent: {delivery.safe_error}")
                 return 0
@@ -293,7 +321,12 @@ def main() -> int:
                 return 0
             notifier = TelegramNotifier()
             delivery = notifier.send(message)
-            log_delivery("daily_prep", delivery.status, event_type="daily_prep", error=delivery.safe_error or "")
+            log_delivery(
+                "daily_prep",
+                delivery.status,
+                event_type="daily_prep",
+                error=delivery.safe_error or "",
+            )
             if not delivery.delivered:
                 print(f"Daily prep Telegram notification not sent: {delivery.safe_error}")
                 return 1
@@ -312,7 +345,12 @@ def main() -> int:
                 return 0
             notifier = TelegramNotifier()
             delivery = notifier.send(message)
-            log_delivery("weekly_radar", delivery.status, event_type="weekly_radar", error=delivery.safe_error or "")
+            log_delivery(
+                "weekly_radar",
+                delivery.status,
+                event_type="weekly_radar",
+                error=delivery.safe_error or "",
+            )
             if not delivery.delivered:
                 print(f"Weekly radar Telegram notification not sent: {delivery.safe_error}")
                 return 1

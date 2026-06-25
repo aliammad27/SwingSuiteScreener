@@ -9,7 +9,9 @@ from scanner.providers.base import CatalystProvider, MarketDataProvider, OptionD
 FIXTURE_TIMESTAMP = datetime(2026, 6, 18, 20, 0, tzinfo=UTC)
 
 
-def _series(symbol: str, timeframe: str, count: int, base: float, drift: float, amp: float) -> list[Candle]:
+def _series(
+    symbol: str, timeframe: str, count: int, base: float, drift: float, amp: float
+) -> list[Candle]:
     candles: list[Candle] = []
     close = base
     step = timedelta(days=1) if timeframe == "1D" else timedelta(hours=4)
@@ -51,6 +53,8 @@ class FixtureDataProvider(MarketDataProvider, OptionDataProvider, CatalystProvid
             return 80, -0.08, 1.6
         if symbol == "APLUS":
             return 55, 0.12, 2.2
+        if self.scenario == "b_tier" or symbol == "BTIER":
+            return 38, 0.014, 2.6
         if symbol in {"SPY", "QQQ"}:
             return 100, 0.04, 1.5
         return 70, 0.045, 3.8
@@ -73,6 +77,7 @@ class FixtureDataProvider(MarketDataProvider, OptionDataProvider, CatalystProvid
         return {
             "SSTR": "Swing Suite Strong Fixture Corp.",
             "APLUS": "A Plus Watch Fixture Corp.",
+            "BTIER": "B Tier Developing Fixture Corp.",
             "ZERO": "Zero Candidate Fixture Corp.",
             "SPY": "SPDR S&P 500 ETF Trust",
             "QQQ": "Invesco QQQ Trust",
@@ -85,16 +90,12 @@ class FixtureDataProvider(MarketDataProvider, OptionDataProvider, CatalystProvid
         if self.scenario == "technical_watch":
             return []
         if symbol == "ZERO":
-            return [
-                OptionQuote("FIXTURE", 21, 0.30, 1.0, 1.4, 50, 10, 85, FIXTURE_TIMESTAMP)
-            ]
+            return [OptionQuote("FIXTURE", 21, 0.30, 1.0, 1.4, 50, 10, 85, FIXTURE_TIMESTAMP)]
         if symbol == "APLUS":
-            return [
-                OptionQuote("FIXTURE", 52, 0.50, 2.00, 2.22, 650, 180, 58, FIXTURE_TIMESTAMP)
-            ]
-        return [
-            OptionQuote("FIXTURE", 52, 0.55, 2.10, 2.26, 1200, 350, 42, FIXTURE_TIMESTAMP)
-        ]
+            return [OptionQuote("FIXTURE", 52, 0.50, 2.00, 2.22, 650, 180, 58, FIXTURE_TIMESTAMP)]
+        if symbol == "BTIER":
+            return [OptionQuote("FIXTURE", 52, 0.50, 2.00, 2.22, 650, 180, 58, FIXTURE_TIMESTAMP)]
+        return [OptionQuote("FIXTURE", 52, 0.55, 2.10, 2.26, 1200, 350, 42, FIXTURE_TIMESTAMP)]
 
     def catalyst(self, symbol: str) -> Catalyst:
         now = FIXTURE_TIMESTAMP

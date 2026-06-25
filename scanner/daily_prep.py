@@ -11,7 +11,6 @@ from scanner.watchlist import (
     SETUP_BUCKETS,
     WatchlistItem,
     ranked_watchlist_items,
-    watchlist_level_summary,
 )
 
 
@@ -32,7 +31,7 @@ def _item_symbols(items: list[WatchlistItem], bucket: str) -> str:
 
 
 def ranked_nightly_items(result: ScanResult) -> list[WatchlistItem]:
-    candidates = result.s_tier + result.a_plus + result.technical_watch
+    candidates = result.s_tier + result.a_plus + result.b_tier + result.technical_watch
     rejected_details = [(record.symbol, record.details) for record in result.rejected]
     return ranked_watchlist_items(candidates, rejected_details, limit=8)
 
@@ -40,18 +39,18 @@ def ranked_nightly_items(result: ScanResult) -> list[WatchlistItem]:
 def _top_lines(items: list[WatchlistItem]) -> list[str]:
     if not items:
         return []
-    lines = ["", "Top:"]
+    lines = ["", "Top setups:"]
     setup_items = [item for item in items if item.bucket in SETUP_BUCKETS]
     watch_items = [item for item in items if item.bucket == "Watch"]
     detailed_items = setup_items + watch_items[: max(0, 5 - len(setup_items))]
     for item in detailed_items:
-        levels = watchlist_level_summary(item)
-        if levels:
-            lines.append(
-                f"{item.symbol} {item.bucket} - {item.reason} - {levels} - {item.tradingview_url}"
-            )
-        else:
-            lines.append(f"{item.symbol} {item.bucket} - {item.reason} - {item.tradingview_url}")
+        parts = [f"{item.symbol} {item.bucket}", item.reason]
+        if item.trigger is not None:
+            parts.append(f"→ {item.trigger:.2f}")
+        if item.support is not None:
+            parts.append(f"Sup {item.support:.2f}")
+        parts.append(item.tradingview_url)
+        lines.append(" | ".join(parts))
     return lines
 
 
@@ -64,6 +63,7 @@ def ticker_watchlist_section(result: ScanResult, report_path: Path | None = None
         [
             f"S: {_item_symbols(items, 'S')}",
             f"A+: {_item_symbols(items, 'A+')}",
+            f"B: {_item_symbols(items, 'B')}",
             f"TW: {_item_symbols(items, 'TW')}",
             f"Watch: {_item_symbols(items, 'Watch')}",
         ]

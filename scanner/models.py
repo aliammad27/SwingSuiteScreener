@@ -14,6 +14,7 @@ class ScanType(StrEnum):
 class Grade(StrEnum):
     S_TIER = "S"
     A_PLUS = "A+"
+    B_TIER = "B"
     TECHNICAL_WATCH = "Technical Watch"
     REJECTED = "Rejected"
 
@@ -163,6 +164,7 @@ class ScanResult:
     research_count: int
     s_tier: list[Candidate]
     a_plus: list[Candidate]
+    b_tier: list[Candidate]
     technical_watch: list[Candidate]
     rejected: list[RejectedRecord]
     fixture: bool = False

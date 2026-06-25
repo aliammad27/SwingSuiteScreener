@@ -86,6 +86,7 @@ def result_to_json(result: ScanResult) -> dict[str, Any]:
         "research_count": result.research_count,
         "s_tier": [asdict(c) for c in result.s_tier],
         "a_plus": [asdict(c) for c in result.a_plus],
+        "b_tier": [asdict(c) for c in result.b_tier],
         "technical_watch": [asdict(c) for c in result.technical_watch],
         "rejected": [asdict(r) for r in result.rejected],
     }
@@ -108,6 +109,7 @@ def write_reports(result: ScanResult) -> tuple[Path, Path]:
             f"Securities scanned: {result.universe_count}",
             f"Passed deterministic filters: {result.deterministic_pass_count}",
             f"Received catalyst review: {result.research_count}",
+            f"B tier developing: {len(result.b_tier)}",
             f"Free technical watch: {len(result.technical_watch)}",
             "",
             "S TIER",
@@ -123,6 +125,18 @@ def write_reports(result: ScanResult) -> tuple[Path, Path]:
         for idx, candidate in enumerate(result.a_plus, 1):
             lines.extend(_candidate_block(candidate, idx, include_a_plus=True))
             lines.append("")
+    lines.extend(["B TIER — DEVELOPING SETUPS", ""])
+    if result.b_tier:
+        lines.extend(
+            [
+                "These setups pass basic technical structure but do not yet meet A+ thresholds. "
+                "Monitor for score improvement before committing capital.",
+                "",
+            ]
+        )
+        for idx, candidate in enumerate(result.b_tier, 1):
+            lines.extend(_candidate_block(candidate, idx, include_a_plus=True))
+            lines.append("")
     lines.extend(["FREE TECHNICAL WATCH", ""])
     if result.technical_watch:
         lines.extend(
@@ -135,8 +149,10 @@ def write_reports(result: ScanResult) -> tuple[Path, Path]:
         for idx, candidate in enumerate(result.technical_watch, 1):
             lines.extend(_candidate_block(candidate, idx, include_a_plus=True))
             lines.append("")
-    if not result.s_tier and not result.a_plus and not result.technical_watch:
-        lines.extend(["No S tier or A plus setups qualified today.", "", "Standards were not lowered.", ""])
+    if not result.s_tier and not result.a_plus and not result.b_tier and not result.technical_watch:
+        lines.extend(
+            ["No S tier or A plus setups qualified today.", "", "Standards were not lowered.", ""]
+        )
     lines.extend(
         [
             "NO TRADE CONDITIONS",
@@ -153,5 +169,7 @@ def write_reports(result: ScanResult) -> tuple[Path, Path]:
         ]
     )
     md_path.write_text("\n".join(lines), encoding="utf-8")
-    json_path.write_text(json.dumps(result_to_json(result), indent=2, default=str), encoding="utf-8")
+    json_path.write_text(
+        json.dumps(result_to_json(result), indent=2, default=str), encoding="utf-8"
+    )
     return md_path, json_path
