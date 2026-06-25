@@ -90,8 +90,8 @@ def validate_configuration(fixture: bool = False) -> list[str]:
     warnings: list[str] = []
     for name in required:
         load_config(name)
-    if not (ROOT / "AGENTS.md").exists():
-        raise ConfigurationError("Root AGENTS.md is required.")
+    if not (ROOT / "CLAUDE.md").exists():
+        raise ConfigurationError("Root CLAUDE.md is required.")
     if fixture:
         return warnings
     if not os.environ.get("ALPACA_API_KEY_ID") or not os.environ.get("ALPACA_API_SECRET_KEY"):

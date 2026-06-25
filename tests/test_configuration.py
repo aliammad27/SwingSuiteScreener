@@ -4,7 +4,7 @@ from scanner.universe import configured_symbols
 
 
 def test_root_agents_present() -> None:
-    assert (ROOT / "AGENTS.md").exists()
+    assert (ROOT / "CLAUDE.md").exists()
 
 
 def test_configuration_valid_fixture() -> None:
