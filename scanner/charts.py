@@ -121,14 +121,16 @@ def render_watchlist_chart(
     return chart_path
 
 
-def render_daily_chart(candidate: Candidate, candles: list[Candle], output_dir: Path | None = None) -> Path:
+def render_daily_chart(
+    candidate: Candidate, candles: list[Candle], output_dir: Path | None = None
+) -> Path:
     return render_watchlist_chart(
         candidate.symbol,
         candles,
         (
             f"{candidate.symbol} daily | {candidate.grade.value} | "
             f"C{candidate.command.score} D{candidate.daily_momentum.score} "
-        f"4H{candidate.four_hour_momentum.score}"
+            f"4H{candidate.four_hour_momentum.score}"
         ),
         candidate.entry_plan.trigger,
         candidate.entry_plan.support,

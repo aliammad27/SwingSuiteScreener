@@ -1,4 +1,3 @@
-
 from scanner.config import ROOT, load_config, validate_configuration
 from scanner.universe import configured_symbols
 

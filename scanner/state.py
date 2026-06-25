@@ -7,7 +7,9 @@ from scanner.models import Candidate
 from scanner.storage.base import Storage
 
 
-def notification_identifier(scan_date: str, run_type: str, candidate: Candidate, event_type: str) -> str:
+def notification_identifier(
+    scan_date: str, run_type: str, candidate: Candidate, event_type: str
+) -> str:
     raw = "|".join(
         [
             scan_date,

@@ -72,7 +72,9 @@ def atr(highs: list[float], lows: list[float], closes: list[float], length: int 
     return sum(true_ranges[-length:]) / length
 
 
-def bollinger(values: list[float], length: int = 20, deviations: float = 2.0) -> tuple[float, float, float, float]:
+def bollinger(
+    values: list[float], length: int = 20, deviations: float = 2.0
+) -> tuple[float, float, float, float]:
     basis = sma(values, length)
     window = values[-length:]
     variance = sum((v - basis) ** 2 for v in window) / length
@@ -83,7 +85,13 @@ def bollinger(values: list[float], length: int = 20, deviations: float = 2.0) ->
     return basis, upper, lower, width
 
 
-def anchored_vwap(highs: list[float], lows: list[float], closes: list[float], volumes: list[int], anchor_index: int) -> float:
+def anchored_vwap(
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    volumes: list[int],
+    anchor_index: int,
+) -> float:
     typical = [
         (high + low + close) / 3
         for high, low, close in zip(

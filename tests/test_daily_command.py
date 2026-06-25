@@ -4,7 +4,9 @@ from scanner.providers.fixtures import FixtureDataProvider
 
 def test_command_score_maximum_and_components() -> None:
     provider = FixtureDataProvider()
-    result = calculate_command("SSTR", provider.daily("SSTR"), provider.daily("QQQ"), provider.weekly("SSTR"))
+    result = calculate_command(
+        "SSTR", provider.daily("SSTR"), provider.daily("QQQ"), provider.weekly("SSTR")
+    )
     assert result.score == 100
     assert result.ema21 > result.sma50
     assert result.sma50 > result.sma200
@@ -36,9 +38,7 @@ def test_breakout_confirmed_bias_requires_volume() -> None:
     provider = FixtureDataProvider()
     daily = provider.daily("SSTR")
     previous_high = max(c.high for c in daily[-21:-1])
-    daily[-2] = type(daily[-2])(
-        **{**daily[-2].__dict__, "close": previous_high - 1}
-    )
+    daily[-2] = type(daily[-2])(**{**daily[-2].__dict__, "close": previous_high - 1})
     daily[-1] = type(daily[-1])(
         **{
             **daily[-1].__dict__,
@@ -56,5 +56,7 @@ def test_breakout_confirmed_bias_requires_volume() -> None:
 
 def test_extended_price_detection() -> None:
     provider = FixtureDataProvider()
-    result = calculate_command("ZERO", provider.daily("ZERO"), provider.daily("QQQ"), provider.weekly("ZERO"))
+    result = calculate_command(
+        "ZERO", provider.daily("ZERO"), provider.daily("QQQ"), provider.weekly("ZERO")
+    )
     assert "below_sma200" in result.rejection_reasons

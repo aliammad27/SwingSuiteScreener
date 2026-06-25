@@ -95,7 +95,11 @@ def validate_configuration(fixture: bool = False) -> list[str]:
     if fixture:
         return warnings
     if not os.environ.get("ALPACA_API_KEY_ID") or not os.environ.get("ALPACA_API_SECRET_KEY"):
-        warnings.append("Live Alpaca credentials are not configured; live market scans are disabled.")
+        warnings.append(
+            "Live Alpaca credentials are not configured; live market scans are disabled."
+        )
     if not os.environ.get("TELEGRAM_BOT_TOKEN") or not os.environ.get("TELEGRAM_CHAT_ID"):
-        warnings.append("Telegram token or chat id is not configured; live notifications are disabled.")
+        warnings.append(
+            "Telegram token or chat id is not configured; live notifications are disabled."
+        )
     return warnings

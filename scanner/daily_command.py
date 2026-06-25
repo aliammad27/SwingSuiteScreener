@@ -6,7 +6,9 @@ from scanner.structure import classify_structure, confirmed_pivot_lows, nearest_
 
 
 def _relative_strength(stock_closes: list[float], benchmark_closes: list[float]) -> str:
-    ratios = [s / b for s, b in zip(stock_closes[-len(benchmark_closes) :], benchmark_closes, strict=True)]
+    ratios = [
+        s / b for s, b in zip(stock_closes[-len(benchmark_closes) :], benchmark_closes, strict=True)
+    ]
     avg = ema(ratios, 21)
     rising = ratios[-1] > ratios[-6]
     if ratios[-1] > avg and rising:
@@ -71,7 +73,9 @@ def calculate_command(
     weekly_alignment = weekly[-1].close > weekly_ema21
     breakout_level = max(highs[-21:-1])
     breakout_confirmed = daily[-2].close <= breakout_level < closes[-1]
-    breakout_watch = closes[-1] < breakout_level and breakout_level - closes[-1] <= 0.5 * current_atr
+    breakout_watch = (
+        closes[-1] < breakout_level and breakout_level - closes[-1] <= 0.5 * current_atr
+    )
     pivot_lows = confirmed_pivot_lows(lows, 5, 3)
     latest_pivot_low = pivot_lows[-1][1] if pivot_lows else min(lows[-20:])
     support = nearest_support_below(closes[-1], [ema21, sma50, vwap, latest_pivot_low])

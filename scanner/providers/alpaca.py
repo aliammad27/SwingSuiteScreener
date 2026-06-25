@@ -116,7 +116,9 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
                 wait_seconds = min(self.retry_base_seconds * (2**attempt), 90.0)
                 log.warning("Alpaca network error for %s; retrying in %.1fs.", path, wait_seconds)
                 time.sleep(wait_seconds)
-        raise RuntimeError(f"Alpaca request failed after retries with HTTP {last_status} for {path}.")
+        raise RuntimeError(
+            f"Alpaca request failed after retries with HTTP {last_status} for {path}."
+        )
 
     def _bars(self, symbol: str, timeframe: str, limit: int) -> list[Candle]:
         end = datetime.now(UTC) - timedelta(minutes=20)

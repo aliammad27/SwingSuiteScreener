@@ -7,7 +7,9 @@ from scanner.storage.local_json import LocalJsonStorage
 
 def test_notification_deduplication(tmp_path) -> None:
     provider = FixtureDataProvider()
-    regime = classify_market_regime(provider.daily("SPY"), provider.daily("QQQ"), provider.weekly("SPY"))
+    regime = classify_market_regime(
+        provider.daily("SPY"), provider.daily("QQQ"), provider.weekly("SPY")
+    )
     candidate = _scan_symbol("SSTR", provider, provider, provider, regime)
     identifier = notification_identifier("2026-06-18", "post_close", candidate, "new_s_tier")
     state = NotificationState(LocalJsonStorage(tmp_path))
