@@ -13,7 +13,7 @@ from urllib import parse, request
 
 from scanner.clocks import NY
 from scanner.config import ROOT, load_local_env
-from scanner.models import Candidate, ScanResult
+from scanner.models import Candidate, PutCandidate, PutScanResult, ScanResult
 
 TELEGRAM_TEST_MESSAGE = (
     "ALI'S SCREENER BOT TEST\n\n"
@@ -270,6 +270,133 @@ def completion_message(result: ScanResult, report_path: Path) -> str:
         f"{title} SCAN COMPLETE\n"
         f"Market: {result.market_regime} | Scanned: {result.universe_count} | {now_et}\n\n"
         "No setups qualified. Standards not lowered."
+    )
+
+
+def _put_dist_to_trigger(candidate: PutCandidate) -> str:
+    price = candidate.command.close
+    trigger = candidate.entry_plan.trigger
+    if price <= 0:
+        return ""
+    pct = (price - trigger) / price * 100
+    sign = "+" if pct >= 0 else ""
+    return f"{sign}{pct:.1f}%"
+
+
+def _put_compact_plan_line(candidate: PutCandidate) -> str:
+    entry = candidate.entry_plan
+    price = candidate.command.close
+    bucket = "TW" if candidate.grade.value == "Technical Watch" else candidate.grade.value
+    dist = _put_dist_to_trigger(candidate)
+    dist_str = f" ({dist} to breakdown)" if dist else ""
+    return (
+        f"{candidate.symbol} {bucket}P | "
+        f"${price:.2f} ↓ ${entry.trigger:.2f}{dist_str} | "
+        f"Inv ${entry.invalidation:.2f} | "
+        f"Tgt ${entry.target_price:.2f} | "
+        f"{entry.preferred_dte_minimum}-{entry.preferred_dte_maximum}DTE | "
+        f"{entry.intended_hold_days_minimum}-{entry.intended_hold_days_maximum}d hold"
+    )
+
+
+def _put_levels_line(candidate: PutCandidate) -> str:
+    entry = candidate.entry_plan
+    price = candidate.command.close
+    dist = _put_dist_to_trigger(candidate)
+    dist_str = f" ({dist})" if dist else ""
+    return (
+        f"${price:.2f} ↓ ${entry.trigger:.2f}{dist_str} | "
+        f"Res ${entry.resistance:.2f} | "
+        f"Inv ${entry.invalidation:.2f} | "
+        f"Tgt ${entry.target_price:.2f}"
+    )
+
+
+def _put_scores_line(candidate: PutCandidate) -> str:
+    cmd = candidate.command
+    daily = candidate.daily_momentum
+    four = candidate.four_hour_momentum
+    return (
+        f"PC{cmd.score} | D{daily.score} | 4H{four.score} | "
+        f"RW {cmd.relative_weakness} | Liquidity {candidate.option_liquidity}"
+    )
+
+
+def _put_option_line(candidate: PutCandidate) -> str:
+    entry = candidate.entry_plan
+    return (
+        f"Strike ${entry.research_put_strike:.2f} | "
+        f"{entry.preferred_dte_minimum}-{entry.preferred_dte_maximum}DTE | "
+        f"{entry.intended_hold_days_minimum}-{entry.intended_hold_days_maximum}d hold"
+    )
+
+
+def put_candidate_message(candidate: PutCandidate, report_path: Path) -> str:
+    grade = candidate.grade.value
+    if grade == "S":
+        return (
+            f"S-PUT TIER SETUP — {candidate.symbol}\n\n"
+            f"{_put_levels_line(candidate)}\n"
+            f"{_put_scores_line(candidate)}\n"
+            f"{_put_option_line(candidate)}\n"
+            f"Earnings: {candidate.catalyst.earnings_date or 'Unknown'} | "
+            f"Catalyst: {candidate.catalyst.summary[:60]}\n\n"
+            f"Report: {report_path}"
+        )
+    if grade == "A+":
+        return (
+            f"A-PLUS PUT SETUP — {candidate.symbol}\n\n"
+            f"{_put_levels_line(candidate)}\n"
+            f"{_put_scores_line(candidate)}\n"
+            f"{_put_option_line(candidate)}\n"
+            f"Missing: {candidate.missing_confirmation or 'None'}\n\n"
+            f"Report: {report_path}"
+        )
+    if grade == "B":
+        return (
+            f"B-PUT TIER SETUP — {candidate.symbol}\n\n"
+            f"{_put_levels_line(candidate)}\n"
+            f"{_put_scores_line(candidate)}\n"
+            f"{_put_option_line(candidate)}\n"
+            "Status: Developing put — verify levels before entry\n\n"
+            f"Report: {report_path}"
+        )
+    return (
+        f"PUT TECHNICAL WATCH — {candidate.symbol}\n\n"
+        f"{_put_levels_line(candidate)}\n"
+        f"{_put_scores_line(candidate)}\n"
+        f"{_put_option_line(candidate)}\n"
+        f"Option Liquidity: {candidate.option_liquidity} — verify live chain before entry\n\n"
+        f"Report: {report_path}"
+    )
+
+
+def put_completion_message(result: PutScanResult, report_path: Path) -> str:
+    now_et = datetime.now(NY).strftime("%-I:%M %p ET")
+    title = result.scan_type.value.replace("_", " ").upper()
+    all_setups = result.s_tier + result.a_plus + result.b_tier + result.technical_watch
+    regime_note = (
+        "Hostile (put-supportive)"
+        if result.market_regime == "Hostile"
+        else result.market_regime
+    )
+    if all_setups:
+        count_line = (
+            f"S: {len(result.s_tier)} | A+: {len(result.a_plus)} | "
+            f"B: {len(result.b_tier)} | TW: {len(result.technical_watch)}"
+        )
+        setup_lines = [_put_compact_plan_line(c) for c in all_setups]
+        return (
+            f"{title} SCAN COMPLETE\n"
+            f"Market: {regime_note} | Scanned: {result.universe_count} | {now_et}\n\n"
+            f"{count_line}\n\n"
+            f"{chr(10).join(setup_lines)}\n\n"
+            f"Full report: {report_path}"
+        )
+    return (
+        f"{title} SCAN COMPLETE\n"
+        f"Market: {regime_note} | Scanned: {result.universe_count} | {now_et}\n\n"
+        "No put setups qualified. Standards not lowered."
     )
 
 

@@ -32,3 +32,44 @@ def classify_option_liquidity(quotes: list[OptionQuote]) -> str:
         )
         return "Acceptable" if near else "Poor"
     return "Poor"
+
+
+def classify_put_option_liquidity(quotes: list[OptionQuote]) -> str:
+    """Classify option liquidity for put contracts.
+
+    Targets puts with delta -0.35 to -0.60 and 45-70 DTE.
+    Falls back to absolute-delta heuristic when no negative-delta quotes are present.
+    """
+    put_quotes = [q for q in quotes if q.delta < 0]
+    if not put_quotes:
+        if not quotes:
+            return "Unknown"
+        best = min(quotes, key=lambda q: abs(q.dte - 57) + abs(abs(q.delta) - 0.50) * 100)
+    else:
+        best = min(put_quotes, key=lambda q: abs(q.dte - 57) + abs(abs(q.delta) - 0.50) * 100)
+    mid = (best.bid + best.ask) / 2
+    if mid <= 0:
+        return "Poor"
+    spread_pct = ((best.ask - best.bid) / mid) * 100
+    abs_delta = abs(best.delta)
+    requirements = [
+        45 <= best.dte <= 70,
+        0.35 <= abs_delta <= 0.60,
+        spread_pct <= 10,
+        best.open_interest >= 500,
+        best.volume >= 100,
+        best.implied_volatility_rank is None or best.implied_volatility_rank <= 70,
+    ]
+    if all(requirements):
+        return "Good"
+    misses = sum(1 for req in requirements if not req)
+    if misses == 1:
+        near = (
+            36 <= best.dte <= 84
+            and 0.28 <= abs_delta <= 0.72
+            and spread_pct <= 12
+            and best.open_interest >= 400
+            and best.volume >= 80
+        )
+        return "Acceptable" if near else "Poor"
+    return "Poor"

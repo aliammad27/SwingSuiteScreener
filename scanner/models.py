@@ -9,6 +9,9 @@ class ScanType(StrEnum):
     POST_CLOSE = "post_close"
     PREMARKET = "premarket"
     FOUR_HOUR = "four_hour"
+    PUT_POST_CLOSE = "put_post_close"
+    PUT_PREMARKET = "put_premarket"
+    PUT_FOUR_HOUR = "put_four_hour"
 
 
 class Grade(StrEnum):
@@ -143,6 +146,89 @@ class Candidate:
     missing_confirmation: str | None = None
     not_s_tier_reason: str | None = None
     rejection_reasons: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PutCommandResult:
+    symbol: str
+    score: int
+    put_bias: str
+    trend: str
+    relative_weakness: str
+    relative_volume: float
+    volume_state: str
+    volatility_state: str
+    structure: str
+    below_vwap: bool
+    anchored_vwap: float
+    weekly_alignment: bool
+    breakdown_level: float
+    breakdown_confirmed: bool
+    breakdown_watch: bool
+    rejection_resistance: float
+    rejection_setup: bool
+    extended_downside: bool
+    close: float
+    ema21: float
+    sma50: float
+    sma200: float
+    rejection_reasons: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PutEntryPlan:
+    entry_mode: str
+    trigger: float
+    resistance: float
+    invalidation: float
+    nearest_support: float
+    target_price: float
+    target_gain_percent: float
+    research_put_strike: float
+    preferred_dte_minimum: int
+    preferred_dte_maximum: int
+    intended_hold_days_minimum: int
+    intended_hold_days_maximum: int
+    distance_to_trigger: float
+    distance_to_resistance: float
+    reward_to_risk: float | None
+    status: str
+
+
+@dataclass(frozen=True)
+class PutCandidate:
+    symbol: str
+    company: str
+    sector: str
+    benchmark: str
+    command: PutCommandResult
+    daily_momentum: MomentumResult
+    four_hour_momentum: MomentumResult
+    option_liquidity: str
+    catalyst: Catalyst
+    market_regime: str
+    entry_plan: PutEntryPlan
+    grade: Grade
+    missing_confirmation: str | None = None
+    not_s_tier_reason: str | None = None
+    rejection_reasons: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PutScanResult:
+    scan_type: ScanType
+    generated_at: datetime
+    market_data_timestamp: datetime
+    market_regime: str
+    universe_count: int
+    deterministic_pass_count: int
+    research_count: int
+    s_tier: list[PutCandidate]
+    a_plus: list[PutCandidate]
+    b_tier: list[PutCandidate]
+    technical_watch: list[PutCandidate]
+    rejected: list[RejectedRecord]
+    fixture: bool = False
 
 
 @dataclass(frozen=True)

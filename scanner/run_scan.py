@@ -16,7 +16,7 @@ from scanner.entry_plan import build_entry_plan
 from scanner.grading import grade_candidate
 from scanner.indicators import ema
 from scanner.market_regime import classify_market_regime
-from scanner.models import Candidate, Grade, RejectedRecord, ScanResult, ScanType
+from scanner.models import Candidate, Grade, PutCandidate, PutScanResult, RejectedRecord, ScanResult, ScanType
 from scanner.momentum import calculate_momentum, strict_daily_filter
 from scanner.notifications import (
     TELEGRAM_TEST_MESSAGE,
@@ -24,7 +24,12 @@ from scanner.notifications import (
     completion_message,
     log_delivery,
 )
-from scanner.option_liquidity import classify_option_liquidity
+from scanner.option_liquidity import classify_option_liquidity, classify_put_option_liquidity
+from scanner.put_command import calculate_put_command
+from scanner.put_entry_plan import build_put_entry_plan
+from scanner.put_grading import grade_put_candidate
+from scanner.put_momentum import calculate_put_momentum, strict_bearish_daily_filter
+from scanner.put_reports import write_put_reports
 from scanner.providers.alpaca import AlpacaDataProvider, NullCatalystProvider
 from scanner.providers.base import CatalystProvider, MarketDataProvider, OptionDataProvider
 from scanner.providers.cache import CachedMarketDataProvider, CachedOptionDataProvider
@@ -172,6 +177,112 @@ def run_scan(
     )
 
 
+def _scan_put_symbol(
+    symbol: str,
+    market: MarketDataProvider,
+    options: OptionDataProvider,
+    catalysts: CatalystProvider,
+    market_regime: str,
+) -> PutCandidate:
+    daily = market.daily(symbol)
+    four_hour = market.four_hour(symbol)
+    weekly = market.weekly(symbol)
+    benchmark = "QQQ"
+    benchmark_daily = market.daily(benchmark)
+    require_completed_candles(daily, minimum=220, label=f"{symbol} daily")
+    require_completed_candles(four_hour, minimum=60, label=f"{symbol} four_hour")
+    require_completed_candles(weekly, minimum=30, label=f"{symbol} weekly")
+    command = calculate_put_command(symbol, daily, benchmark_daily, weekly)
+    # Bearish weekly HTF: close below weekly EMA 21
+    daily_htf = weekly[-1].close < ema([c.close for c in weekly], 21)
+    daily_momentum = calculate_put_momentum(symbol, daily, "1D", daily_htf)
+    daily_filter = strict_bearish_daily_filter(daily_momentum)
+    four_hour_momentum = calculate_put_momentum(symbol, four_hour, "4H", daily_filter)
+    option_quotes = options.option_quotes(symbol)
+    option_liquidity = classify_put_option_liquidity(option_quotes)
+    if option_quotes and getattr(options, "option_feed", "") == "indicative":
+        option_liquidity = "Indicative"
+    catalyst = catalysts.catalyst(symbol)
+    entry = build_put_entry_plan(command, four_hour_momentum)
+    return grade_put_candidate(
+        symbol=symbol,
+        company=market.company_name(symbol),
+        sector=market.sector(symbol),
+        benchmark=benchmark,
+        command=command,
+        daily_momentum=daily_momentum,
+        four_hour=four_hour_momentum,
+        option_liquidity=option_liquidity,
+        catalyst=catalyst,
+        market_regime=market_regime,
+        entry_plan=entry,
+        allow_technical_watch=os.environ.get("ALLOW_TECHNICAL_WATCH", "true").lower() == "true",
+    )
+
+
+def run_put_scan(
+    scan_type: ScanType, *, fixture: bool = False, scenario: str = "default"
+) -> PutScanResult:
+    validate_configuration(fixture=fixture)
+    market, options, catalysts = _providers(fixture, scenario)
+    weekly = market.weekly("SPY")
+    market_regime = classify_market_regime(market.daily("SPY"), market.daily("QQQ"), weekly)
+    if fixture and scenario == "put_s_tier":
+        symbols = ["SPUT"]
+    elif fixture and scenario == "put_a_plus":
+        symbols = ["APUT"]
+    elif fixture and scenario == "put_b_tier":
+        symbols = ["BPUT"]
+    else:
+        symbols = configured_symbols(fixture=fixture)
+    candidates: list[PutCandidate] = []
+    rejected: list[RejectedRecord] = []
+    for symbol in symbols:
+        try:
+            candidate = _scan_put_symbol(symbol, market, options, catalysts, market_regime)
+        except (DataQualityError, ValueError, RuntimeError) as exc:
+            rejected.append(
+                RejectedRecord(symbol, "data_quality", ["scan_error"], {"error": str(exc)})
+            )
+            continue
+        if candidate.grade in {Grade.S_TIER, Grade.A_PLUS, Grade.B_TIER, Grade.TECHNICAL_WATCH}:
+            candidates.append(candidate)
+        else:
+            rejected.append(
+                RejectedRecord(
+                    symbol,
+                    "grading",
+                    candidate.rejection_reasons or ["did_not_meet_put_standard"],
+                    {},
+                )
+            )
+    s_tier = [c for c in candidates if c.grade == Grade.S_TIER][:5]
+    remaining_slots = max(0, 5 - len(s_tier))
+    a_plus = [c for c in candidates if c.grade == Grade.A_PLUS][:remaining_slots]
+    remaining_slots = max(0, remaining_slots - len(a_plus))
+    b_tier = [c for c in candidates if c.grade == Grade.B_TIER][:remaining_slots]
+    remaining_slots = max(0, remaining_slots - len(b_tier))
+    technical_watch = [c for c in candidates if c.grade == Grade.TECHNICAL_WATCH][:remaining_slots]
+    from scanner.providers.fixtures import FIXTURE_TIMESTAMP
+
+    timestamp = FIXTURE_TIMESTAMP if fixture else datetime.now(UTC)
+    return PutScanResult(
+        scan_type=scan_type,
+        generated_at=datetime.now(UTC),
+        market_data_timestamp=timestamp,
+        market_regime=market_regime,
+        universe_count=len(symbols),
+        deterministic_pass_count=len(candidates),
+        research_count=len(candidates),
+        s_tier=s_tier,
+        a_plus=a_plus,
+        b_tier=b_tier,
+        technical_watch=technical_watch,
+        rejected=rejected,
+        fixture=fixture,
+    )
+
+
 def readiness_check() -> int:
     load_local_env()
     warnings = validate_configuration(fixture=False)
@@ -275,13 +386,26 @@ def main() -> int:
             "weekly_radar",
             "validate_configuration",
             "readiness_check",
+            "put_post_close",
+            "put_premarket",
+            "put_four_hour",
         ],
     )
     parser.add_argument("--fixture", action="store_true")
     parser.add_argument(
         "--scenario",
         default="default",
-        choices=["default", "s_tier", "a_plus", "b_tier", "technical_watch", "zero"],
+        choices=[
+            "default",
+            "s_tier",
+            "a_plus",
+            "b_tier",
+            "technical_watch",
+            "zero",
+            "put_s_tier",
+            "put_a_plus",
+            "put_b_tier",
+        ],
     )
     args = parser.parse_args()
     try:
@@ -357,6 +481,15 @@ def main() -> int:
             market, _, _ = _providers(False, args.scenario)
             _send_watchlist_charts(result, market, notifier, fixture=args.fixture)
             print("Weekly radar Telegram notification delivered.")
+            return 0
+        if args.command in {"put_post_close", "put_premarket", "put_four_hour"}:
+            put_scan_type = ScanType(args.command)
+            put_result = run_put_scan(
+                put_scan_type, fixture=args.fixture, scenario=args.scenario
+            )
+            md_path, json_path = write_put_reports(put_result)
+            print(f"Markdown report: {md_path}")
+            print(f"JSON report: {json_path}")
             return 0
         scan_type = ScanType(args.command)
         result = run_scan(scan_type, fixture=args.fixture, scenario=args.scenario)

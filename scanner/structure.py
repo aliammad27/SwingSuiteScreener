@@ -40,6 +40,11 @@ def nearest_support_below(price: float, levels: list[float]) -> float:
     return max(below) if below else min(levels)
 
 
+def nearest_resistance_above(price: float, levels: list[float]) -> float:
+    above = [level for level in levels if level > price]
+    return min(above) if above else max(levels)
+
+
 def latest_resistance(highs: list[float]) -> float:
     pivots = confirmed_pivot_highs(highs, 5, 3)
     return pivots[-1][1] if pivots else max(highs[-20:])
