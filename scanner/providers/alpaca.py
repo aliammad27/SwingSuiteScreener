@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 from datetime import UTC, datetime, timedelta
@@ -7,6 +8,8 @@ from typing import Any
 
 from scanner.models import Candle, Catalyst, OptionQuote
 from scanner.providers.base import CatalystProvider, MarketDataProvider, OptionDataProvider
+
+log = logging.getLogger(__name__)
 
 
 class AlpacaConfigurationError(RuntimeError):
@@ -92,9 +95,13 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
                     if attempt == self.max_retries:
                         break
                     wait_seconds = self._retry_wait_seconds(response, attempt)
-                    print(
-                        f"Alpaca transient HTTP {response.status_code}; retrying in {wait_seconds:.1f}s.",
-                        flush=True,
+                    log.warning(
+                        "Alpaca transient HTTP %s for %s; retrying in %.1fs (attempt %d/%d).",
+                        response.status_code,
+                        path,
+                        wait_seconds,
+                        attempt + 1,
+                        self.max_retries,
                     )
                     time.sleep(wait_seconds)
                     continue
@@ -107,7 +114,7 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
                 if attempt == self.max_retries:
                     raise RuntimeError(f"Alpaca request failed after retries for {path}.") from exc
                 wait_seconds = min(self.retry_base_seconds * (2**attempt), 90.0)
-                print(f"Alpaca network error; retrying in {wait_seconds:.1f}s.", flush=True)
+                log.warning("Alpaca network error for %s; retrying in %.1fs.", path, wait_seconds)
                 time.sleep(wait_seconds)
         raise RuntimeError(f"Alpaca request failed after retries with HTTP {last_status} for {path}.")
 

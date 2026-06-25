@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -31,6 +32,16 @@ from scanner.providers.fixtures import FIXTURE_TIMESTAMP, FixtureDataProvider
 from scanner.reports import write_reports
 from scanner.universe import configured_symbols
 from scanner.watchlist import SETUP_BUCKETS, watch_details, watchlist_level_summary
+
+log = logging.getLogger(__name__)
+
+
+def _configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%SZ",
+    )
 
 
 def _providers(
@@ -151,8 +162,8 @@ def run_scan(scan_type: ScanType, *, fixture: bool = False, scenario: str = "def
 def readiness_check() -> int:
     load_local_env()
     warnings = validate_configuration(fixture=False)
-    target_day = date(2026, 6, 22)
-    print("Readiness check for Monday 2026-06-22")
+    target_day = date.today()
+    print(f"Readiness check for {target_day.strftime('%A %Y-%m-%d')}")
     print(f"Trading day: {'yes' if is_trading_day(target_day) else 'no'}")
     if is_trading_day(target_day):
         print(f"Market close: {market_close_for(target_day).isoformat()}")
@@ -228,6 +239,7 @@ def _send_watchlist_charts(
 
 
 def main() -> int:
+    _configure_logging()
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "command",
