@@ -2,10 +2,13 @@ name: Weekly Radar
 
 on:
   schedule:
-    # Early EDT wakeup; the schedule gate waits until Sunday 8:00 PM America/New_York.
-    - cron: "22 18 * * 0"
-    # Backup EDT wakeup in case GitHub misses the early trigger.
-    - cron: "40 23 * * 0"
+    # Primary: fires 15 min before 8:00 PM ET Sunday (EDT=23:45 UTC Sun, EST=00:45 UTC Mon).
+    # Gate waits the remaining minutes; rejects if GitHub starts > 30 min late.
+    - cron: "45 23 * * 0"
+    # Backup: fires 20 min after target (EDT=00:20 UTC Mon). Same 30-min gate tolerance.
+    # Concurrency hold ensures this is rejected if the primary already succeeded.
+    # If the primary got no runner, this backup delivers the radar instead.
+    - cron: "20 0 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -18,7 +21,7 @@ concurrency:
 jobs:
   weekly-radar:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 180
     env:
       ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
       ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
@@ -44,12 +47,12 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Wait until 8:00 PM ET
         if: github.event_name == 'schedule'
-        run: python -m scanner.schedule_gate --target 20:00 --max-late-minutes 20
+        run: python -m scanner.schedule_gate --target 20:00 --max-late-minutes 30
       - name: Send weekly radar
         run: python -m scanner.run_scan weekly_radar
       - name: Hold schedule window
         if: github.event_name == 'schedule'
-        run: python -m scanner.schedule_gate --target 20:00 --max-late-minutes 20 --hold-window-open
+        run: python -m scanner.schedule_gate --target 20:00 --max-late-minutes 30 --hold-window-open
       - name: Upload weekly radar artifacts
         if: always()
         uses: actions/upload-artifact@v4

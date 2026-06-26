@@ -2,10 +2,13 @@ name: Four Hour Refresh
 
 on:
   schedule:
-    # Early EDT wakeup; the schedule gate waits until 1:35 PM America/New_York.
-    - cron: "57 11 * * 1-5"
-    # Backup EDT wakeup in case GitHub misses the early trigger.
-    - cron: "15 17 * * 1-5"
+    # Primary: fires 15 min before 1:35 PM ET (EDT=17:20 UTC, EST=18:20 UTC).
+    # Gate waits the remaining minutes; rejects if GitHub starts > 30 min late.
+    - cron: "20 17 * * 1-5"
+    # Backup: fires 20 min after target (EDT=17:55 UTC). Same 30-min gate tolerance.
+    # Concurrency hold ensures this is rejected if the primary already succeeded.
+    # If the primary got no runner, this backup delivers the refresh instead.
+    - cron: "55 17 * * 1-5"
   workflow_dispatch:
 
 permissions:
@@ -18,7 +21,7 @@ concurrency:
 jobs:
   four-hour:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 180
     env:
       ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
       ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
@@ -44,12 +47,12 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Wait until 1:35 PM ET
         if: github.event_name == 'schedule'
-        run: python -m scanner.schedule_gate --target 13:35 --max-late-minutes 20
+        run: python -m scanner.schedule_gate --target 13:35 --max-late-minutes 30
       - name: Run four hour refresh
         run: python -m scanner.run_scan four_hour
       - name: Hold schedule window
         if: github.event_name == 'schedule'
-        run: python -m scanner.schedule_gate --target 13:35 --max-late-minutes 20 --hold-window-open
+        run: python -m scanner.schedule_gate --target 13:35 --max-late-minutes 30 --hold-window-open
       - name: Upload report artifact
         if: always()
         uses: actions/upload-artifact@v4

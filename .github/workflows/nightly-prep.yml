@@ -2,15 +2,13 @@ name: Nightly Prep
 
 on:
   schedule:
-    # Primary EDT wakeup; the schedule gate waits until 9:00 PM America/New_York.
-    # Strict: gate rejects if GitHub starts this more than 20 minutes late.
-    - cron: "22 19 * * *"
-    # First backup: fires ~20 min before target. Lenient: allows up to 4-hour late start
-    # so nightly prep still sends even if GitHub delays this trigger until midnight.
-    - cron: "40 0 * * *"
-    # Second backup: fires ~2.5 hours after target. Catches cases where GitHub delays
-    # both earlier triggers by several hours.
-    - cron: "30 3 * * *"
+    # Primary: fires 15 min before 9:00 PM ET (EDT=00:45 UTC, EST=01:45 UTC).
+    # Gate waits the remaining minutes; rejects if GitHub starts > 60 min late.
+    - cron: "45 0 * * *"
+    # Backup: fires 50 min after target (EDT=01:50 UTC). Same 60-min gate tolerance.
+    # Concurrency hold ensures this is rejected if the primary already succeeded.
+    # If the primary got no runner, this backup delivers the prep instead.
+    - cron: "50 1 * * *"
   workflow_dispatch:
 
 permissions:
@@ -23,7 +21,7 @@ concurrency:
 jobs:
   nightly-prep:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 240
     env:
       ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
       ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
@@ -49,24 +47,12 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Wait until 9:00 PM ET
         if: github.event_name == 'schedule'
-        run: |
-          # Primary cron is strict (20 min tolerance) to avoid sending stale very-early prep.
-          # Backup crons allow up to 4 hours late so prep still sends even at midnight.
-          if [ "${{ github.event.schedule }}" = "22 19 * * *" ]; then
-            python -m scanner.schedule_gate --target 21:00 --max-late-minutes 20
-          else
-            python -m scanner.schedule_gate --target 21:00 --max-late-minutes 240
-          fi
+        run: python -m scanner.schedule_gate --target 21:00 --max-late-minutes 60
       - name: Send next-session prep
         run: python -m scanner.run_scan daily_prep
       - name: Hold schedule window
         if: github.event_name == 'schedule'
-        run: |
-          if [ "${{ github.event.schedule }}" = "22 19 * * *" ]; then
-            python -m scanner.schedule_gate --target 21:00 --max-late-minutes 20 --hold-window-open
-          else
-            python -m scanner.schedule_gate --target 21:00 --max-late-minutes 240 --hold-window-open
-          fi
+        run: python -m scanner.schedule_gate --target 21:00 --max-late-minutes 60 --hold-window-open
       - name: Upload notification log
         if: always()
         uses: actions/upload-artifact@v4
