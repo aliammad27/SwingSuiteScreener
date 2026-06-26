@@ -117,10 +117,13 @@ def _scan_symbol(
 def run_scan(
     scan_type: ScanType, *, fixture: bool = False, scenario: str = "default"
 ) -> ScanResult:
+    from collections import Counter
+
     validate_configuration(fixture=fixture)
     market, options, catalysts = _providers(fixture, scenario)
     weekly = market.weekly("SPY")
     market_regime = classify_market_regime(market.daily("SPY"), market.daily("QQQ"), weekly)
+    print(f"[scan] Market regime: {market_regime}")
     if fixture and scenario == "zero":
         symbols = ["ZERO"]
     elif fixture and scenario == "s_tier":
@@ -133,6 +136,7 @@ def run_scan(
         symbols = ["SSTR"]
     else:
         symbols = configured_symbols(fixture=fixture)
+    print(f"[scan] Processing {len(symbols)} symbols...")
     candidates: list[Candidate] = []
     rejected: list[RejectedRecord] = []
     for symbol in symbols:
@@ -160,6 +164,16 @@ def run_scan(
                     watch_details(candidate),
                 )
             )
+    reason_counts: Counter[str] = Counter()
+    for record in rejected:
+        for reason in record.reason_codes:
+            reason_counts[reason] += 1
+    print(
+        f"[scan] Done: {len(candidates)} qualified, {len(rejected)} rejected"
+        f" out of {len(symbols)}"
+    )
+    for reason, count in reason_counts.most_common(5):
+        print(f"[scan] Rejection reason: {reason} ({count}x)")
     s_tier = [c for c in candidates if c.grade == Grade.S_TIER][:5]
     remaining_slots = max(0, 5 - len(s_tier))
     a_plus = [c for c in candidates if c.grade == Grade.A_PLUS][:remaining_slots]

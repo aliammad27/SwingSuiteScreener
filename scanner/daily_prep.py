@@ -69,13 +69,11 @@ def ticker_watchlist_section(result: ScanResult, report_path: Path | None = None
         ]
     )
     if not items:
-        lines.extend(
-            [
-                "",
-                "No qualified or watch tickers tonight.",
-                "Standards were not lowered.",
-            ]
-        )
+        no_results = ["", "No qualified or watch tickers tonight."]
+        if result.market_regime == "Hostile":
+            no_results.append("Market regime blocked all candidates.")
+        no_results.append("Standards were not lowered.")
+        lines.extend(no_results)
     else:
         lines.extend(_top_lines(items))
     if any(item.bucket == "TW" for item in items):
@@ -93,7 +91,8 @@ def nightly_prep_message(
 
     return (
         "NIGHTLY WATCHLIST\n"
-        f"Next: {_format_day(session_day)}\n\n"
+        f"Next: {_format_day(session_day)}\n"
+        f"Market: {result.market_regime} | Scanned: {result.universe_count}\n\n"
         f"{ticker_watchlist_section(result, report_path)}"
     )
 
@@ -108,6 +107,6 @@ def weekly_radar_message(
     return (
         "WEEKLY RADAR\n"
         f"Next: {_format_day(session_day)}\n"
-        f"Scanned: {result.universe_count}\n\n"
+        f"Market: {result.market_regime} | Scanned: {result.universe_count}\n\n"
         f"{ticker_watchlist_section(result, report_path)}"
     )
