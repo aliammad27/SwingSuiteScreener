@@ -47,12 +47,12 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Wait until 8:00 PM ET
         if: github.event_name == 'schedule'
-        run: python -m scanner.schedule_gate --target 20:00 --max-late-minutes 30
+        run: python -m scanner.schedule_gate --target 20:00 --max-late-minutes 90
       - name: Send weekly radar
         run: python -m scanner.run_scan weekly_radar
       - name: Hold schedule window
         if: github.event_name == 'schedule'
-        run: python -m scanner.schedule_gate --target 20:00 --max-late-minutes 30 --hold-window-open
+        run: python -m scanner.schedule_gate --target 20:00 --max-late-minutes 90 --hold-window-open
       - name: Upload weekly radar artifacts
         if: always()
         uses: actions/upload-artifact@v4
