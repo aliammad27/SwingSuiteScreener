@@ -1,8 +1,8 @@
 """Tests for the put command center (bearish daily selection)."""
 from __future__ import annotations
 
-from scanner.put_command import calculate_put_command, _relative_weakness
 from scanner.providers.fixtures import FixtureDataProvider
+from scanner.put_command import _relative_weakness, calculate_put_command
 
 
 def _put_cmd(symbol: str, scenario: str = "default"):
@@ -96,7 +96,6 @@ def test_put_command_score_max_100() -> None:
 
 def test_avoid_bias_when_above_sma200() -> None:
     """Scores below 45 or price above SMA200 must produce Avoid bias."""
-    prov = FixtureDataProvider("default")
     # SSTR is a bullish fixture — its put command should be Avoid
     cmd = _put_cmd("SSTR", "default")
     assert cmd.put_bias == "Avoid"
