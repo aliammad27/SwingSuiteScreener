@@ -2,9 +2,9 @@ name: Premarket Validation
 
 on:
   schedule:
-    # Primary: fires 15 min before 8:45 AM ET (EDT=12:30 UTC, EST=13:30 UTC).
+    # Primary: fires 30 min before 8:45 AM ET (EDT=12:15 UTC, EST=13:15 UTC).
     # Gate waits the remaining minutes; rejects if GitHub starts > 30 min late.
-    - cron: "30 12 * * 1-5"
+    - cron: "15 12 * * 1-5"
     # Backup: fires 20 min after target (EDT=13:05 UTC). Same 30-min gate tolerance.
     # Concurrency hold ensures this is rejected if the primary already succeeded.
     # If the primary got no runner, this backup delivers the notification instead.

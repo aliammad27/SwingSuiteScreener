@@ -2,9 +2,9 @@ name: Weekly Radar
 
 on:
   schedule:
-    # Primary: fires 15 min before 8:00 PM ET Sunday (EDT=23:45 UTC Sun, EST=00:45 UTC Mon).
+    # Primary: fires 30 min before 8:00 PM ET Sunday (EDT=23:30 UTC Sun, EST=00:30 UTC Mon).
     # Gate waits the remaining minutes; rejects if GitHub starts > 30 min late.
-    - cron: "45 23 * * 0"
+    - cron: "30 23 * * 0"
     # Backup: fires 20 min after target (EDT=00:20 UTC Mon). Same 30-min gate tolerance.
     # Concurrency hold ensures this is rejected if the primary already succeeded.
     # If the primary got no runner, this backup delivers the radar instead.

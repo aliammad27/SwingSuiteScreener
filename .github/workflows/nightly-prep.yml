@@ -2,9 +2,9 @@ name: Nightly Prep
 
 on:
   schedule:
-    # Primary: fires 15 min before 9:00 PM ET (EDT=00:45 UTC, EST=01:45 UTC).
+    # Primary: fires 30 min before 9:00 PM ET (EDT=00:30 UTC, EST=01:30 UTC).
     # Gate waits the remaining minutes; rejects if GitHub starts > 60 min late.
-    - cron: "45 0 * * *"
+    - cron: "30 0 * * *"
     # Backup: fires 50 min after target (EDT=01:50 UTC). Same 60-min gate tolerance.
     # Concurrency hold ensures this is rejected if the primary already succeeded.
     # If the primary got no runner, this backup delivers the prep instead.

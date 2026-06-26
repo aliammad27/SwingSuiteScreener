@@ -2,9 +2,9 @@ name: Post Close Scan
 
 on:
   schedule:
-    # Primary: fires 15 min before 4:20 PM ET (EDT=20:05 UTC, EST=21:05 UTC).
+    # Primary: fires 30 min before 4:20 PM ET (EDT=19:50 UTC, EST=20:50 UTC).
     # Gate waits the remaining minutes; rejects if GitHub starts > 30 min late.
-    - cron: "5 20 * * 1-5"
+    - cron: "50 19 * * 1-5"
     # Backup: fires 20 min after target (EDT=20:40 UTC). Same 30-min gate tolerance.
     # Concurrency hold ensures this is rejected if the primary already succeeded.
     # If the primary got no runner, this backup delivers the scan instead.

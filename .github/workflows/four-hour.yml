@@ -2,9 +2,9 @@ name: Four Hour Refresh
 
 on:
   schedule:
-    # Primary: fires 15 min before 1:35 PM ET (EDT=17:20 UTC, EST=18:20 UTC).
+    # Primary: fires 30 min before 1:35 PM ET (EDT=17:05 UTC, EST=18:05 UTC).
     # Gate waits the remaining minutes; rejects if GitHub starts > 30 min late.
-    - cron: "20 17 * * 1-5"
+    - cron: "5 17 * * 1-5"
     # Backup: fires 20 min after target (EDT=17:55 UTC). Same 30-min gate tolerance.
     # Concurrency hold ensures this is rejected if the primary already succeeded.
     # If the primary got no runner, this backup delivers the refresh instead.
