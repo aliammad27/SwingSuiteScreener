@@ -113,6 +113,17 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", required=True, help="Eastern target time in HH:MM format.")
     parser.add_argument("--max-late-minutes", type=int, default=20)
+    parser.add_argument(
+        "--hold-max-late-minutes",
+        type=int,
+        default=None,
+        help=(
+            "Max late minutes used for the hold window duration. "
+            "Defaults to --max-late-minutes when omitted. "
+            "Set lower than --max-late-minutes to keep hold windows short "
+            "when using a large gate tolerance."
+        ),
+    )
     parser.add_argument("--max-early-minutes", type=int, default=720)
     parser.add_argument(
         "--hold-window-open",
@@ -120,6 +131,11 @@ def main() -> int:
         help="Sleep until the late window closes so queued backup schedules cannot duplicate alerts.",
     )
     args = parser.parse_args()
+    hold_max_late = (
+        args.hold_max_late_minutes
+        if args.hold_max_late_minutes is not None
+        else args.max_late_minutes
+    )
 
     now = datetime.now(NY)
     target = parse_target_time(args.target)
@@ -127,7 +143,7 @@ def main() -> int:
         decision = hold_decision(
             now=now,
             target=target,
-            max_late_minutes=args.max_late_minutes,
+            max_late_minutes=hold_max_late,
             max_early_minutes=args.max_early_minutes,
         )
         print(decision.message, flush=True)
