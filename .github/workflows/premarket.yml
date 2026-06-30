@@ -47,12 +47,12 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Wait until 8:45 AM ET
         if: github.event_name == 'schedule'
-        run: python -m scanner.schedule_gate --target 08:45 --max-late-minutes 90
+        run: python -m scanner.schedule_gate --target 08:45 --max-late-minutes 270
       - name: Run premarket validation
         run: python -m scanner.run_scan premarket
       - name: Hold schedule window
         if: github.event_name == 'schedule'
-        run: python -m scanner.schedule_gate --target 08:45 --max-late-minutes 90 --hold-window-open
+        run: python -m scanner.schedule_gate --target 08:45 --max-late-minutes 270 --hold-max-late-minutes 90 --hold-window-open
       - name: Upload report artifact
         if: always()
         uses: actions/upload-artifact@v4
