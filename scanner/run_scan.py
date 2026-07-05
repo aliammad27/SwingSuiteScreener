@@ -8,7 +8,8 @@ from pathlib import Path
 
 from scanner.calendars import is_trading_day, market_close_for
 from scanner.charts import render_watchlist_chart
-from scanner.config import ConfigurationError, load_local_env, validate_configuration
+from scanner.clocks import NY
+from scanner.config import ConfigurationError, load_config, load_local_env, validate_configuration
 from scanner.daily_command import calculate_command
 from scanner.daily_prep import nightly_prep_message, ranked_nightly_items, weekly_radar_message
 from scanner.data_quality import DataQualityError, require_completed_candles
@@ -43,6 +44,8 @@ from scanner.put_grading import grade_put_candidate
 from scanner.put_momentum import calculate_put_momentum, strict_bearish_daily_filter
 from scanner.put_reports import write_put_reports
 from scanner.reports import write_reports
+from scanner.state import NotificationState, completion_snapshot, should_send_completion
+from scanner.storage.local_json import LocalJsonStorage
 from scanner.universe import configured_symbols
 from scanner.watchlist import SETUP_BUCKETS, watch_details, watchlist_level_summary
 
@@ -337,16 +340,52 @@ def readiness_check() -> int:
     return 0
 
 
+_ONLY_ON_CHANGE_FLAGS = {
+    ScanType.PREMARKET: "send_premarket_only_on_change",
+    ScanType.FOUR_HOUR: "send_four_hour_only_on_change",
+}
+
+
 def _maybe_notify(result: ScanResult, report_path: Path, fixture: bool) -> None:
     message = completion_message(result, report_path)
     notifier = TelegramNotifier()
     if fixture:
         print(message)
         return
+    flag_name = _ONLY_ON_CHANGE_FLAGS.get(result.scan_type)
+    if flag_name is not None:
+        only_on_change = bool(load_config("notifications").get(flag_name, True))
+        state = NotificationState(LocalJsonStorage())
+        snapshot = completion_snapshot(result)
+        previous = state.last_completion_snapshot(result.scan_type.value)
+        send = should_send_completion(previous, snapshot, only_on_change)
+        state.record_completion_snapshot(result.scan_type.value, snapshot)
+        if not send:
+            log_delivery(
+                "completion",
+                "suppressed_unchanged",
+                event_type="completion",
+            )
+            print("Completion message suppressed: nothing material changed since the last run.")
+            return
     delivery = notifier.send(message)
     log_delivery(
         "completion", delivery.status, event_type="completion", error=delivery.safe_error or ""
     )
+
+
+WEEKLY_RADAR_SENT_EVENT = "weekly_radar_sent_date"
+
+
+def _mark_weekly_radar_sent() -> None:
+    state = NotificationState(LocalJsonStorage())
+    state.record_event(WEEKLY_RADAR_SENT_EVENT, datetime.now(NY).date().isoformat())
+
+
+def _weekly_radar_sent_today() -> bool:
+    """True when the weekly radar already delivered charts today (Sunday overlap)."""
+    state = NotificationState(LocalJsonStorage())
+    return state.last_event(WEEKLY_RADAR_SENT_EVENT) == datetime.now(NY).date().isoformat()
 
 
 def _send_watchlist_charts(
@@ -476,8 +515,11 @@ def main() -> int:
             if not delivery.delivered:
                 print(f"Daily prep Telegram notification not sent: {delivery.safe_error}")
                 return 1
-            market, _, _ = _providers(False, args.scenario)
-            _send_watchlist_charts(result, market, notifier, fixture=args.fixture)
+            if _weekly_radar_sent_today():
+                print("Skipping chart attachments: weekly radar already sent them today.")
+            else:
+                market, _, _ = _providers(False, args.scenario)
+                _send_watchlist_charts(result, market, notifier, fixture=args.fixture)
             print("Daily prep Telegram notification delivered.")
             return 0
         if args.command == "weekly_radar":
@@ -502,6 +544,7 @@ def main() -> int:
                 return 1
             market, _, _ = _providers(False, args.scenario)
             _send_watchlist_charts(result, market, notifier, fixture=args.fixture)
+            _mark_weekly_radar_sent()
             print("Weekly radar Telegram notification delivered.")
             return 0
         if args.command in {"put_post_close", "put_premarket", "put_four_hour"}:

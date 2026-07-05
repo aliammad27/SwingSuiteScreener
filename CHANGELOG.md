@@ -47,3 +47,12 @@ Aggressive contract profile v2 — approved by user; stock-selection gates inten
 - Shortened the intended hold window to 3-7 days.
 - Added a movement-capability filter (target gain >= 1.5x required move including a 1% premium cushion, daily ATR percent >= 2.0) that blocks S tier and A Plus with reason codes `insufficient_movement_capability` and `atr_percent_below_floor`; B tier and watch remain reachable.
 - Added a management footer to S tier and A Plus reports and Telegram messages.
+
+## 2.0.1 - 2026-07-05
+
+Notification clutter cleanup.
+
+- Premarket and four-hour completion messages are now suppressed when nothing material changed since the previous run (per spec section 20); post-close still always sends.
+- Nightly prep skips its chart attachments on days when the weekly radar already delivered them, removing the Sunday duplicate image burst.
+- Backup GitHub Actions wakeups now skip cleanly when the primary scheduled run already succeeded, instead of failing red.
+- Scanner state (`data/state`) now persists across GitHub Actions runs via a rolling cache so change detection works between scheduled jobs.

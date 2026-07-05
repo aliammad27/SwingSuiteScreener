@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from scanner.models import Candidate
+from scanner.models import Candidate, ScanResult
 from scanner.storage.base import Storage
 
 
@@ -25,6 +25,45 @@ def notification_identifier(
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def completion_snapshot(result: ScanResult) -> dict[str, Any]:
+    """Material state of a scan result used to detect meaningful change.
+
+    Two runs with equal snapshots carry the same actionable information, so a
+    second premarket or four-hour completion message would be pure noise.
+    """
+    setups: dict[str, Any] = {}
+    for candidate in (
+        result.s_tier + result.a_plus + result.b_tier + result.technical_watch
+    ):
+        setups[candidate.symbol] = {
+            "grade": candidate.grade.value,
+            "entry_status": candidate.entry_plan.status,
+            "trigger": round(candidate.entry_plan.trigger, 2),
+            "support": round(candidate.entry_plan.support, 2),
+            "invalidation": round(candidate.entry_plan.invalidation, 2),
+            "option_liquidity": candidate.option_liquidity,
+            "daily_filter": candidate.four_hour_momentum.daily_filter_passed,
+        }
+    return {"market_regime": result.market_regime, "setups": setups}
+
+
+def should_send_completion(
+    previous: dict[str, Any] | None,
+    snapshot: dict[str, Any],
+    only_on_change: bool,
+) -> bool:
+    """Return True when a completion message should be delivered.
+
+    Always send when only_on_change is disabled or no prior snapshot exists;
+    otherwise send only when the material snapshot changed.
+    """
+    if not only_on_change:
+        return True
+    if previous is None:
+        return True
+    return previous != snapshot
+
+
 class NotificationState:
     def __init__(self, storage: Storage) -> None:
         self.storage = storage
@@ -39,4 +78,32 @@ class NotificationState:
         sent = self.data.setdefault("sent", {})
         if isinstance(sent, dict):
             sent[identifier] = metadata
+        self.storage.save_json("notification_state", self.data)
+
+    def last_completion_snapshot(self, run_type: str) -> dict[str, Any] | None:
+        snapshots = self.data.get("completion_snapshots", {})
+        if isinstance(snapshots, dict):
+            value = snapshots.get(run_type)
+            if isinstance(value, dict):
+                return value
+        return None
+
+    def record_completion_snapshot(self, run_type: str, snapshot: dict[str, Any]) -> None:
+        snapshots = self.data.setdefault("completion_snapshots", {})
+        if isinstance(snapshots, dict):
+            snapshots[run_type] = snapshot
+        self.storage.save_json("notification_state", self.data)
+
+    def last_event(self, name: str) -> str | None:
+        events = self.data.get("events", {})
+        if isinstance(events, dict):
+            value = events.get(name)
+            if isinstance(value, str):
+                return value
+        return None
+
+    def record_event(self, name: str, value: str) -> None:
+        events = self.data.setdefault("events", {})
+        if isinstance(events, dict):
+            events[name] = value
         self.storage.save_json("notification_state", self.data)
