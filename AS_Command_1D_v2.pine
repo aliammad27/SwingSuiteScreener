@@ -1,0 +1,1628 @@
+//@version=6
+indicator(
+    title = "Ali Swing Suite: Command Center 1D v2 (Calls + Puts)",
+    shorttitle = "AS Command v2",
+    overlay = true,
+    precision = 2,
+    max_lines_count = 50,
+    behind_chart = true
+)
+
+//=============================================================================
+// INPUT GROUPS
+//=============================================================================
+
+string GROUP_DIRECTION = "Trade Direction"
+string GROUP_TREND = "Trend Moving Averages"
+string GROUP_VWAP = "Anchored VWAP"
+string GROUP_STRUCTURE = "Support, Resistance, and Trend Lines"
+string GROUP_BREAKOUT = "Breakout and Pullback Levels"
+string GROUP_TARGET = "Target and Room"
+string GROUP_RS = "Relative Strength"
+string GROUP_VOLUME = "Volume"
+string GROUP_VOLATILITY = "Volatility"
+string GROUP_V2 = "v2 Aggressive Profile"
+string GROUP_DISPLAY = "Display"
+string GROUP_ALERTS = "Alerts"
+
+//=============================================================================
+// TRADE DIRECTION
+//=============================================================================
+
+string tradeDirection = input.string(
+    "Both",
+    "Trade Direction",
+    options = ["Bullish", "Bearish", "Both"],
+    group = GROUP_DIRECTION,
+    tooltip = "Bullish runs only the call-side Command Center (identical to v1). Bearish runs only the put-side mirror. Both runs both engines with separate scores, bias states, levels, and alerts."
+)
+
+bool bullSideEnabled = tradeDirection != "Bearish"
+bool bearSideEnabled = tradeDirection != "Bullish"
+
+//=============================================================================
+// TREND SETTINGS
+//=============================================================================
+
+int emaTrendLength = input.int(
+    21,
+    "Trend EMA Length",
+    minval = 2,
+    maxval = 200,
+    group = GROUP_TREND,
+    tooltip = "The 21 EMA is the trend spine for daily swing options."
+)
+
+int smaMediumLength = input.int(
+    50,
+    "Medium SMA Length",
+    minval = 10,
+    maxval = 300,
+    group = GROUP_TREND
+)
+
+int smaLongLength = input.int(
+    200,
+    "Long SMA Length",
+    minval = 50,
+    maxval = 500,
+    group = GROUP_TREND
+)
+
+bool showMovingAverages = input.bool(
+    true,
+    "Show Moving Averages",
+    group = GROUP_TREND
+)
+
+bool showEmaCloud = input.bool(
+    true,
+    "Show 21 over 50 Trend Cloud",
+    group = GROUP_TREND,
+    tooltip = "Shades the area between the 21 EMA and 50 SMA. Green when the 21 is above the 50."
+)
+
+//=============================================================================
+// ANCHORED VWAP SETTINGS
+//=============================================================================
+
+string avwapAnchorMode = input.string(
+    "Month",
+    "VWAP Anchor",
+    options = ["Week", "Month", "Quarter", "Year"],
+    group = GROUP_VWAP,
+    tooltip = "Monthly is the recommended default for swing options."
+)
+
+bool showAnchoredVwap = input.bool(
+    true,
+    "Show Anchored VWAP",
+    group = GROUP_VWAP
+)
+
+//=============================================================================
+// STRUCTURE SETTINGS
+//=============================================================================
+
+int pivotLeftBars = input.int(
+    5,
+    "Pivot Bars on Left",
+    minval = 2,
+    maxval = 20,
+    group = GROUP_STRUCTURE
+)
+
+int pivotRightBars = input.int(
+    3,
+    "Pivot Bars on Right",
+    minval = 2,
+    maxval = 20,
+    group = GROUP_STRUCTURE
+)
+
+bool showHorizontalLevels = input.bool(
+    true,
+    "Show Latest Support and Resistance",
+    group = GROUP_STRUCTURE
+)
+
+bool showAutomaticTrendLines = input.bool(
+    true,
+    "Show Automatic Trend Lines",
+    group = GROUP_STRUCTURE
+)
+
+int structureLineWidth = input.int(
+    1,
+    "Structure Line Width",
+    minval = 1,
+    maxval = 4,
+    group = GROUP_STRUCTURE
+)
+
+int structureLineTransparency = input.int(
+    25,
+    "Structure Line Transparency",
+    minval = 0,
+    maxval = 90,
+    group = GROUP_STRUCTURE
+)
+
+int structureForwardBars = input.int(
+    20,
+    "Horizontal Level Length",
+    minval = 5,
+    maxval = 100,
+    group = GROUP_STRUCTURE
+)
+
+//=============================================================================
+// BREAKOUT, BREAKDOWN, PULLBACK, AND REJECTION SETTINGS
+//=============================================================================
+
+int breakoutLookback = input.int(
+    20,
+    "Breakout / Breakdown Lookback",
+    minval = 5,
+    maxval = 100,
+    group = GROUP_BREAKOUT,
+    tooltip = "Calls: highest high of the previous N completed bars. Puts: lowest low of the previous N completed bars. The current bar is excluded from both."
+)
+
+float breakoutAtrDistance = input.float(
+    0.50,
+    "Watch Distance in ATR",
+    minval = 0.10,
+    maxval = 3.00,
+    step = 0.05,
+    group = GROUP_BREAKOUT,
+    tooltip = "Breakout watch (calls) and breakdown watch (puts) activate inside this ATR distance of the level."
+)
+
+float pullbackAtrTolerance = input.float(
+    0.30,
+    "Support / Resistance Touch Tolerance in ATR",
+    minval = 0.05,
+    maxval = 2.00,
+    step = 0.05,
+    group = GROUP_BREAKOUT,
+    tooltip = "Calls: pullback support touch tolerance. Puts: rejection resistance touch tolerance."
+)
+
+bool showTradeLevels = input.bool(
+    true,
+    "Show Trade Levels",
+    group = GROUP_BREAKOUT
+)
+
+//=============================================================================
+// TARGET AND ROOM SETTINGS
+//=============================================================================
+
+bool showTargetLine = input.bool(
+    true,
+    "Show Target Line",
+    group = GROUP_TARGET,
+    tooltip = "Calls: nearest resistance target above price. Puts: nearest support target below price. ATR fallback when no structural level exists."
+)
+
+float targetAtrFallbackMultiple = input.float(
+    2.00,
+    "Fallback Target in ATR",
+    minval = 0.50,
+    maxval = 10.00,
+    step = 0.25,
+    group = GROUP_TARGET,
+    tooltip = "Used only when the chart does not have a clear structural level in the trade direction."
+)
+
+float minimumRoomToTargetPercent = input.float(
+    5.00,
+    "Minimum Room to Target %",
+    minval = 0.50,
+    maxval = 50.00,
+    step = 0.25,
+    group = GROUP_TARGET,
+    tooltip = "The table marks room as tight when the distance to target is below this percentage. Applies to both directions."
+)
+
+float minimumRoomToTargetAtr = input.float(
+    1.50,
+    "Minimum Room to Target in ATR",
+    minval = 0.25,
+    maxval = 10.00,
+    step = 0.25,
+    group = GROUP_TARGET,
+    tooltip = "The table marks room as tight when the distance to target is below this ATR distance. Applies to both directions."
+)
+
+//=============================================================================
+// RELATIVE STRENGTH SETTINGS
+//=============================================================================
+
+benchmarkSymbol = input.symbol(
+    "NASDAQ:QQQ",
+    "Benchmark",
+    group = GROUP_RS,
+    tooltip = "QQQ is useful for technology stocks. SPY can be selected for the broader market."
+)
+
+int relativeStrengthAverageLength = input.int(
+    21,
+    "Relative Strength Average Length",
+    minval = 5,
+    maxval = 100,
+    group = GROUP_RS
+)
+
+int relativeStrengthSlopeBars = input.int(
+    5,
+    "Relative Strength Direction Bars",
+    minval = 1,
+    maxval = 30,
+    group = GROUP_RS
+)
+
+int volumeAverageLength = input.int(
+    20,
+    "Volume Average Length",
+    minval = 5,
+    maxval = 100,
+    group = GROUP_VOLUME
+)
+
+float volumeExpansionThreshold = input.float(
+    1.30,
+    "Volume Expansion Threshold",
+    minval = 1.00,
+    maxval = 5.00,
+    step = 0.05,
+    group = GROUP_VOLUME
+)
+
+int atrLength = input.int(
+    14,
+    "ATR Length",
+    minval = 2,
+    maxval = 100,
+    group = GROUP_VOLATILITY
+)
+
+int volatilityAverageLength = input.int(
+    50,
+    "Volatility Average Length",
+    minval = 10,
+    maxval = 200,
+    group = GROUP_VOLATILITY
+)
+
+int bollingerLength = input.int(
+    20,
+    "Bollinger Length",
+    minval = 5,
+    maxval = 100,
+    group = GROUP_VOLATILITY
+)
+
+float bollingerDeviation = input.float(
+    2.0,
+    "Bollinger Deviation",
+    minval = 0.5,
+    maxval = 5.0,
+    step = 0.1,
+    group = GROUP_VOLATILITY
+)
+
+//=============================================================================
+// V2 AGGRESSIVE PROFILE SETTINGS
+//=============================================================================
+
+float atrPercentFloor = input.float(
+    2.0,
+    "Movement Floor: Daily ATR Percent",
+    minval = 0.0,
+    maxval = 10.0,
+    step = 0.1,
+    group = GROUP_V2,
+    tooltip = "The v2 movement filter requires daily ATR percent at or above this floor. The table row turns red when the stock fails it."
+)
+
+bool showResearchStrikes = input.bool(
+    true,
+    "Show Research Strikes in Table",
+    group = GROUP_V2,
+    tooltip = "Call strike = trigger + half the distance to target, rounded up to the strike increment. Put strike = trigger minus half the distance to target, rounded down. Research values only: validate against a 0.25 to 0.35 absolute delta band in the broker."
+)
+
+//=============================================================================
+// DISPLAY AND ALERT SETTINGS
+//=============================================================================
+
+bool showCommandTable = input.bool(
+    true,
+    "Show Command Center",
+    group = GROUP_DISPLAY
+)
+
+bool showBarColors = input.bool(
+    false,
+    "Color Candles by Bias",
+    group = GROUP_DISPLAY
+)
+
+bool confirmSignalsOnClose = input.bool(
+    true,
+    "Confirm Signals at Candle Close",
+    group = GROUP_ALERTS
+)
+
+//=============================================================================
+// HELPER FUNCTIONS
+//=============================================================================
+
+f_nearestBelow(float referencePrice, float levelOne, float levelTwo, float levelThree, float levelFour) =>
+    float result = na
+
+    if not na(levelOne) and levelOne <= referencePrice
+        result := levelOne
+
+    if not na(levelTwo) and levelTwo <= referencePrice
+        result := na(result) ? levelTwo : math.max(result, levelTwo)
+
+    if not na(levelThree) and levelThree <= referencePrice
+        result := na(result) ? levelThree : math.max(result, levelThree)
+
+    if not na(levelFour) and levelFour <= referencePrice
+        result := na(result) ? levelFour : math.max(result, levelFour)
+
+    result
+
+f_nearestAbove(float referencePrice, float levelOne, float levelTwo, float levelThree, float levelFour) =>
+    float result = na
+
+    if not na(levelOne) and levelOne >= referencePrice
+        result := levelOne
+
+    if not na(levelTwo) and levelTwo >= referencePrice
+        result := na(result) ? levelTwo : math.min(result, levelTwo)
+
+    if not na(levelThree) and levelThree >= referencePrice
+        result := na(result) ? levelThree : math.min(result, levelThree)
+
+    if not na(levelFour) and levelFour >= referencePrice
+        result := na(result) ? levelFour : math.min(result, levelFour)
+
+    result
+
+f_projectLinePrice(int firstBar, float firstPrice, int secondBar, float secondPrice, int targetBar) =>
+    float result = na
+
+    if not na(firstBar) and not na(firstPrice) and not na(secondBar) and not na(secondPrice) and secondBar != firstBar
+        result := firstPrice + ((secondPrice - firstPrice) * (targetBar - firstBar) / (secondBar - firstBar))
+
+    result
+
+f_strikeIncrement(float price) =>
+    price < 25 ? 0.5 : price < 100 ? 1.0 : price < 250 ? 2.5 : price < 500 ? 5.0 : 10.0
+
+f_researchCallStrike(float triggerPrice, float targetLevel) =>
+    float rawStrike = triggerPrice + 0.5 * (targetLevel - triggerPrice)
+    float increment = f_strikeIncrement(rawStrike)
+    math.ceil(rawStrike / increment) * increment
+
+f_researchPutStrike(float triggerPrice, float targetLevel) =>
+    float rawStrike = triggerPrice - 0.5 * (triggerPrice - targetLevel)
+    float increment = f_strikeIncrement(rawStrike)
+    math.floor(rawStrike / increment) * increment
+
+//=============================================================================
+// MOVING AVERAGES
+//=============================================================================
+
+float emaTrend = ta.ema(close, emaTrendLength)
+float smaMedium = ta.sma(close, smaMediumLength)
+float smaLong = ta.sma(close, smaLongLength)
+
+bool emaAlignmentBullish = emaTrend > smaMedium
+bool mediumTrendBullish = close > smaMedium
+bool longTrendBullish = close > smaLong
+bool movingAverageStackBullish = emaTrend > smaMedium and smaMedium > smaLong
+bool longAverageRising = smaLong > smaLong[10]
+
+bool emaAlignmentBearish = emaTrend < smaMedium
+bool mediumTrendBearish = close < smaMedium
+bool longTrendBearish = close < smaLong
+bool movingAverageStackBearish = emaTrend < smaMedium and smaMedium < smaLong
+bool longAverageFalling = smaLong < smaLong[10]
+
+//=============================================================================
+// ANCHORED VWAP
+//=============================================================================
+
+bool vwapAnchor = false
+
+if avwapAnchorMode == "Week"
+    vwapAnchor := timeframe.change("1W")
+else if avwapAnchorMode == "Month"
+    vwapAnchor := timeframe.change("1M")
+else if avwapAnchorMode == "Quarter"
+    vwapAnchor := timeframe.change("3M")
+else
+    vwapAnchor := timeframe.change("12M")
+
+float anchoredVwap = ta.vwap(hlc3, vwapAnchor)
+bool priceAboveAnchoredVwap = not na(anchoredVwap) and close > anchoredVwap
+bool priceBelowAnchoredVwap = not na(anchoredVwap) and close < anchoredVwap
+
+float anchoredVwapDistancePercent = na
+
+if not na(anchoredVwap) and anchoredVwap != 0
+    anchoredVwapDistancePercent := ((close - anchoredVwap) / anchoredVwap) * 100
+
+//=============================================================================
+// CONFIRMED WEEKLY TREND
+//=============================================================================
+
+float weeklyClose = request.security(
+    syminfo.tickerid,
+    "1W",
+    close[1],
+    gaps = barmerge.gaps_off,
+    lookahead = barmerge.lookahead_on
+)
+
+float weeklyEmaTrend = request.security(
+    syminfo.tickerid,
+    "1W",
+    ta.ema(close, emaTrendLength)[1],
+    gaps = barmerge.gaps_off,
+    lookahead = barmerge.lookahead_on
+)
+
+bool weeklyTrendAligned = not na(weeklyClose) and not na(weeklyEmaTrend) and weeklyClose > weeklyEmaTrend
+bool weeklyBearAligned = not na(weeklyClose) and not na(weeklyEmaTrend) and weeklyClose < weeklyEmaTrend
+
+//=============================================================================
+// RELATIVE STRENGTH AND RELATIVE WEAKNESS
+//=============================================================================
+
+float benchmarkClose = request.security(
+    benchmarkSymbol,
+    timeframe.period,
+    close,
+    gaps = barmerge.gaps_off,
+    lookahead = barmerge.lookahead_off
+)
+
+float relativeStrengthRatio = na
+
+if not na(benchmarkClose) and benchmarkClose != 0
+    relativeStrengthRatio := close / benchmarkClose
+
+float relativeStrengthAverage = ta.ema(relativeStrengthRatio, relativeStrengthAverageLength)
+
+bool relativeStrengthAboveAverage = not na(relativeStrengthRatio) and not na(relativeStrengthAverage) and relativeStrengthRatio > relativeStrengthAverage
+
+bool relativeStrengthBelowAverage = not na(relativeStrengthRatio) and not na(relativeStrengthAverage) and relativeStrengthRatio < relativeStrengthAverage
+
+bool relativeStrengthRising = not na(relativeStrengthRatio[relativeStrengthSlopeBars]) and relativeStrengthRatio > relativeStrengthRatio[relativeStrengthSlopeBars]
+
+bool relativeStrengthFalling = not na(relativeStrengthRatio[relativeStrengthSlopeBars]) and relativeStrengthRatio < relativeStrengthRatio[relativeStrengthSlopeBars]
+
+bool relativeStrengthLeading = relativeStrengthAboveAverage and relativeStrengthRising
+
+// Put-side relative weakness (mirrors scanner/put_command.py):
+// Leading = ratio below its average AND falling (stock dropping faster than benchmark).
+bool relativeWeaknessLeading = relativeStrengthBelowAverage and relativeStrengthFalling
+
+string relativeStrengthState = "Lagging"
+color relativeStrengthColor = color.rgb(190, 55, 55)
+
+if relativeStrengthLeading
+    relativeStrengthState := "Leading"
+    relativeStrengthColor := color.rgb(20, 145, 80)
+else if relativeStrengthAboveAverage
+    relativeStrengthState := "Strong"
+    relativeStrengthColor := color.rgb(45, 150, 110)
+else if relativeStrengthRising
+    relativeStrengthState := "Improving"
+    relativeStrengthColor := color.rgb(40, 130, 165)
+
+string relativeWeaknessState = "Lagging"
+color relativeWeaknessColor = color.rgb(20, 145, 80)
+
+if relativeWeaknessLeading
+    relativeWeaknessState := "Leading"
+    relativeWeaknessColor := color.rgb(160, 30, 30)
+else if relativeStrengthBelowAverage
+    relativeWeaknessState := "Strong"
+    relativeWeaknessColor := color.rgb(185, 60, 50)
+else if relativeStrengthFalling
+    relativeWeaknessState := "Improving"
+    relativeWeaknessColor := color.rgb(40, 130, 165)
+
+//=============================================================================
+// VOLUME
+//=============================================================================
+
+float averageVolume = ta.sma(volume, volumeAverageLength)
+float relativeVolume = na
+
+if not na(averageVolume) and averageVolume > 0
+    relativeVolume := volume / averageVolume
+
+bool volumeAboveAverage = not na(relativeVolume) and relativeVolume >= 1.00
+bool volumeExpansion = not na(relativeVolume) and relativeVolume >= volumeExpansionThreshold
+bool bullishVolumeExpansion = volumeExpansion and close > open
+bool bearishVolumeExpansion = volumeExpansion and close < open
+
+string volumeState = "Light"
+color volumeStateColor = color.rgb(190, 90, 55)
+
+if volumeExpansion
+    volumeState := "Expansion"
+    volumeStateColor := color.rgb(20, 145, 80)
+else if volumeAboveAverage
+    volumeState := "Above average"
+    volumeStateColor := color.rgb(45, 150, 110)
+else if not na(relativeVolume) and relativeVolume >= 0.70
+    volumeState := "Normal"
+    volumeStateColor := color.rgb(100, 110, 125)
+
+//=============================================================================
+// VOLATILITY
+//=============================================================================
+
+float atrValue = ta.atr(atrLength)
+float atrPercent = close != 0 ? (atrValue / close) * 100 : na
+float averageAtrPercent = ta.sma(atrPercent, volatilityAverageLength)
+
+float bollingerBasis = ta.sma(close, bollingerLength)
+float bollingerDeviationValue = ta.stdev(close, bollingerLength) * bollingerDeviation
+float bollingerUpper = bollingerBasis + bollingerDeviationValue
+float bollingerLower = bollingerBasis - bollingerDeviationValue
+
+float bollingerWidth = bollingerBasis != 0 ? ((bollingerUpper - bollingerLower) / bollingerBasis) * 100 : na
+float averageBollingerWidth = ta.sma(bollingerWidth, volatilityAverageLength)
+
+bool volatilitySqueeze = not na(bollingerWidth) and not na(averageBollingerWidth) and bollingerWidth < averageBollingerWidth * 0.75
+
+bool elevatedVolatility = not na(atrPercent) and not na(averageAtrPercent) and atrPercent > averageAtrPercent * 1.25
+
+bool lowVolatility = not na(atrPercent) and not na(averageAtrPercent) and atrPercent < averageAtrPercent * 0.80
+
+string volatilityState = "Normal"
+color volatilityStateColor = color.rgb(100, 110, 125)
+
+if volatilitySqueeze
+    volatilityState := "Squeeze"
+    volatilityStateColor := color.rgb(120, 90, 175)
+else if elevatedVolatility
+    volatilityState := "High"
+    volatilityStateColor := color.rgb(220, 125, 35)
+else if lowVolatility
+    volatilityState := "Low"
+    volatilityStateColor := color.rgb(40, 130, 165)
+
+bool movementFloorPassed = not na(atrPercent) and atrPercent >= atrPercentFloor
+
+//=============================================================================
+// PRICE PIVOTS AND MARKET STRUCTURE
+//=============================================================================
+
+float confirmedPivotLow = ta.pivotlow(low, pivotLeftBars, pivotRightBars)
+float confirmedPivotHigh = ta.pivothigh(high, pivotLeftBars, pivotRightBars)
+
+var float previousPivotLowPrice = na
+var float latestPivotLowPrice = na
+var int previousPivotLowBar = na
+var int latestPivotLowBar = na
+
+var float previousPivotHighPrice = na
+var float latestPivotHighPrice = na
+var int previousPivotHighBar = na
+var int latestPivotHighBar = na
+
+var bool newPivotLow = false
+var bool newPivotHigh = false
+
+newPivotLow := false
+newPivotHigh := false
+
+if not na(confirmedPivotLow)
+    previousPivotLowPrice := latestPivotLowPrice
+    previousPivotLowBar := latestPivotLowBar
+    latestPivotLowPrice := confirmedPivotLow
+    latestPivotLowBar := bar_index - pivotRightBars
+    newPivotLow := true
+
+if not na(confirmedPivotHigh)
+    previousPivotHighPrice := latestPivotHighPrice
+    previousPivotHighBar := latestPivotHighBar
+    latestPivotHighPrice := confirmedPivotHigh
+    latestPivotHighBar := bar_index - pivotRightBars
+    newPivotHigh := true
+
+bool higherLow = not na(previousPivotLowPrice) and not na(latestPivotLowPrice) and latestPivotLowPrice > previousPivotLowPrice
+bool lowerLow = not na(previousPivotLowPrice) and not na(latestPivotLowPrice) and latestPivotLowPrice < previousPivotLowPrice
+bool higherHigh = not na(previousPivotHighPrice) and not na(latestPivotHighPrice) and latestPivotHighPrice > previousPivotHighPrice
+bool lowerHigh = not na(previousPivotHighPrice) and not na(latestPivotHighPrice) and latestPivotHighPrice < previousPivotHighPrice
+
+bool bullishStructure = higherHigh and higherLow
+bool improvingStructure = higherHigh or higherLow
+bool bearishStructure = lowerHigh and lowerLow
+bool mixedStructure = not bullishStructure and not improvingStructure and not bearishStructure
+
+string structureState = "Mixed"
+color structureStateColor = color.rgb(100, 110, 125)
+
+if bullishStructure
+    structureState := "Higher high and higher low"
+    structureStateColor := color.rgb(20, 145, 80)
+else if higherLow
+    structureState := "Higher low"
+    structureStateColor := color.rgb(45, 150, 110)
+else if higherHigh
+    structureState := "Higher high"
+    structureStateColor := color.rgb(45, 150, 110)
+else if bearishStructure
+    structureState := "Lower high and lower low"
+    structureStateColor := color.rgb(190, 55, 55)
+else if lowerHigh
+    structureState := "Lower high"
+    structureStateColor := color.rgb(220, 125, 35)
+else if lowerLow
+    structureState := "Lower low"
+    structureStateColor := color.rgb(190, 55, 55)
+
+//=============================================================================
+// HORIZONTAL SUPPORT AND RESISTANCE LINES
+//=============================================================================
+
+var line latestSupportLine = na
+var line latestResistanceLine = na
+
+if showHorizontalLevels and not na(latestPivotLowPrice) and not na(latestPivotLowBar)
+    if na(latestSupportLine)
+        latestSupportLine := line.new(
+            x1 = latestPivotLowBar,
+            y1 = latestPivotLowPrice,
+            x2 = bar_index + structureForwardBars,
+            y2 = latestPivotLowPrice,
+            xloc = xloc.bar_index,
+            extend = extend.none,
+            color = color.new(color.teal, structureLineTransparency),
+            style = line.style_dotted,
+            width = structureLineWidth
+        )
+    else
+        line.set_xy1(latestSupportLine, latestPivotLowBar, latestPivotLowPrice)
+        line.set_xy2(latestSupportLine, bar_index + structureForwardBars, latestPivotLowPrice)
+else
+    if not na(latestSupportLine)
+        line.delete(latestSupportLine)
+        latestSupportLine := na
+
+if showHorizontalLevels and not na(latestPivotHighPrice) and not na(latestPivotHighBar)
+    if na(latestResistanceLine)
+        latestResistanceLine := line.new(
+            x1 = latestPivotHighBar,
+            y1 = latestPivotHighPrice,
+            x2 = bar_index + structureForwardBars,
+            y2 = latestPivotHighPrice,
+            xloc = xloc.bar_index,
+            extend = extend.none,
+            color = color.new(color.orange, structureLineTransparency),
+            style = line.style_dotted,
+            width = structureLineWidth
+        )
+    else
+        line.set_xy1(latestResistanceLine, latestPivotHighBar, latestPivotHighPrice)
+        line.set_xy2(latestResistanceLine, bar_index + structureForwardBars, latestPivotHighPrice)
+else
+    if not na(latestResistanceLine)
+        line.delete(latestResistanceLine)
+        latestResistanceLine := na
+
+//=============================================================================
+// AUTOMATIC DIAGONAL TREND LINES
+//=============================================================================
+
+var line risingSupportTrendLine = na
+var line fallingResistanceTrendLine = na
+
+var int risingTrendFirstBar = na
+var float risingTrendFirstPrice = na
+var int risingTrendSecondBar = na
+var float risingTrendSecondPrice = na
+
+var int fallingTrendFirstBar = na
+var float fallingTrendFirstPrice = na
+var int fallingTrendSecondBar = na
+var float fallingTrendSecondPrice = na
+
+var bool risingTrendActive = false
+var bool fallingTrendActive = false
+
+if newPivotLow and higherLow
+    risingTrendFirstBar := previousPivotLowBar
+    risingTrendFirstPrice := previousPivotLowPrice
+    risingTrendSecondBar := latestPivotLowBar
+    risingTrendSecondPrice := latestPivotLowPrice
+    risingTrendActive := true
+
+    if not na(risingSupportTrendLine)
+        line.delete(risingSupportTrendLine)
+        risingSupportTrendLine := na
+
+if newPivotHigh and lowerHigh
+    fallingTrendFirstBar := previousPivotHighBar
+    fallingTrendFirstPrice := previousPivotHighPrice
+    fallingTrendSecondBar := latestPivotHighBar
+    fallingTrendSecondPrice := latestPivotHighPrice
+    fallingTrendActive := true
+
+    if not na(fallingResistanceTrendLine)
+        line.delete(fallingResistanceTrendLine)
+        fallingResistanceTrendLine := na
+
+if showAutomaticTrendLines and risingTrendActive
+    if na(risingSupportTrendLine)
+        risingSupportTrendLine := line.new(
+            x1 = risingTrendFirstBar,
+            y1 = risingTrendFirstPrice,
+            x2 = risingTrendSecondBar,
+            y2 = risingTrendSecondPrice,
+            xloc = xloc.bar_index,
+            extend = extend.right,
+            color = color.new(color.teal, structureLineTransparency),
+            style = line.style_solid,
+            width = structureLineWidth
+        )
+else
+    if not na(risingSupportTrendLine)
+        line.delete(risingSupportTrendLine)
+        risingSupportTrendLine := na
+
+if showAutomaticTrendLines and fallingTrendActive
+    if na(fallingResistanceTrendLine)
+        fallingResistanceTrendLine := line.new(
+            x1 = fallingTrendFirstBar,
+            y1 = fallingTrendFirstPrice,
+            x2 = fallingTrendSecondBar,
+            y2 = fallingTrendSecondPrice,
+            xloc = xloc.bar_index,
+            extend = extend.right,
+            color = color.new(color.orange, structureLineTransparency),
+            style = line.style_solid,
+            width = structureLineWidth
+        )
+else
+    if not na(fallingResistanceTrendLine)
+        line.delete(fallingResistanceTrendLine)
+        fallingResistanceTrendLine := na
+
+float risingTrendPrice = risingTrendActive ? f_projectLinePrice(risingTrendFirstBar, risingTrendFirstPrice, risingTrendSecondBar, risingTrendSecondPrice, bar_index) : na
+
+float fallingTrendPrice = fallingTrendActive ? f_projectLinePrice(fallingTrendFirstBar, fallingTrendFirstPrice, fallingTrendSecondBar, fallingTrendSecondPrice, bar_index) : na
+
+bool signalBarAllowed = not confirmSignalsOnClose or barstate.isconfirmed
+
+// Cross calls are computed unconditionally in global scope so their internal
+// history stays consistent on every bar (Pine v6 lazy boolean evaluation).
+bool closeCrossedUnderRisingTrend = ta.crossunder(close, risingTrendPrice)
+
+bool closeCrossedOverFallingTrend = ta.crossover(close, fallingTrendPrice)
+
+bool risingTrendBreakdown = risingTrendActive and bar_index > risingTrendSecondBar and not na(risingTrendPrice) and closeCrossedUnderRisingTrend and signalBarAllowed
+
+bool fallingTrendBreakout = fallingTrendActive and bar_index > fallingTrendSecondBar and not na(fallingTrendPrice) and closeCrossedOverFallingTrend and signalBarAllowed
+
+if risingTrendBreakdown
+    risingTrendActive := false
+
+    if not na(risingSupportTrendLine)
+        line.delete(risingSupportTrendLine)
+        risingSupportTrendLine := na
+
+if fallingTrendBreakout
+    fallingTrendActive := false
+
+    if not na(fallingResistanceTrendLine)
+        line.delete(fallingResistanceTrendLine)
+        fallingResistanceTrendLine := na
+
+//=============================================================================
+// BREAKOUT AND PULLBACK LEVELS — CALL SIDE (UNCHANGED FROM V1)
+//=============================================================================
+
+float breakoutLevel = ta.highest(high[1], breakoutLookback)
+
+float pullbackSupport = f_nearestBelow(
+    close,
+    emaTrend,
+    smaMedium,
+    anchoredVwap,
+    latestPivotLowPrice
+)
+
+float breakoutDistance = not na(breakoutLevel) ? breakoutLevel - close : na
+
+bool breakoutWatch = not na(breakoutLevel) and breakoutDistance >= 0 and breakoutDistance <= atrValue * breakoutAtrDistance
+
+bool breakoutConfirmed = not na(breakoutLevel) and close > breakoutLevel and close[1] <= breakoutLevel[1] and signalBarAllowed
+
+bool pullbackTouched = not na(pullbackSupport) and low <= pullbackSupport + atrValue * pullbackAtrTolerance
+
+bool pullbackHeld = not na(pullbackSupport) and close > pullbackSupport and close >= open
+
+//=============================================================================
+// BREAKDOWN AND REJECTION LEVELS — PUT SIDE (MIRRORS scanner/put_command.py)
+//=============================================================================
+
+float breakdownLevel = ta.lowest(low[1], breakoutLookback)
+
+float rejectionResistance = f_nearestAbove(
+    close,
+    emaTrend,
+    smaMedium,
+    anchoredVwap,
+    latestPivotHighPrice
+)
+
+float breakdownDistance = not na(breakdownLevel) ? close - breakdownLevel : na
+
+bool breakdownWatch = not na(breakdownLevel) and breakdownDistance >= 0 and breakdownDistance <= atrValue * breakoutAtrDistance
+
+bool breakdownConfirmed = not na(breakdownLevel) and close < breakdownLevel and close[1] >= breakdownLevel[1] and signalBarAllowed
+
+bool rejectionTouched = not na(rejectionResistance) and high >= rejectionResistance - atrValue * pullbackAtrTolerance
+
+bool rejectionFell = not na(rejectionResistance) and close < rejectionResistance and close <= open
+
+bool rejectionActive = rejectionTouched and rejectionFell
+
+//=============================================================================
+// TARGET AND ROOM — CALL SIDE (UNCHANGED FROM V1)
+//=============================================================================
+
+float structureTarget = f_nearestAbove(
+    close,
+    latestPivotHighPrice,
+    breakoutLevel,
+    fallingTrendPrice,
+    bollingerUpper
+)
+
+bool targetUsesAtrFallback = na(structureTarget) and not na(atrValue)
+
+float targetPrice = targetUsesAtrFallback ? close + atrValue * targetAtrFallbackMultiple : structureTarget
+
+float targetRoomPercent = not na(targetPrice) and close != 0 ? ((targetPrice - close) / close) * 100 : na
+
+float targetRoomAtr = not na(targetPrice) and not na(atrValue) and atrValue > 0 ? (targetPrice - close) / atrValue : na
+
+bool targetRoomEnough = not na(targetRoomPercent) and not na(targetRoomAtr) and targetRoomPercent >= minimumRoomToTargetPercent and targetRoomAtr >= minimumRoomToTargetAtr
+
+//=============================================================================
+// TARGET AND ROOM — PUT SIDE
+//=============================================================================
+
+float putStructureTarget = f_nearestBelow(
+    close,
+    latestPivotLowPrice,
+    breakdownLevel,
+    risingTrendPrice,
+    bollingerLower
+)
+
+bool putTargetUsesAtrFallback = na(putStructureTarget) and not na(atrValue)
+
+float putTargetPrice = putTargetUsesAtrFallback ? close - atrValue * targetAtrFallbackMultiple : putStructureTarget
+
+float putTargetRoomPercent = not na(putTargetPrice) and close != 0 ? ((close - putTargetPrice) / close) * 100 : na
+
+float putTargetRoomAtr = not na(putTargetPrice) and not na(atrValue) and atrValue > 0 ? (close - putTargetPrice) / atrValue : na
+
+bool putTargetRoomEnough = not na(putTargetRoomPercent) and not na(putTargetRoomAtr) and putTargetRoomPercent >= minimumRoomToTargetPercent and putTargetRoomAtr >= minimumRoomToTargetAtr
+
+//=============================================================================
+// RESEARCH STRIKES (V2 — RESEARCH VALUES ONLY, DELTA BAND IS PRIMARY)
+//=============================================================================
+
+float researchCallStrike = na
+
+if not na(breakoutLevel) and not na(targetPrice) and targetPrice > breakoutLevel
+    researchCallStrike := f_researchCallStrike(breakoutLevel, targetPrice)
+
+float researchPutStrike = na
+
+if not na(breakdownLevel) and not na(putTargetPrice) and putTargetPrice < breakdownLevel
+    researchPutStrike := f_researchPutStrike(breakdownLevel, putTargetPrice)
+
+//=============================================================================
+// COMMAND SCORE — CALL SIDE (UNCHANGED FROM V1)
+//=============================================================================
+
+int commandScore = 0
+
+commandScore += close > emaTrend ? 10 : 0
+commandScore += emaAlignmentBullish ? 10 : 0
+commandScore += mediumTrendBullish ? 10 : 0
+commandScore += smaMedium > smaLong ? 15 : 0
+commandScore += longTrendBullish ? 10 : 0
+commandScore += longAverageRising ? 5 : 0
+commandScore += relativeStrengthLeading ? 15 : relativeStrengthAboveAverage ? 8 : 0
+commandScore += priceAboveAnchoredVwap ? 10 : 0
+commandScore += bullishVolumeExpansion ? 10 : volumeAboveAverage ? 5 : 0
+commandScore += bullishStructure ? 5 : improvingStructure ? 3 : 0
+commandScore += weeklyTrendAligned ? 5 : 0
+
+commandScore := int(math.min(commandScore, 100))
+
+//=============================================================================
+// COMMAND SCORE — PUT SIDE (MIRRORS scanner/put_command.py EXACTLY)
+//=============================================================================
+
+int putCommandScore = 0
+
+putCommandScore += close < emaTrend ? 10 : 0
+putCommandScore += emaAlignmentBearish ? 10 : 0
+putCommandScore += mediumTrendBearish ? 10 : 0
+putCommandScore += smaMedium < smaLong ? 15 : 0
+putCommandScore += longTrendBearish ? 10 : 0
+putCommandScore += longAverageFalling ? 5 : 0
+putCommandScore += relativeWeaknessLeading ? 15 : relativeStrengthBelowAverage ? 8 : 0
+putCommandScore += priceBelowAnchoredVwap ? 10 : 0
+putCommandScore += bearishVolumeExpansion ? 10 : volumeAboveAverage ? 5 : 0
+putCommandScore += bearishStructure ? 5 : mixedStructure ? 3 : 0
+putCommandScore += weeklyBearAligned ? 5 : 0
+
+putCommandScore := int(math.min(putCommandScore, 100))
+
+//=============================================================================
+// SETUP CONDITIONS — CALL SIDE (UNCHANGED FROM V1)
+//=============================================================================
+
+bool extendedPrice = close > bollingerUpper and close - emaTrend > atrValue * 1.50
+
+bool pullbackSetup = commandScore >= 70 and pullbackTouched and pullbackHeld and priceAboveAnchoredVwap
+
+bool breakoutSetup = commandScore >= 70 and breakoutConfirmed and volumeAboveAverage
+
+bool highQualityCallCondition = commandScore >= 75 and weeklyTrendAligned and relativeStrengthLeading and priceAboveAnchoredVwap and (breakoutSetup or pullbackSetup)
+
+bool highQualityCallStarted = bullSideEnabled and highQualityCallCondition and not highQualityCallCondition[1]
+
+bool breakoutSetupStarted = bullSideEnabled and breakoutSetup and not breakoutSetup[1]
+
+bool pullbackSetupStarted = bullSideEnabled and pullbackSetup and not pullbackSetup[1]
+
+//=============================================================================
+// SETUP CONDITIONS — PUT SIDE
+//=============================================================================
+
+bool extendedDownside = close < bollingerLower and emaTrend - close > atrValue * 1.50
+
+bool rejectionSetup = putCommandScore >= 70 and rejectionActive and priceBelowAnchoredVwap
+
+bool breakdownSetup = putCommandScore >= 70 and breakdownConfirmed and volumeAboveAverage
+
+bool highQualityPutCondition = putCommandScore >= 75 and weeklyBearAligned and relativeWeaknessLeading and priceBelowAnchoredVwap and (breakdownSetup or rejectionSetup)
+
+bool highQualityPutStarted = bearSideEnabled and highQualityPutCondition and not highQualityPutCondition[1]
+
+bool breakdownSetupStarted = bearSideEnabled and breakdownSetup and not breakdownSetup[1]
+
+bool rejectionSetupStarted = bearSideEnabled and rejectionSetup and not rejectionSetup[1]
+
+//=============================================================================
+// TREND AND FINAL BIAS STATES
+//=============================================================================
+
+string trendState = "Downtrend"
+color trendStateColor = color.rgb(190, 55, 55)
+
+if movingAverageStackBullish and longAverageRising
+    trendState := "Strong uptrend"
+    trendStateColor := color.rgb(20, 145, 80)
+else if close > emaTrend and close > smaMedium and close > smaLong
+    trendState := "Uptrend"
+    trendStateColor := color.rgb(45, 150, 110)
+else if close > smaLong
+    trendState := "Mixed"
+    trendStateColor := color.rgb(220, 145, 35)
+else if movingAverageStackBearish and longAverageFalling
+    trendState := "Strong downtrend"
+    trendStateColor := color.rgb(160, 30, 30)
+
+string callBiasState = "Avoid"
+color callBiasColor = color.rgb(190, 55, 55)
+
+if not timeframe.isdaily
+    callBiasState := "Use 1D chart"
+    callBiasColor := color.rgb(190, 55, 55)
+else if close < smaLong or commandScore < 45
+    callBiasState := "Avoid"
+    callBiasColor := color.rgb(190, 55, 55)
+else if extendedPrice
+    callBiasState := "Extended"
+    callBiasColor := color.rgb(225, 125, 35)
+else if breakoutSetup
+    callBiasState := "Breakout confirmed"
+    callBiasColor := color.rgb(15, 145, 75)
+else if pullbackSetup
+    callBiasState := "Pullback setup"
+    callBiasColor := color.rgb(20, 145, 100)
+else if breakoutWatch and commandScore >= 65
+    callBiasState := "Breakout watch"
+    callBiasColor := color.rgb(40, 130, 165)
+else if commandScore >= 75
+    callBiasState := "Bullish"
+    callBiasColor := color.rgb(40, 155, 105)
+else if commandScore >= 60
+    callBiasState := "Watch"
+    callBiasColor := color.rgb(220, 145, 35)
+else
+    callBiasState := "Mixed"
+    callBiasColor := color.rgb(100, 110, 125)
+
+string putBiasState = "Avoid"
+color putBiasColor = color.rgb(190, 55, 55)
+
+if not timeframe.isdaily
+    putBiasState := "Use 1D chart"
+    putBiasColor := color.rgb(190, 55, 55)
+else if close > smaLong or putCommandScore < 45
+    putBiasState := "Avoid"
+    putBiasColor := color.rgb(190, 55, 55)
+else if extendedDownside
+    putBiasState := "Extended downside"
+    putBiasColor := color.rgb(225, 125, 35)
+else if breakdownSetup
+    putBiasState := "Breakdown confirmed"
+    putBiasColor := color.rgb(160, 30, 30)
+else if rejectionSetup
+    putBiasState := "Rejection setup"
+    putBiasColor := color.rgb(185, 60, 50)
+else if breakdownWatch and putCommandScore >= 65
+    putBiasState := "Breakdown watch"
+    putBiasColor := color.rgb(40, 130, 165)
+else if putCommandScore >= 75
+    putBiasState := "Bearish"
+    putBiasColor := color.rgb(170, 45, 45)
+else if putCommandScore >= 60
+    putBiasState := "Put watch"
+    putBiasColor := color.rgb(220, 145, 35)
+else
+    putBiasState := "Mixed"
+    putBiasColor := color.rgb(100, 110, 125)
+
+color commandScoreColor = color.rgb(190, 55, 55)
+
+if commandScore >= 85
+    commandScoreColor := color.rgb(15, 145, 75)
+else if commandScore >= 75
+    commandScoreColor := color.rgb(40, 155, 105)
+else if commandScore >= 60
+    commandScoreColor := color.rgb(40, 130, 165)
+else if commandScore >= 45
+    commandScoreColor := color.rgb(220, 145, 35)
+
+color putCommandScoreColor = color.rgb(100, 110, 125)
+
+if putCommandScore >= 85
+    putCommandScoreColor := color.rgb(160, 30, 30)
+else if putCommandScore >= 75
+    putCommandScoreColor := color.rgb(185, 60, 50)
+else if putCommandScore >= 60
+    putCommandScoreColor := color.rgb(150, 90, 120)
+else if putCommandScore >= 45
+    putCommandScoreColor := color.rgb(220, 145, 35)
+
+//=============================================================================
+// TRADE LEVEL LINES
+//=============================================================================
+
+var line breakoutTriggerLine = na
+var line pullbackSupportLine = na
+var line targetLine = na
+var line breakdownTriggerLine = na
+var line rejectionResistanceLine = na
+var line putTargetLine = na
+
+int shortLineStart = bar_index > 8 ? bar_index - 8 : 0
+int shortLineEnd = bar_index + 5
+
+if showTradeLevels and bullSideEnabled and not na(breakoutLevel)
+    if na(breakoutTriggerLine)
+        breakoutTriggerLine := line.new(
+            x1 = shortLineStart,
+            y1 = breakoutLevel,
+            x2 = shortLineEnd,
+            y2 = breakoutLevel,
+            xloc = xloc.bar_index,
+            extend = extend.none,
+            color = color.new(color.lime, 10),
+            style = line.style_dashed,
+            width = 1
+        )
+    else
+        line.set_xy1(breakoutTriggerLine, shortLineStart, breakoutLevel)
+        line.set_xy2(breakoutTriggerLine, shortLineEnd, breakoutLevel)
+else
+    if not na(breakoutTriggerLine)
+        line.delete(breakoutTriggerLine)
+        breakoutTriggerLine := na
+
+if showTradeLevels and bullSideEnabled and not na(pullbackSupport)
+    if na(pullbackSupportLine)
+        pullbackSupportLine := line.new(
+            x1 = shortLineStart,
+            y1 = pullbackSupport,
+            x2 = shortLineEnd,
+            y2 = pullbackSupport,
+            xloc = xloc.bar_index,
+            extend = extend.none,
+            color = color.new(color.aqua, 10),
+            style = line.style_dashed,
+            width = 1
+        )
+    else
+        line.set_xy1(pullbackSupportLine, shortLineStart, pullbackSupport)
+        line.set_xy2(pullbackSupportLine, shortLineEnd, pullbackSupport)
+else
+    if not na(pullbackSupportLine)
+        line.delete(pullbackSupportLine)
+        pullbackSupportLine := na
+
+if showTargetLine and bullSideEnabled and not na(targetPrice)
+    if na(targetLine)
+        targetLine := line.new(
+            x1 = shortLineStart,
+            y1 = targetPrice,
+            x2 = shortLineEnd,
+            y2 = targetPrice,
+            xloc = xloc.bar_index,
+            extend = extend.none,
+            color = color.new(targetRoomEnough ? color.lime : color.orange, 0),
+            style = line.style_dashed,
+            width = 2
+        )
+    else
+        line.set_xy1(targetLine, shortLineStart, targetPrice)
+        line.set_xy2(targetLine, shortLineEnd, targetPrice)
+        line.set_color(targetLine, color.new(targetRoomEnough ? color.lime : color.orange, 0))
+else
+    if not na(targetLine)
+        line.delete(targetLine)
+        targetLine := na
+
+if showTradeLevels and bearSideEnabled and not na(breakdownLevel)
+    if na(breakdownTriggerLine)
+        breakdownTriggerLine := line.new(
+            x1 = shortLineStart,
+            y1 = breakdownLevel,
+            x2 = shortLineEnd,
+            y2 = breakdownLevel,
+            xloc = xloc.bar_index,
+            extend = extend.none,
+            color = color.new(color.red, 10),
+            style = line.style_dashed,
+            width = 1
+        )
+    else
+        line.set_xy1(breakdownTriggerLine, shortLineStart, breakdownLevel)
+        line.set_xy2(breakdownTriggerLine, shortLineEnd, breakdownLevel)
+else
+    if not na(breakdownTriggerLine)
+        line.delete(breakdownTriggerLine)
+        breakdownTriggerLine := na
+
+if showTradeLevels and bearSideEnabled and not na(rejectionResistance)
+    if na(rejectionResistanceLine)
+        rejectionResistanceLine := line.new(
+            x1 = shortLineStart,
+            y1 = rejectionResistance,
+            x2 = shortLineEnd,
+            y2 = rejectionResistance,
+            xloc = xloc.bar_index,
+            extend = extend.none,
+            color = color.new(color.maroon, 10),
+            style = line.style_dashed,
+            width = 1
+        )
+    else
+        line.set_xy1(rejectionResistanceLine, shortLineStart, rejectionResistance)
+        line.set_xy2(rejectionResistanceLine, shortLineEnd, rejectionResistance)
+else
+    if not na(rejectionResistanceLine)
+        line.delete(rejectionResistanceLine)
+        rejectionResistanceLine := na
+
+if showTargetLine and bearSideEnabled and not na(putTargetPrice)
+    if na(putTargetLine)
+        putTargetLine := line.new(
+            x1 = shortLineStart,
+            y1 = putTargetPrice,
+            x2 = shortLineEnd,
+            y2 = putTargetPrice,
+            xloc = xloc.bar_index,
+            extend = extend.none,
+            color = color.new(putTargetRoomEnough ? color.red : color.orange, 0),
+            style = line.style_dashed,
+            width = 2
+        )
+    else
+        line.set_xy1(putTargetLine, shortLineStart, putTargetPrice)
+        line.set_xy2(putTargetLine, shortLineEnd, putTargetPrice)
+        line.set_color(putTargetLine, color.new(putTargetRoomEnough ? color.red : color.orange, 0))
+else
+    if not na(putTargetLine)
+        line.delete(putTargetLine)
+        putTargetLine := na
+
+//=============================================================================
+// MAIN CHART PLOTS
+//=============================================================================
+
+emaTrendPlot = plot(
+    showMovingAverages ? emaTrend : na,
+    title = "EMA 21",
+    color = color.rgb(135, 80, 200),
+    linewidth = 2
+)
+
+smaMediumPlot = plot(
+    showMovingAverages ? smaMedium : na,
+    title = "SMA 50",
+    color = color.rgb(225, 145, 30),
+    linewidth = 2
+)
+
+plot(
+    showMovingAverages ? smaLong : na,
+    title = "SMA 200",
+    color = color.rgb(195, 55, 55),
+    linewidth = 2
+)
+
+plot(
+    showAnchoredVwap ? anchoredVwap : na,
+    title = "Anchored VWAP",
+    color = color.rgb(125, 65, 180),
+    linewidth = 2
+)
+
+fill(
+    emaTrendPlot,
+    smaMediumPlot,
+    color = showEmaCloud ? emaAlignmentBullish ? color.new(color.green, 91) : color.new(color.red, 92) : na,
+    title = "21 over 50 Trend Cloud"
+)
+
+color candleBiasColor = na
+
+if showBarColors
+    if bullSideEnabled and (callBiasState == "Breakout confirmed" or callBiasState == "Pullback setup" or callBiasState == "Bullish")
+        candleBiasColor := color.new(color.teal, 20)
+    else if bearSideEnabled and (putBiasState == "Breakdown confirmed" or putBiasState == "Rejection setup" or putBiasState == "Bearish")
+        candleBiasColor := color.new(color.maroon, 20)
+    else if callBiasState == "Extended" or putBiasState == "Extended downside"
+        candleBiasColor := color.new(color.orange, 15)
+    else if tradeDirection == "Bullish" and callBiasState == "Avoid"
+        candleBiasColor := color.new(color.red, 20)
+
+barcolor(candleBiasColor)
+
+//=============================================================================
+// COMMAND CENTER TEXT
+//=============================================================================
+
+string weeklyState =
+     tradeDirection == "Bullish"
+     ? (weeklyTrendAligned ? "Aligned" : "Not aligned")
+     : tradeDirection == "Bearish"
+     ? (weeklyBearAligned ? "Aligned (bear)" : "Not aligned")
+     : weeklyTrendAligned
+     ? "Bull aligned"
+     : weeklyBearAligned
+     ? "Bear aligned"
+     : "Flat"
+
+color weeklyStateColor =
+     tradeDirection == "Bearish"
+     ? (weeklyBearAligned ? color.rgb(160, 30, 30) : color.rgb(220, 125, 35))
+     : weeklyTrendAligned
+     ? color.rgb(20, 145, 80)
+     : tradeDirection == "Both" and weeklyBearAligned
+     ? color.rgb(160, 30, 30)
+     : color.rgb(220, 125, 35)
+
+string anchoredVwapState = "Unavailable"
+color anchoredVwapStateColor = color.rgb(100, 110, 125)
+
+if not na(anchoredVwapDistancePercent)
+    if priceAboveAnchoredVwap
+        anchoredVwapState := "Above, " + str.tostring(anchoredVwapDistancePercent, "#.0") + "%"
+        anchoredVwapStateColor := color.rgb(20, 145, 80)
+    else
+        anchoredVwapState := "Below, " + str.tostring(math.abs(anchoredVwapDistancePercent), "#.0") + "%"
+        anchoredVwapStateColor := color.rgb(190, 55, 55)
+
+string volumeText = na(relativeVolume) ? "Unavailable" : str.tostring(relativeVolume, "#.00") + "x, " + volumeState
+
+string volatilityText = na(atrPercent) ? volatilityState : volatilityState + ", ATR " + str.tostring(atrPercent, "#.0") + "%"
+
+string breakoutText = na(breakoutLevel) ? "Waiting" : str.tostring(breakoutLevel, format.mintick)
+
+string supportText = na(pullbackSupport) ? "Waiting" : str.tostring(pullbackSupport, format.mintick)
+
+string targetText = na(targetPrice) ? "Waiting" : str.tostring(targetPrice, format.mintick) + (targetUsesAtrFallback ? " ATR" : "")
+
+string targetRoomText = na(targetRoomPercent) or na(targetRoomAtr) ? "Waiting" : str.tostring(targetRoomPercent, "#.0") + "%, " + str.tostring(targetRoomAtr, "#.0") + " ATR"
+
+color targetRoomColor = targetRoomEnough ? color.rgb(20, 145, 80) : color.rgb(220, 125, 35)
+
+string breakdownText = na(breakdownLevel) ? "Waiting" : str.tostring(breakdownLevel, format.mintick)
+
+string rejectionText = na(rejectionResistance) ? "Waiting" : str.tostring(rejectionResistance, format.mintick)
+
+string putTargetText = na(putTargetPrice) ? "Waiting" : str.tostring(putTargetPrice, format.mintick) + (putTargetUsesAtrFallback ? " ATR" : "")
+
+string putTargetRoomText = na(putTargetRoomPercent) or na(putTargetRoomAtr) ? "Waiting" : str.tostring(putTargetRoomPercent, "#.0") + "%, " + str.tostring(putTargetRoomAtr, "#.0") + " ATR"
+
+color putTargetRoomColor = putTargetRoomEnough ? color.rgb(160, 30, 30) : color.rgb(220, 125, 35)
+
+string callStrikeText = na(researchCallStrike) ? "Waiting" : str.tostring(researchCallStrike, format.mintick)
+
+string putStrikeText = na(researchPutStrike) ? "Waiting" : str.tostring(researchPutStrike, format.mintick)
+
+string atrFloorText =
+     na(atrPercent)
+     ? "Unavailable"
+     : str.tostring(atrPercent, "#.0") + "% (floor " + str.tostring(atrPercentFloor, "#.0") + ")"
+
+color atrFloorColor =
+     na(atrPercent)
+     ? color.rgb(100, 110, 125)
+     : movementFloorPassed
+     ? color.rgb(20, 145, 80)
+     : color.rgb(190, 55, 55)
+
+//=============================================================================
+// COMMAND CENTER TABLE
+//=============================================================================
+
+var table commandTable = table.new(
+    position.top_right,
+    2,
+    24,
+    bgcolor = color.new(color.black, 8),
+    frame_color = color.new(color.gray, 55),
+    frame_width = 1,
+    border_color = color.new(color.gray, 75),
+    border_width = 1
+)
+
+f_tableRow(int rowIndex, string labelText, string valueText, color valueColor) =>
+    table.cell(commandTable, 0, rowIndex, labelText, text_color = color.white, text_size = size.tiny, bgcolor = color.rgb(40, 45, 55))
+    table.cell(commandTable, 1, rowIndex, valueText, text_color = color.white, text_size = size.tiny, bgcolor = valueColor)
+
+if barstate.islast
+
+    table.clear(commandTable, 0, 0, 1, 23)
+
+    if showCommandTable
+
+        int rowIndex = 0
+
+        if bullSideEnabled
+            f_tableRow(rowIndex, "COMMAND", str.tostring(commandScore) + "/100", commandScoreColor)
+            rowIndex += 1
+            f_tableRow(rowIndex, "CALL BIAS", callBiasState, callBiasColor)
+            rowIndex += 1
+
+        if bearSideEnabled
+            f_tableRow(rowIndex, "PUT COMMAND", str.tostring(putCommandScore) + "/100", putCommandScoreColor)
+            rowIndex += 1
+            f_tableRow(rowIndex, "PUT BIAS", putBiasState, putBiasColor)
+            rowIndex += 1
+
+        f_tableRow(rowIndex, "TREND", trendState, trendStateColor)
+        rowIndex += 1
+
+        f_tableRow(rowIndex, "WEEKLY", weeklyState, weeklyStateColor)
+        rowIndex += 1
+
+        f_tableRow(rowIndex, "STRUCTURE", structureState, structureStateColor)
+        rowIndex += 1
+
+        if bullSideEnabled
+            f_tableRow(rowIndex, "REL STRENGTH", relativeStrengthState, relativeStrengthColor)
+            rowIndex += 1
+
+        if bearSideEnabled
+            f_tableRow(rowIndex, "REL WEAKNESS", relativeWeaknessState, relativeWeaknessColor)
+            rowIndex += 1
+
+        f_tableRow(rowIndex, "VOLUME", volumeText, volumeStateColor)
+        rowIndex += 1
+
+        f_tableRow(rowIndex, "VOLATILITY", volatilityText, volatilityStateColor)
+        rowIndex += 1
+
+        f_tableRow(rowIndex, "ANCHORED VWAP", anchoredVwapState, anchoredVwapStateColor)
+        rowIndex += 1
+
+        if bullSideEnabled
+            f_tableRow(rowIndex, "BREAKOUT", breakoutText, color.rgb(45, 145, 70))
+            rowIndex += 1
+            f_tableRow(rowIndex, "SUPPORT", supportText, color.rgb(20, 125, 125))
+            rowIndex += 1
+            f_tableRow(rowIndex, "TARGET", targetText, color.rgb(45, 145, 70))
+            rowIndex += 1
+            f_tableRow(rowIndex, "ROOM", targetRoomText, targetRoomColor)
+            rowIndex += 1
+
+            if showResearchStrikes
+                f_tableRow(rowIndex, "CALL STRIKE", callStrikeText, color.rgb(45, 145, 70))
+                rowIndex += 1
+
+        if bearSideEnabled
+            f_tableRow(rowIndex, "BREAKDOWN", breakdownText, color.rgb(170, 45, 45))
+            rowIndex += 1
+            f_tableRow(rowIndex, "REJECTION", rejectionText, color.rgb(120, 35, 55))
+            rowIndex += 1
+            f_tableRow(rowIndex, "PUT TARGET", putTargetText, color.rgb(170, 45, 45))
+            rowIndex += 1
+            f_tableRow(rowIndex, "PUT ROOM", putTargetRoomText, putTargetRoomColor)
+            rowIndex += 1
+
+            if showResearchStrikes
+                f_tableRow(rowIndex, "PUT STRIKE", putStrikeText, color.rgb(170, 45, 45))
+                rowIndex += 1
+
+        f_tableRow(rowIndex, "ATR FLOOR", atrFloorText, atrFloorColor)
+
+//=============================================================================
+// DATA WINDOW VALUES
+//=============================================================================
+
+plot(commandScore, title = "Command Score", display = display.data_window)
+plot(putCommandScore, title = "Put Command Score", display = display.data_window)
+plot(relativeStrengthRatio, title = "Relative Strength Ratio", display = display.data_window)
+plot(relativeVolume, title = "Relative Volume", display = display.data_window)
+plot(atrPercent, title = "ATR Percent", display = display.data_window)
+plot(breakoutLevel, title = "Breakout Level", display = display.data_window)
+plot(pullbackSupport, title = "Pullback Support", display = display.data_window)
+plot(targetPrice, title = "Target Price", display = display.data_window)
+plot(targetRoomPercent, title = "Room to Target Percent", display = display.data_window)
+plot(targetRoomAtr, title = "Room to Target ATR", display = display.data_window)
+plot(breakdownLevel, title = "Breakdown Level", display = display.data_window)
+plot(rejectionResistance, title = "Rejection Resistance", display = display.data_window)
+plot(putTargetPrice, title = "Put Target Price", display = display.data_window)
+plot(putTargetRoomPercent, title = "Put Room Percent", display = display.data_window)
+plot(putTargetRoomAtr, title = "Put Room ATR", display = display.data_window)
+plot(researchCallStrike, title = "Research Call Strike", display = display.data_window)
+plot(researchPutStrike, title = "Research Put Strike", display = display.data_window)
+plot(risingTrendPrice, title = "Rising Trend Price", display = display.data_window)
+plot(fallingTrendPrice, title = "Falling Trend Price", display = display.data_window)
+
+//=============================================================================
+// ALERT CONDITIONS
+//=============================================================================
+
+bool bullishBiasActive = commandScore >= 70 and close > emaTrend and close > smaMedium and priceAboveAnchoredVwap
+
+bool bullishBiasLost = bullSideEnabled and bullishBiasActive[1] and not bullishBiasActive and signalBarAllowed
+
+bool bearishBiasActive = putCommandScore >= 70 and close < emaTrend and close < smaMedium and priceBelowAnchoredVwap
+
+bool bearishBiasLost = bearSideEnabled and bearishBiasActive[1] and not bearishBiasActive and signalBarAllowed
+
+// Cross calls are computed unconditionally in global scope so their internal
+// history stays consistent on every bar (Pine v6 lazy boolean evaluation).
+bool closeCrossedUnderPullbackSupport = ta.crossunder(close, pullbackSupport)
+
+bool closeCrossedOverRejectionResistance = ta.crossover(close, rejectionResistance)
+
+bool pullbackSupportLost = bullSideEnabled and not na(pullbackSupport) and closeCrossedUnderPullbackSupport and signalBarAllowed
+
+bool rejectionResistanceReclaimed = bearSideEnabled and not na(rejectionResistance) and closeCrossedOverRejectionResistance and signalBarAllowed
+
+bool breakoutWatchStarted = bullSideEnabled and breakoutWatch and not breakoutWatch[1] and commandScore >= 65 and signalBarAllowed
+
+bool breakdownWatchStarted = bearSideEnabled and breakdownWatch and not breakdownWatch[1] and putCommandScore >= 65 and signalBarAllowed
+
+//=============================================================================
+// ALERTS — CALL SIDE (TITLES UNCHANGED FROM V1)
+//=============================================================================
+
+alertcondition(
+    highQualityCallStarted,
+    title = "High Quality Swing Call Setup",
+    message = "{{ticker}} entered a high quality daily swing call setup."
+)
+
+alertcondition(
+    breakoutSetupStarted,
+    title = "Daily Breakout Confirmed",
+    message = "{{ticker}} confirmed a daily breakout with supportive command center conditions."
+)
+
+alertcondition(
+    pullbackSetupStarted,
+    title = "Daily Pullback Setup",
+    message = "{{ticker}} confirmed a bullish daily pullback setup near support."
+)
+
+alertcondition(
+    breakoutWatchStarted,
+    title = "Daily Breakout Watch",
+    message = "{{ticker}} is approaching its daily breakout trigger."
+)
+
+alertcondition(
+    bullishBiasLost,
+    title = "Daily Bullish Bias Lost",
+    message = "{{ticker}} lost its bullish daily command center condition."
+)
+
+alertcondition(
+    pullbackSupportLost,
+    title = "Daily Pullback Support Lost",
+    message = "{{ticker}} closed below its active daily pullback support."
+)
+
+alertcondition(
+    fallingTrendBreakout,
+    title = "Falling Resistance Broken",
+    message = "{{ticker}} closed above its falling resistance trend line."
+)
+
+alertcondition(
+    risingTrendBreakdown,
+    title = "Rising Support Broken",
+    message = "{{ticker}} closed below its rising support trend line."
+)
+
+//=============================================================================
+// ALERTS — PUT SIDE (NEW IN V2)
+//=============================================================================
+
+alertcondition(
+    highQualityPutStarted,
+    title = "High Quality Swing Put Setup",
+    message = "{{ticker}} entered a high quality daily swing put setup."
+)
+
+alertcondition(
+    breakdownSetupStarted,
+    title = "Daily Breakdown Confirmed",
+    message = "{{ticker}} confirmed a daily breakdown with supportive put command conditions."
+)
+
+alertcondition(
+    rejectionSetupStarted,
+    title = "Daily Rejection Setup",
+    message = "{{ticker}} confirmed a bearish daily rejection at overhead resistance."
+)
+
+alertcondition(
+    breakdownWatchStarted,
+    title = "Daily Breakdown Watch",
+    message = "{{ticker}} is approaching its daily breakdown trigger."
+)
+
+alertcondition(
+    bearishBiasLost,
+    title = "Daily Bearish Bias Lost",
+    message = "{{ticker}} lost its bearish daily put command condition."
+)
+
+alertcondition(
+    rejectionResistanceReclaimed,
+    title = "Daily Rejection Resistance Reclaimed",
+    message = "{{ticker}} closed above its active rejection resistance. Active put setups are threatened."
+)

@@ -1,0 +1,1851 @@
+//@version=6
+indicator(
+     title = "Ali Swing Suite: Momentum Confirmation Overlay v2 (Bull + Bear)",
+     shorttitle = "AS Momentum v2",
+     overlay = true,
+     scale = scale.none,
+     precision = 1,
+     max_lines_count = 20
+)
+
+//=============================================================================
+// INPUT GROUPS
+//=============================================================================
+
+string GROUP_DIRECTION = "Trade Direction"
+string GROUP_RSI = "RSI Settings"
+string GROUP_MACD = "MACD Settings"
+string GROUP_HTF = "Higher Timeframe Confirmation"
+string GROUP_REACTION = "Price Reaction Lines"
+string GROUP_TREND = "Automatic Trend Lines"
+string GROUP_DIVERGENCE = "Divergence Settings"
+string GROUP_SCORE = "Momentum Score"
+string GROUP_V2 = "v2 Aggressive Profile"
+string GROUP_DISPLAY = "Display Settings"
+string GROUP_OVERLAY = "Price Chart Overlay"
+string GROUP_ALERTS = "Signal and Alert Settings"
+
+//=============================================================================
+// TRADE DIRECTION
+//=============================================================================
+
+string tradeDirection = input.string(
+     "Both",
+     "Trade Direction",
+     options = ["Bullish", "Bearish", "Both"],
+     group = GROUP_DIRECTION,
+     tooltip = "Bullish runs only the call-side engine (identical to v1). Bearish runs only the put-side mirror. Both runs both engines: the higher timeframe gate, reaction lines, table rows, and alerts for each side operate independently."
+)
+
+bool bullSideEnabled = tradeDirection != "Bearish"
+bool bearSideEnabled = tradeDirection != "Bullish"
+
+//=============================================================================
+// RSI SETTINGS
+//=============================================================================
+
+rsiSource = input.source(close, "RSI Source", group = GROUP_RSI)
+
+int rsiLength = input.int(14, "RSI Length", minval = 2, maxval = 100, group = GROUP_RSI)
+
+//=============================================================================
+// MACD SETTINGS
+//=============================================================================
+
+int macdFastLength = input.int(12, "MACD Fast Length", minval = 1, group = GROUP_MACD)
+
+int macdSlowLength = input.int(26, "MACD Slow Length", minval = 2, group = GROUP_MACD)
+
+int macdSignalLength = input.int(9, "MACD Signal Length", minval = 1, group = GROUP_MACD)
+
+//=============================================================================
+// HIGHER TIMEFRAME SETTINGS
+//=============================================================================
+
+string htfFilterMode = input.string(
+     "Strict",
+     "Higher Timeframe Filter",
+     options = ["Off", "Moderate", "Strict"],
+     group = GROUP_HTF,
+     tooltip = "Bull side: Moderate requires higher timeframe RSI above 50; Strict also requires higher timeframe MACD above its signal line. Bear side is the exact mirror: Moderate requires RSI below 50; Strict also requires MACD below its signal line."
+)
+
+bool autoHigherTimeframe = input.bool(
+     true,
+     "Auto-Select Higher Timeframe by Chart",
+     group = GROUP_HTF,
+     tooltip = "Recommended. On a 4 hour or lower chart this uses the daily. On a daily chart it uses the weekly. On weekly or monthly it uses the quarter. Overrides the manual selection below."
+)
+
+string manualHigherTimeframe = input.timeframe(
+     "1D",
+     "Manual Higher Timeframe",
+     group = GROUP_HTF,
+     tooltip = "Used only when Auto-Select is off. Use 1D while viewing the 4 hour chart, or 1W on the daily chart."
+)
+
+string autoSelectedHigherTimeframe =
+     timeframe.isweekly or timeframe.ismonthly
+     ? "3M"
+     : timeframe.isdaily
+     ? "1W"
+     : "1D"
+
+string higherTimeframe =
+     autoHigherTimeframe
+     ? autoSelectedHigherTimeframe
+     : manualHigherTimeframe
+
+bool useConfirmedHtfBars = input.bool(
+     true,
+     "Use Last Confirmed Higher Timeframe Candle",
+     group = GROUP_HTF,
+     tooltip = "Recommended. This avoids using unfinished higher timeframe momentum values."
+)
+
+//=============================================================================
+// PRICE REACTION LINE SETTINGS
+//=============================================================================
+
+bool showPriceReactionLines = input.bool(
+     true,
+     "Show Price Reaction Lines",
+     group = GROUP_REACTION,
+     tooltip = "This setting controls drawings only. Signal prices and alerts continue working when the lines are hidden."
+)
+
+bool showMomentumWarningLine = input.bool(true, "Show Momentum Warning Line", group = GROUP_REACTION)
+
+int reactionLineBars = input.int(15, "Line Length in Candles", minval = 5, maxval = 50, group = GROUP_REACTION)
+
+int reactionLineWidth = input.int(1, "Line Width", minval = 1, maxval = 4, group = GROUP_REACTION)
+
+//=============================================================================
+// AUTOMATIC TREND LINE SETTINGS
+//=============================================================================
+
+bool showAutomaticTrendLines = input.bool(
+     true,
+     "Show Automatic Trend Lines",
+     group = GROUP_TREND,
+     tooltip = "Draws one rising support line from confirmed higher lows and one falling resistance line from confirmed lower highs."
+)
+
+int trendPivotLeftBars = input.int(5, "Trend Pivot Bars on Left", minval = 2, maxval = 20, group = GROUP_TREND)
+
+int trendPivotRightBars = input.int(
+     5,
+     "Trend Pivot Bars on Right",
+     minval = 2,
+     maxval = 20,
+     group = GROUP_TREND,
+     tooltip = "A pivot is confirmed only after this many candles close to its right."
+)
+
+int trendLineWidth = input.int(1, "Trend Line Width", minval = 1, maxval = 4, group = GROUP_TREND)
+
+int trendLineTransparency = input.int(20, "Trend Line Transparency", minval = 0, maxval = 90, group = GROUP_TREND)
+
+//=============================================================================
+// DIVERGENCE SETTINGS
+//=============================================================================
+
+int divergenceLeftBars = input.int(5, "Pivot Bars on Left", minval = 2, maxval = 20, group = GROUP_DIVERGENCE)
+
+int divergenceRightBars = input.int(5, "Pivot Bars on Right", minval = 2, maxval = 20, group = GROUP_DIVERGENCE)
+
+int divergenceMinimumBars = input.int(5, "Minimum Bars Between Pivots", minval = 1, maxval = 50, group = GROUP_DIVERGENCE)
+
+int divergenceMaximumBars = input.int(60, "Maximum Bars Between Pivots", minval = 10, maxval = 200, group = GROUP_DIVERGENCE)
+
+//=============================================================================
+// SCORE SETTINGS
+//=============================================================================
+
+int warningPenaltyBars = input.int(
+     3,
+     "Warning Penalty Duration",
+     minval = 1,
+     maxval = 20,
+     group = GROUP_SCORE,
+     tooltip = "Number of chart candles for which a recent momentum warning reduces the score. Applies to each side independently."
+)
+
+int divergenceInfluenceBars = input.int(10, "Divergence Influence Duration", minval = 1, maxval = 50, group = GROUP_SCORE)
+
+int strongScoreThreshold = input.int(
+     70,
+     "High Confidence Score Threshold",
+     minval = 50,
+     maxval = 95,
+     group = GROUP_SCORE,
+     tooltip = "Used by both the bullish and bearish high confidence conditions."
+)
+
+//=============================================================================
+// V2 AGGRESSIVE PROFILE SETTINGS
+//=============================================================================
+
+int dailyAtrLength = input.int(
+     14,
+     "Daily ATR Length",
+     minval = 2,
+     maxval = 100,
+     group = GROUP_V2
+)
+
+float atrPercentFloor = input.float(
+     2.0,
+     "Movement Floor: Daily ATR Percent",
+     minval = 0.0,
+     maxval = 10.0,
+     step = 0.1,
+     group = GROUP_V2,
+     tooltip = "The v2 movement filter requires daily ATR percent at or above this floor. The table row turns red when the stock fails it. Uses the last confirmed daily candle."
+)
+
+int signalAgeWarningBars = input.int(
+     6,
+     "Signal Age Warning in Candles",
+     minval = 1,
+     maxval = 50,
+     group = GROUP_V2,
+     tooltip = "The table signal age row turns orange at this many candles since the active signal. Six 4 hour candles is roughly three trading days, matching the v2 time stop."
+)
+
+//=============================================================================
+// DISPLAY SETTINGS
+//=============================================================================
+
+bool showStatusTable = input.bool(true, "Show Momentum Status Table", group = GROUP_DISPLAY)
+
+//=============================================================================
+// PRICE CHART OVERLAY SETTINGS
+//=============================================================================
+
+bool showPriceTrendLine = input.bool(
+     true,
+     "Show Momentum Trend Line on Price",
+     group = GROUP_OVERLAY,
+     tooltip = "Plots a momentum colored moving average directly on the candles. The color matches the Overall state in the panel."
+)
+
+int priceTrendLength = input.int(21, "Momentum Trend Line Length", minval = 5, maxval = 200, group = GROUP_OVERLAY)
+
+bool showSlowTrendLine = input.bool(
+     true,
+     "Show Slow Trend Reference on Price",
+     group = GROUP_OVERLAY,
+     tooltip = "A slower, muted moving average for broader trend context."
+)
+
+int slowTrendLength = input.int(50, "Slow Trend Reference Length", minval = 10, maxval = 400, group = GROUP_OVERLAY)
+
+bool showPriceSignalMarkers = input.bool(
+     false,
+     "Show Signal Markers on Price",
+     group = GROUP_OVERLAY,
+     tooltip = "Off by default for a clean chart. Bull side: teal triangle up is a confirmed bullish signal, green diamond is a high confidence start, orange X is a momentum warning. Bear side: red triangle down, dark red diamond, yellow X."
+)
+
+bool tintCandlesByMomentum = input.bool(
+     false,
+     "Tint Candles by Momentum",
+     group = GROUP_OVERLAY,
+     tooltip = "Optional. Recolors the candle bodies by the displayed overall momentum state. Off by default."
+)
+
+int priceTrendTransparency = input.int(10, "Momentum Trend Line Transparency", minval = 0, maxval = 80, group = GROUP_OVERLAY)
+
+//=============================================================================
+// SIGNAL AND ALERT SETTINGS
+//=============================================================================
+
+bool confirmSignalsOnClose = input.bool(
+     true,
+     "Confirm Signals at Candle Close",
+     group = GROUP_ALERTS,
+     tooltip = "Recommended for daily and four hour swing trading."
+)
+
+//=============================================================================
+// CURRENT TIMEFRAME CALCULATIONS
+//=============================================================================
+
+float rsiValue = ta.rsi(rsiSource, rsiLength)
+
+[macdLine, macdSignal, macdHistogram] = ta.macd(close, macdFastLength, macdSlowLength, macdSignalLength)
+
+bool rsiRising = rsiValue > rsiValue[1]
+bool rsiFalling = rsiValue < rsiValue[1]
+
+bool histogramRising = macdHistogram > macdHistogram[1]
+bool histogramFalling = macdHistogram < macdHistogram[1]
+
+bool macdAboveSignal = macdLine > macdSignal
+bool macdBelowSignal = macdLine < macdSignal
+
+bool macdAboveZero = macdLine > 0
+bool macdBelowZero = macdLine < 0
+
+bool signalBarAllowed =
+     not confirmSignalsOnClose or
+     barstate.isconfirmed
+
+//=============================================================================
+// HIGHER TIMEFRAME FUNCTIONS
+//=============================================================================
+
+f_currentHtfMomentum() =>
+    float localRsi = ta.rsi(close, rsiLength)
+    [localMacd, localSignal, localHistogram] = ta.macd(close, macdFastLength, macdSlowLength, macdSignalLength)
+    [localRsi, localMacd, localSignal, localHistogram]
+
+f_confirmedHtfMomentum() =>
+    float localRsi = ta.rsi(close, rsiLength)
+    [localMacd, localSignal, localHistogram] = ta.macd(close, macdFastLength, macdSlowLength, macdSignalLength)
+    [localRsi[1], localMacd[1], localSignal[1], localHistogram[1]]
+
+f_confirmedDailyAtrPercent() =>
+    float localAtrPercent = ta.atr(dailyAtrLength) / close * 100
+    localAtrPercent[1]
+
+//=============================================================================
+// HIGHER TIMEFRAME REQUESTS
+//=============================================================================
+
+[htfRsiLive, htfMacdLive, htfSignalLive, htfHistogramLive] = request.security(
+     syminfo.tickerid,
+     higherTimeframe,
+     f_currentHtfMomentum(),
+     gaps = barmerge.gaps_off,
+     lookahead = barmerge.lookahead_off
+)
+
+[htfRsiConfirmed, htfMacdConfirmed, htfSignalConfirmed, htfHistogramConfirmed] = request.security(
+     syminfo.tickerid,
+     higherTimeframe,
+     f_confirmedHtfMomentum(),
+     gaps = barmerge.gaps_off,
+     lookahead = barmerge.lookahead_on
+)
+
+float dailyAtrPercent = request.security(
+     syminfo.tickerid,
+     "1D",
+     f_confirmedDailyAtrPercent(),
+     gaps = barmerge.gaps_off,
+     lookahead = barmerge.lookahead_on
+)
+
+float htfRsi = useConfirmedHtfBars ? htfRsiConfirmed : htfRsiLive
+float htfMacd = useConfirmedHtfBars ? htfMacdConfirmed : htfMacdLive
+float htfSignal = useConfirmedHtfBars ? htfSignalConfirmed : htfSignalLive
+float htfHistogram = useConfirmedHtfBars ? htfHistogramConfirmed : htfHistogramLive
+
+bool movementFloorPassed = not na(dailyAtrPercent) and dailyAtrPercent >= atrPercentFloor
+
+//=============================================================================
+// HIGHER TIMEFRAME VALIDATION — BULL AND BEAR GATES
+//=============================================================================
+
+bool useHtfFilter = htfFilterMode != "Off"
+
+bool htfIsHigher =
+     timeframe.in_seconds(higherTimeframe) >
+     timeframe.in_seconds()
+
+bool bullModeratePass = htfRsi >= 50
+
+bool bullStrictPass =
+     htfRsi >= 50 and
+     htfMacd > htfSignal
+
+bool bearModeratePass = htfRsi < 50
+
+bool bearStrictPass =
+     htfRsi < 50 and
+     htfMacd < htfSignal
+
+bool bullGatePassed =
+     not useHtfFilter
+     ? true
+     : not htfIsHigher
+     ? false
+     : htfFilterMode == "Moderate"
+     ? bullModeratePass
+     : bullStrictPass
+
+bool bearGatePassed =
+     not useHtfFilter
+     ? true
+     : not htfIsHigher
+     ? false
+     : htfFilterMode == "Moderate"
+     ? bearModeratePass
+     : bearStrictPass
+
+// Kept for parity with the v1 bullish engine.
+bool htfGatePassed = bullGatePassed
+
+string htfStateText =
+     not useHtfFilter
+     ? "Off"
+     : not htfIsHigher
+     ? "Invalid timeframe"
+     : tradeDirection == "Bullish"
+     ? higherTimeframe + (bullGatePassed ? " passed" : " blocked")
+     : tradeDirection == "Bearish"
+     ? higherTimeframe + (bearGatePassed ? " passed" : " blocked")
+     : higherTimeframe + " bull " + (bullGatePassed ? "pass" : "block") + " | bear " + (bearGatePassed ? "pass" : "block")
+
+color htfStateColor =
+     not useHtfFilter
+     ? color.rgb(100, 110, 125)
+     : not htfIsHigher
+     ? color.rgb(190, 55, 55)
+     : (bullSideEnabled and bullGatePassed) or (bearSideEnabled and bearGatePassed)
+     ? color.rgb(20, 145, 80)
+     : color.rgb(210, 100, 40)
+
+//=============================================================================
+// RSI CLASSIFICATION
+//=============================================================================
+
+string rsiState =
+     rsiValue >= 75
+     ? "Extended"
+     : rsiValue >= 60
+     ? "Strong"
+     : rsiValue >= 50
+     ? "Bullish"
+     : rsiValue >= 40
+     ? "Neutral"
+     : rsiValue >= 25
+     ? "Weak"
+     : "Extended down"
+
+color rsiStateColor =
+     rsiValue >= 75
+     ? color.rgb(230, 126, 34)
+     : rsiValue >= 60
+     ? color.rgb(20, 140, 80)
+     : rsiValue >= 50
+     ? color.rgb(46, 160, 110)
+     : rsiValue >= 40
+     ? color.rgb(100, 110, 125)
+     : rsiValue >= 25
+     ? color.rgb(190, 55, 55)
+     : color.rgb(230, 126, 34)
+
+//=============================================================================
+// MACD CLASSIFICATION
+//=============================================================================
+
+string macdState =
+     macdAboveSignal and histogramRising
+     ? "Bullish, strengthening"
+     : macdAboveSignal and histogramFalling
+     ? "Bullish, slowing"
+     : macdBelowSignal and histogramRising
+     ? "Bearish, improving"
+     : "Bearish, weakening"
+
+color macdStateColor =
+     macdAboveSignal and histogramRising
+     ? color.rgb(20, 150, 80)
+     : macdAboveSignal and histogramFalling
+     ? color.rgb(25, 135, 145)
+     : macdBelowSignal and histogramRising
+     ? color.rgb(225, 145, 30)
+     : color.rgb(195, 55, 55)
+
+//=============================================================================
+// BASE MOMENTUM CONDITIONS — BULL SIDE (UNCHANGED FROM V1)
+//=============================================================================
+
+bool bullishConfirmationCondition =
+     rsiValue >= 50 and
+     macdAboveSignal and
+     histogramRising
+
+bool filteredBullishCondition =
+     bullishConfirmationCondition and
+     bullGatePassed
+
+bool confirmedBullishSignal =
+     bullSideEnabled and
+     filteredBullishCondition and
+     not filteredBullishCondition[1] and
+     signalBarAllowed
+
+bool rsiWarningEvent = ta.crossunder(rsiValue, 50)
+
+bool macdWarningEvent = ta.crossunder(macdLine, macdSignal)
+
+bool momentumWarningEvent =
+     rsiWarningEvent or
+     macdWarningEvent
+
+bool confirmedWarningSignal =
+     momentumWarningEvent and
+     signalBarAllowed
+
+//=============================================================================
+// BASE MOMENTUM CONDITIONS — BEAR SIDE (MIRROR OF THE SCREENER PUT ENGINE)
+//=============================================================================
+
+bool bearishConfirmationCondition =
+     rsiValue < 50 and
+     macdBelowSignal and
+     histogramFalling
+
+bool filteredBearishCondition =
+     bearishConfirmationCondition and
+     bearGatePassed
+
+bool confirmedBearishSignal =
+     bearSideEnabled and
+     filteredBearishCondition and
+     not filteredBearishCondition[1] and
+     signalBarAllowed
+
+// Bearish warnings are bullish recovery events that threaten an active put.
+bool rsiRecoveryEvent = ta.crossover(rsiValue, 50)
+
+bool macdRecoveryEvent = ta.crossover(macdLine, macdSignal)
+
+bool bearMomentumWarningEvent =
+     rsiRecoveryEvent or
+     macdRecoveryEvent
+
+bool confirmedBearWarningSignal =
+     bearMomentumWarningEvent and
+     signalBarAllowed
+
+//=============================================================================
+// CONFIRMED DIVERGENCE DETECTION
+//=============================================================================
+
+float rsiPivotLow = ta.pivotlow(rsiValue, divergenceLeftBars, divergenceRightBars)
+
+float rsiPivotHigh = ta.pivothigh(rsiValue, divergenceLeftBars, divergenceRightBars)
+
+var float previousRsiPivotLow = na
+var float previousPricePivotLow = na
+var int previousLowPivotBar = na
+
+var float previousRsiPivotHigh = na
+var float previousPricePivotHigh = na
+var int previousHighPivotBar = na
+
+bool bullishDivergence = false
+bool bearishDivergence = false
+
+if not na(rsiPivotLow)
+
+    int currentLowPivotBar = bar_index - divergenceRightBars
+
+    float currentPricePivotLow = low[divergenceRightBars]
+
+    int barsBetweenLowPivots =
+         na(previousLowPivotBar)
+         ? 0
+         : currentLowPivotBar - previousLowPivotBar
+
+    bool validLowSpacing =
+         not na(previousLowPivotBar) and
+         barsBetweenLowPivots >= divergenceMinimumBars and
+         barsBetweenLowPivots <= divergenceMaximumBars
+
+    bullishDivergence :=
+         validLowSpacing and
+         currentPricePivotLow < previousPricePivotLow and
+         rsiPivotLow > previousRsiPivotLow
+
+    previousRsiPivotLow := rsiPivotLow
+    previousPricePivotLow := currentPricePivotLow
+    previousLowPivotBar := currentLowPivotBar
+
+if not na(rsiPivotHigh)
+
+    int currentHighPivotBar = bar_index - divergenceRightBars
+
+    float currentPricePivotHigh = high[divergenceRightBars]
+
+    int barsBetweenHighPivots =
+         na(previousHighPivotBar)
+         ? 0
+         : currentHighPivotBar - previousHighPivotBar
+
+    bool validHighSpacing =
+         not na(previousHighPivotBar) and
+         barsBetweenHighPivots >= divergenceMinimumBars and
+         barsBetweenHighPivots <= divergenceMaximumBars
+
+    bearishDivergence :=
+         validHighSpacing and
+         currentPricePivotHigh > previousPricePivotHigh and
+         rsiPivotHigh < previousRsiPivotHigh
+
+    previousRsiPivotHigh := rsiPivotHigh
+    previousPricePivotHigh := currentPricePivotHigh
+    previousHighPivotBar := currentHighPivotBar
+
+//=============================================================================
+// RECENT EVENT TRACKING
+//=============================================================================
+
+var int lastBullishDivergenceBar = na
+var int lastBearishDivergenceBar = na
+var int lastWarningBar = na
+var int lastBearWarningBar = na
+
+if bullishDivergence
+    lastBullishDivergenceBar := bar_index
+
+if bearishDivergence
+    lastBearishDivergenceBar := bar_index
+
+if confirmedWarningSignal
+    lastWarningBar := bar_index
+
+if confirmedBearWarningSignal
+    lastBearWarningBar := bar_index
+
+bool recentBullishDivergence =
+     not na(lastBullishDivergenceBar) and
+     bar_index - lastBullishDivergenceBar <= divergenceInfluenceBars
+
+bool recentBearishDivergence =
+     not na(lastBearishDivergenceBar) and
+     bar_index - lastBearishDivergenceBar <= divergenceInfluenceBars
+
+bool recentWarningActive =
+     not na(lastWarningBar) and
+     bar_index - lastWarningBar <= warningPenaltyBars
+
+bool recentBearWarningActive =
+     not na(lastBearWarningBar) and
+     bar_index - lastBearWarningBar <= warningPenaltyBars
+
+//=============================================================================
+// BULL MOMENTUM SCORE (UNCHANGED FROM V1)
+//=============================================================================
+
+int rsiRegimeScore =
+     rsiValue >= 75
+     ? 20
+     : rsiValue >= 60
+     ? 30
+     : rsiValue >= 50
+     ? 22
+     : rsiValue >= 40
+     ? 10
+     : 0
+
+int rsiDirectionScore = rsiRising ? 10 : 0
+
+int macdSignalScore = macdAboveSignal ? 25 : 0
+
+int macdZeroScore = macdAboveZero ? 20 : 0
+
+int histogramScore = histogramRising ? 15 : 0
+
+int baseMomentumScore =
+     rsiRegimeScore +
+     rsiDirectionScore +
+     macdSignalScore +
+     macdZeroScore +
+     histogramScore
+
+int divergenceAdjustment =
+     (recentBullishDivergence ? 5 : 0) -
+     (recentBearishDivergence ? 5 : 0)
+
+int warningPenalty = recentWarningActive ? 10 : 0
+
+int adjustedMomentumScore =
+     baseMomentumScore +
+     divergenceAdjustment -
+     warningPenalty
+
+int boundedMomentumScore =
+     int(math.max(0, math.min(100, adjustedMomentumScore)))
+
+int macdCappedMomentumScore =
+     macdAboveSignal
+     ? boundedMomentumScore
+     : int(math.min(boundedMomentumScore, 74))
+
+int momentumScore =
+     rsiValue >= 75
+     ? int(math.min(macdCappedMomentumScore, 84))
+     : macdCappedMomentumScore
+
+color momentumScoreColor =
+     momentumScore >= 85
+     ? color.rgb(15, 145, 75)
+     : momentumScore >= 70
+     ? color.rgb(40, 155, 105)
+     : momentumScore >= 55
+     ? color.rgb(40, 130, 165)
+     : momentumScore >= 40
+     ? color.rgb(225, 145, 30)
+     : color.rgb(190, 55, 55)
+
+//=============================================================================
+// BEAR MOMENTUM SCORE (MIRRORS scanner/put_momentum.py EXACTLY)
+//=============================================================================
+
+int bearRsiRegimeScore =
+     rsiValue <= 25
+     ? 20
+     : rsiValue <= 40
+     ? 30
+     : rsiValue <= 50
+     ? 22
+     : rsiValue <= 60
+     ? 10
+     : 0
+
+int bearRsiDirectionScore = rsiFalling ? 10 : 0
+
+int bearMacdSignalScore = macdBelowSignal ? 25 : 0
+
+int bearMacdZeroScore = macdBelowZero ? 20 : 0
+
+int bearHistogramScore = histogramFalling ? 15 : 0
+
+int bearBaseMomentumScore =
+     bearRsiRegimeScore +
+     bearRsiDirectionScore +
+     bearMacdSignalScore +
+     bearMacdZeroScore +
+     bearHistogramScore
+
+int bearDivergenceAdjustment =
+     (recentBearishDivergence ? 5 : 0) -
+     (recentBullishDivergence ? 5 : 0)
+
+int bearWarningPenalty = recentBearWarningActive ? 10 : 0
+
+int bearAdjustedMomentumScore =
+     bearBaseMomentumScore +
+     bearDivergenceAdjustment -
+     bearWarningPenalty
+
+int bearBoundedMomentumScore =
+     int(math.max(0, math.min(100, bearAdjustedMomentumScore)))
+
+int bearMacdCappedMomentumScore =
+     macdBelowSignal
+     ? bearBoundedMomentumScore
+     : int(math.min(bearBoundedMomentumScore, 74))
+
+int bearMomentumScore =
+     rsiValue <= 25
+     ? int(math.min(bearMacdCappedMomentumScore, 84))
+     : bearMacdCappedMomentumScore
+
+color bearMomentumScoreColor =
+     bearMomentumScore >= 85
+     ? color.rgb(160, 30, 30)
+     : bearMomentumScore >= 70
+     ? color.rgb(185, 60, 50)
+     : bearMomentumScore >= 55
+     ? color.rgb(150, 90, 120)
+     : bearMomentumScore >= 40
+     ? color.rgb(225, 145, 30)
+     : color.rgb(100, 110, 125)
+
+//=============================================================================
+// HIGH CONFIDENCE CONDITIONS
+//=============================================================================
+
+bool highConfidenceCondition =
+     momentumScore >= strongScoreThreshold and
+     filteredBullishCondition
+
+bool highConfidenceStarted =
+     bullSideEnabled and
+     highConfidenceCondition and
+     not highConfidenceCondition[1] and
+     signalBarAllowed
+
+bool highConfidenceBearCondition =
+     bearMomentumScore >= strongScoreThreshold and
+     filteredBearishCondition
+
+bool highConfidenceBearStarted =
+     bearSideEnabled and
+     highConfidenceBearCondition and
+     not highConfidenceBearCondition[1] and
+     signalBarAllowed
+
+//=============================================================================
+// OVERALL MOMENTUM CLASSIFICATION — BULL SIDE (UNCHANGED FROM V1)
+//=============================================================================
+
+bool extendedMomentum =
+     rsiValue >= 75 and
+     macdAboveSignal
+
+bool strongBullishMomentum =
+     rsiValue >= 60 and
+     rsiValue < 75 and
+     macdAboveSignal and
+     macdAboveZero and
+     histogramRising
+
+bool bullishMomentum =
+     rsiValue >= 50 and
+     macdAboveSignal
+
+bool bearishMomentum =
+     rsiValue < 40 and
+     macdBelowSignal and
+     macdBelowZero
+
+bool weakeningMomentum =
+     (rsiValue < 50 or macdBelowSignal) and
+     (rsiFalling or histogramFalling)
+
+bool improvingMomentum =
+     rsiRising and
+     histogramRising
+
+string overallMomentumState =
+     recentWarningActive
+     ? "Warning active"
+     : extendedMomentum
+     ? "Extended"
+     : strongBullishMomentum and bullGatePassed
+     ? "Strong bullish"
+     : bullishMomentum and bullGatePassed
+     ? "Bullish"
+     : bullishMomentum and not bullGatePassed
+     ? "HTF blocked"
+     : bearishMomentum
+     ? "Bearish"
+     : weakeningMomentum
+     ? "Weakening"
+     : improvingMomentum
+     ? "Improving"
+     : "Neutral"
+
+color overallMomentumColor =
+     recentWarningActive
+     ? color.rgb(210, 100, 40)
+     : extendedMomentum
+     ? color.rgb(230, 126, 34)
+     : strongBullishMomentum and bullGatePassed
+     ? color.rgb(15, 145, 75)
+     : bullishMomentum and bullGatePassed
+     ? color.rgb(40, 155, 105)
+     : bullishMomentum and not bullGatePassed
+     ? color.rgb(210, 100, 40)
+     : bearishMomentum
+     ? color.rgb(185, 45, 45)
+     : weakeningMomentum
+     ? color.rgb(210, 90, 45)
+     : improvingMomentum
+     ? color.rgb(40, 130, 165)
+     : color.rgb(100, 110, 125)
+
+//=============================================================================
+// OVERALL MOMENTUM CLASSIFICATION — BEAR SIDE
+//=============================================================================
+
+bool extendedBearMomentum =
+     rsiValue <= 25 and
+     macdBelowSignal
+
+bool strongBearishMomentum =
+     rsiValue > 25 and
+     rsiValue <= 40 and
+     macdBelowSignal and
+     macdBelowZero and
+     histogramFalling
+
+bool bearishConfirmMomentum =
+     rsiValue < 50 and
+     macdBelowSignal
+
+bool bearImprovingMomentum =
+     rsiFalling and
+     histogramFalling
+
+bool bearWeakeningMomentum =
+     (rsiValue > 50 or macdAboveSignal) and
+     (rsiRising or histogramRising)
+
+string bearOverallMomentumState =
+     recentBearWarningActive
+     ? "Warning active"
+     : extendedBearMomentum
+     ? "Extended down"
+     : strongBearishMomentum and bearGatePassed
+     ? "Strong bearish"
+     : bearishConfirmMomentum and bearGatePassed
+     ? "Bearish"
+     : bearishConfirmMomentum and not bearGatePassed
+     ? "HTF blocked"
+     : bullishMomentum
+     ? "Bullish, adverse"
+     : bearWeakeningMomentum
+     ? "Weakening"
+     : bearImprovingMomentum
+     ? "Improving"
+     : "Neutral"
+
+color bearOverallMomentumColor =
+     recentBearWarningActive
+     ? color.rgb(210, 100, 40)
+     : extendedBearMomentum
+     ? color.rgb(230, 126, 34)
+     : strongBearishMomentum and bearGatePassed
+     ? color.rgb(160, 30, 30)
+     : bearishConfirmMomentum and bearGatePassed
+     ? color.rgb(185, 60, 50)
+     : bearishConfirmMomentum and not bearGatePassed
+     ? color.rgb(210, 100, 40)
+     : bullishMomentum
+     ? color.rgb(20, 145, 80)
+     : bearWeakeningMomentum
+     ? color.rgb(210, 90, 45)
+     : bearImprovingMomentum
+     ? color.rgb(40, 130, 165)
+     : color.rgb(100, 110, 125)
+
+//=============================================================================
+// DISPLAYED OVERALL STATE (DRIVES TREND LINE COLOR AND CANDLE TINT)
+//=============================================================================
+
+string displayOverallState =
+     tradeDirection == "Bullish"
+     ? overallMomentumState
+     : tradeDirection == "Bearish"
+     ? bearOverallMomentumState
+     : bearMomentumScore > momentumScore
+     ? bearOverallMomentumState
+     : overallMomentumState
+
+color displayOverallColor =
+     tradeDirection == "Bullish"
+     ? overallMomentumColor
+     : tradeDirection == "Bearish"
+     ? bearOverallMomentumColor
+     : bearMomentumScore > momentumScore
+     ? bearOverallMomentumColor
+     : overallMomentumColor
+
+//=============================================================================
+// PRICE REACTION LINE STORAGE — BULL SIDE
+//=============================================================================
+
+var line bullishTriggerLine = na
+var line bullishSupportLine = na
+var line momentumWarningLine = na
+
+var float bullishTriggerPrice = na
+var float bullishSupportPrice = na
+var float momentumWarningPrice = na
+
+var int bullishSignalBar = na
+var int warningSignalBar = na
+
+if confirmedBullishSignal
+
+    bullishTriggerPrice := high
+    bullishSupportPrice := low
+    bullishSignalBar := bar_index
+
+    if not na(bullishTriggerLine)
+        line.delete(bullishTriggerLine)
+
+    if not na(bullishSupportLine)
+        line.delete(bullishSupportLine)
+
+    bullishTriggerLine := na
+    bullishSupportLine := na
+
+    if showPriceReactionLines
+
+        bullishTriggerLine := line.new(
+             x1 = bar_index,
+             y1 = bullishTriggerPrice,
+             x2 = bar_index + reactionLineBars,
+             y2 = bullishTriggerPrice,
+             xloc = xloc.bar_index,
+             extend = extend.none,
+             color = color.new(color.lime, 5),
+             style = line.style_dotted,
+             width = reactionLineWidth,
+             force_overlay = true
+        )
+
+        bullishSupportLine := line.new(
+             x1 = bar_index,
+             y1 = bullishSupportPrice,
+             x2 = bar_index + reactionLineBars,
+             y2 = bullishSupportPrice,
+             xloc = xloc.bar_index,
+             extend = extend.none,
+             color = color.new(color.teal, 5),
+             style = line.style_dotted,
+             width = reactionLineWidth,
+             force_overlay = true
+        )
+
+if confirmedWarningSignal and bullSideEnabled
+
+    momentumWarningPrice := low
+    warningSignalBar := bar_index
+
+    if not na(momentumWarningLine)
+        line.delete(momentumWarningLine)
+
+    momentumWarningLine := na
+
+    if showPriceReactionLines and showMomentumWarningLine
+
+        momentumWarningLine := line.new(
+             x1 = bar_index,
+             y1 = momentumWarningPrice,
+             x2 = bar_index + reactionLineBars,
+             y2 = momentumWarningPrice,
+             xloc = xloc.bar_index,
+             extend = extend.none,
+             color = color.new(color.orange, 5),
+             style = line.style_dotted,
+             width = reactionLineWidth,
+             force_overlay = true
+        )
+
+//=============================================================================
+// PRICE REACTION LINE STORAGE — BEAR SIDE
+//=============================================================================
+
+var line bearTriggerLine = na
+var line bearResistanceLine = na
+var line bearWarningLine = na
+
+var float bearTriggerPrice = na
+var float bearResistancePrice = na
+var float bearWarningPrice = na
+
+var int bearSignalBar = na
+var int bearWarningSignalBar = na
+
+if confirmedBearishSignal
+
+    bearTriggerPrice := low
+    bearResistancePrice := high
+    bearSignalBar := bar_index
+
+    if not na(bearTriggerLine)
+        line.delete(bearTriggerLine)
+
+    if not na(bearResistanceLine)
+        line.delete(bearResistanceLine)
+
+    bearTriggerLine := na
+    bearResistanceLine := na
+
+    if showPriceReactionLines
+
+        bearTriggerLine := line.new(
+             x1 = bar_index,
+             y1 = bearTriggerPrice,
+             x2 = bar_index + reactionLineBars,
+             y2 = bearTriggerPrice,
+             xloc = xloc.bar_index,
+             extend = extend.none,
+             color = color.new(color.red, 5),
+             style = line.style_dotted,
+             width = reactionLineWidth,
+             force_overlay = true
+        )
+
+        bearResistanceLine := line.new(
+             x1 = bar_index,
+             y1 = bearResistancePrice,
+             x2 = bar_index + reactionLineBars,
+             y2 = bearResistancePrice,
+             xloc = xloc.bar_index,
+             extend = extend.none,
+             color = color.new(color.maroon, 5),
+             style = line.style_dotted,
+             width = reactionLineWidth,
+             force_overlay = true
+        )
+
+if confirmedBearWarningSignal and bearSideEnabled
+
+    bearWarningPrice := high
+    bearWarningSignalBar := bar_index
+
+    if not na(bearWarningLine)
+        line.delete(bearWarningLine)
+
+    bearWarningLine := na
+
+    if showPriceReactionLines and showMomentumWarningLine
+
+        bearWarningLine := line.new(
+             x1 = bar_index,
+             y1 = bearWarningPrice,
+             x2 = bar_index + reactionLineBars,
+             y2 = bearWarningPrice,
+             xloc = xloc.bar_index,
+             extend = extend.none,
+             color = color.new(color.yellow, 5),
+             style = line.style_dotted,
+             width = reactionLineWidth,
+             force_overlay = true
+        )
+
+//=============================================================================
+// EXPIRE STORED LEVELS
+//=============================================================================
+
+bool bullishLevelsExpired =
+     not na(bullishSignalBar) and
+     bar_index > bullishSignalBar + reactionLineBars
+
+if bullishLevelsExpired
+
+    if not na(bullishTriggerLine)
+        line.delete(bullishTriggerLine)
+
+    if not na(bullishSupportLine)
+        line.delete(bullishSupportLine)
+
+    bullishTriggerLine := na
+    bullishSupportLine := na
+
+    bullishTriggerPrice := na
+    bullishSupportPrice := na
+    bullishSignalBar := na
+
+bool warningLevelExpired =
+     not na(warningSignalBar) and
+     bar_index > warningSignalBar + reactionLineBars
+
+if warningLevelExpired
+
+    if not na(momentumWarningLine)
+        line.delete(momentumWarningLine)
+
+    momentumWarningLine := na
+    momentumWarningPrice := na
+    warningSignalBar := na
+
+bool bearLevelsExpired =
+     not na(bearSignalBar) and
+     bar_index > bearSignalBar + reactionLineBars
+
+if bearLevelsExpired
+
+    if not na(bearTriggerLine)
+        line.delete(bearTriggerLine)
+
+    if not na(bearResistanceLine)
+        line.delete(bearResistanceLine)
+
+    bearTriggerLine := na
+    bearResistanceLine := na
+
+    bearTriggerPrice := na
+    bearResistancePrice := na
+    bearSignalBar := na
+
+bool bearWarningLevelExpired =
+     not na(bearWarningSignalBar) and
+     bar_index > bearWarningSignalBar + reactionLineBars
+
+if bearWarningLevelExpired
+
+    if not na(bearWarningLine)
+        line.delete(bearWarningLine)
+
+    bearWarningLine := na
+    bearWarningPrice := na
+    bearWarningSignalBar := na
+
+//=============================================================================
+// AUTOMATIC PRICE TREND LINES (UNCHANGED FROM V1)
+//=============================================================================
+
+f_projectTrendPrice(int x1, float y1, int x2, float y2, int targetX) =>
+    float projectedPrice = na
+    if not na(x1) and not na(y1) and not na(x2) and not na(y2) and x2 != x1
+        projectedPrice := y1 + (y2 - y1) * (targetX - x1) / (x2 - x1)
+    projectedPrice
+
+float pricePivotLow = ta.pivotlow(low, trendPivotLeftBars, trendPivotRightBars)
+
+float pricePivotHigh = ta.pivothigh(high, trendPivotLeftBars, trendPivotRightBars)
+
+var float previousTrendLowPrice = na
+var int previousTrendLowBar = na
+var float previousTrendHighPrice = na
+var int previousTrendHighBar = na
+
+var line risingSupportTrendLine = na
+var line fallingResistanceTrendLine = na
+
+var int risingSupportX1 = na
+var float risingSupportY1 = na
+var int risingSupportX2 = na
+var float risingSupportY2 = na
+var bool risingSupportActive = false
+
+var int fallingResistanceX1 = na
+var float fallingResistanceY1 = na
+var int fallingResistanceX2 = na
+var float fallingResistanceY2 = na
+var bool fallingResistanceActive = false
+
+if not na(pricePivotLow)
+
+    int currentTrendLowBar = bar_index - trendPivotRightBars
+    float currentTrendLowPrice = pricePivotLow
+
+    bool validRisingSupport =
+         not na(previousTrendLowBar) and
+         not na(previousTrendLowPrice) and
+         currentTrendLowBar > previousTrendLowBar and
+         currentTrendLowPrice > previousTrendLowPrice
+
+    if validRisingSupport
+
+        risingSupportX1 := previousTrendLowBar
+        risingSupportY1 := previousTrendLowPrice
+        risingSupportX2 := currentTrendLowBar
+        risingSupportY2 := currentTrendLowPrice
+        risingSupportActive := true
+
+        if not na(risingSupportTrendLine)
+            line.delete(risingSupportTrendLine)
+
+        risingSupportTrendLine := na
+
+        if showAutomaticTrendLines
+            risingSupportTrendLine := line.new(
+                 x1 = risingSupportX1,
+                 y1 = risingSupportY1,
+                 x2 = risingSupportX2,
+                 y2 = risingSupportY2,
+                 xloc = xloc.bar_index,
+                 extend = extend.right,
+                 color = color.new(color.teal, trendLineTransparency),
+                 style = line.style_solid,
+                 width = trendLineWidth,
+                 force_overlay = true
+            )
+
+    previousTrendLowBar := currentTrendLowBar
+    previousTrendLowPrice := currentTrendLowPrice
+
+if not na(pricePivotHigh)
+
+    int currentTrendHighBar = bar_index - trendPivotRightBars
+    float currentTrendHighPrice = pricePivotHigh
+
+    bool validFallingResistance =
+         not na(previousTrendHighBar) and
+         not na(previousTrendHighPrice) and
+         currentTrendHighBar > previousTrendHighBar and
+         currentTrendHighPrice < previousTrendHighPrice
+
+    if validFallingResistance
+
+        fallingResistanceX1 := previousTrendHighBar
+        fallingResistanceY1 := previousTrendHighPrice
+        fallingResistanceX2 := currentTrendHighBar
+        fallingResistanceY2 := currentTrendHighPrice
+        fallingResistanceActive := true
+
+        if not na(fallingResistanceTrendLine)
+            line.delete(fallingResistanceTrendLine)
+
+        fallingResistanceTrendLine := na
+
+        if showAutomaticTrendLines
+            fallingResistanceTrendLine := line.new(
+                 x1 = fallingResistanceX1,
+                 y1 = fallingResistanceY1,
+                 x2 = fallingResistanceX2,
+                 y2 = fallingResistanceY2,
+                 xloc = xloc.bar_index,
+                 extend = extend.right,
+                 color = color.new(color.orange, trendLineTransparency),
+                 style = line.style_solid,
+                 width = trendLineWidth,
+                 force_overlay = true
+            )
+
+    previousTrendHighBar := currentTrendHighBar
+    previousTrendHighPrice := currentTrendHighPrice
+
+float risingSupportTrendPrice =
+     risingSupportActive
+     ? f_projectTrendPrice(risingSupportX1, risingSupportY1, risingSupportX2, risingSupportY2, bar_index)
+     : na
+
+float fallingResistanceTrendPrice =
+     fallingResistanceActive
+     ? f_projectTrendPrice(fallingResistanceX1, fallingResistanceY1, fallingResistanceX2, fallingResistanceY2, bar_index)
+     : na
+
+// Cross calls are computed unconditionally in global scope so their internal
+// history stays consistent on every bar (Pine v6 lazy boolean evaluation).
+bool closeCrossedUnderRisingSupport = ta.crossunder(close, risingSupportTrendPrice)
+
+bool closeCrossedOverFallingResistance = ta.crossover(close, fallingResistanceTrendPrice)
+
+bool risingSupportBreakdown =
+     risingSupportActive and
+     bar_index > risingSupportX2 and
+     not na(risingSupportTrendPrice) and
+     closeCrossedUnderRisingSupport and
+     signalBarAllowed
+
+bool fallingResistanceBreakout =
+     fallingResistanceActive and
+     bar_index > fallingResistanceX2 and
+     not na(fallingResistanceTrendPrice) and
+     closeCrossedOverFallingResistance and
+     signalBarAllowed
+
+if risingSupportBreakdown
+    if not na(risingSupportTrendLine)
+        line.delete(risingSupportTrendLine)
+    risingSupportTrendLine := na
+    risingSupportActive := false
+
+if fallingResistanceBreakout
+    if not na(fallingResistanceTrendLine)
+        line.delete(fallingResistanceTrendLine)
+    fallingResistanceTrendLine := na
+    fallingResistanceActive := false
+
+string trendStructureState = "No active trend line"
+color trendStructureColor = color.rgb(100, 110, 125)
+
+if risingSupportActive and fallingResistanceActive
+    trendStructureState := "Support and resistance"
+    trendStructureColor := color.rgb(65, 120, 155)
+else if risingSupportActive
+    trendStructureState := "Rising support"
+    trendStructureColor := color.rgb(20, 125, 125)
+else if fallingResistanceActive
+    trendStructureState := "Falling resistance"
+    trendStructureColor := color.rgb(210, 125, 30)
+
+//=============================================================================
+// PRICE CHART OVERLAY DRAWINGS
+//=============================================================================
+
+float priceTrendLine = ta.ema(close, priceTrendLength)
+
+float slowTrendLine = ta.ema(close, slowTrendLength)
+
+color priceTrendColor = color.new(displayOverallColor, priceTrendTransparency)
+
+plot(
+     showPriceTrendLine ? priceTrendLine : na,
+     title = "Momentum Trend Line",
+     color = priceTrendColor,
+     linewidth = 2,
+     force_overlay = true
+)
+
+plot(
+     showSlowTrendLine ? slowTrendLine : na,
+     title = "Slow Trend Reference",
+     color = color.new(color.gray, 55),
+     linewidth = 1,
+     force_overlay = true
+)
+
+plotshape(
+     showPriceSignalMarkers and confirmedBullishSignal ? low : na,
+     title = "Bullish Signal Marker",
+     style = shape.triangleup,
+     location = location.belowbar,
+     color = color.new(color.teal, 0),
+     size = size.tiny,
+     force_overlay = true
+)
+
+plotshape(
+     showPriceSignalMarkers and highConfidenceStarted ? low : na,
+     title = "High Confidence Bull Marker",
+     style = shape.diamond,
+     location = location.belowbar,
+     color = color.new(color.rgb(15, 145, 75), 0),
+     size = size.tiny,
+     force_overlay = true
+)
+
+plotshape(
+     showPriceSignalMarkers and bullSideEnabled and confirmedWarningSignal ? high : na,
+     title = "Bull Warning Marker",
+     style = shape.xcross,
+     location = location.abovebar,
+     color = color.new(color.orange, 0),
+     size = size.tiny,
+     force_overlay = true
+)
+
+plotshape(
+     showPriceSignalMarkers and confirmedBearishSignal ? high : na,
+     title = "Bearish Signal Marker",
+     style = shape.triangledown,
+     location = location.abovebar,
+     color = color.new(color.red, 0),
+     size = size.tiny,
+     force_overlay = true
+)
+
+plotshape(
+     showPriceSignalMarkers and highConfidenceBearStarted ? high : na,
+     title = "High Confidence Bear Marker",
+     style = shape.diamond,
+     location = location.abovebar,
+     color = color.new(color.rgb(160, 30, 30), 0),
+     size = size.tiny,
+     force_overlay = true
+)
+
+plotshape(
+     showPriceSignalMarkers and bearSideEnabled and confirmedBearWarningSignal ? low : na,
+     title = "Bear Warning Marker",
+     style = shape.xcross,
+     location = location.belowbar,
+     color = color.new(color.yellow, 0),
+     size = size.tiny,
+     force_overlay = true
+)
+
+plotcandle(
+     tintCandlesByMomentum ? open : na,
+     tintCandlesByMomentum ? high : na,
+     tintCandlesByMomentum ? low : na,
+     tintCandlesByMomentum ? close : na,
+     title = "Momentum Tinted Candles",
+     color = color.new(displayOverallColor, 30),
+     wickcolor = color.new(displayOverallColor, 30),
+     bordercolor = color.new(displayOverallColor, 10),
+     force_overlay = true
+)
+
+//=============================================================================
+// TABLE TEXT
+//=============================================================================
+
+string triggerPriceText = na(bullishTriggerPrice) ? "Waiting" : str.tostring(bullishTriggerPrice, format.mintick)
+
+string supportPriceText = na(bullishSupportPrice) ? "Waiting" : str.tostring(bullishSupportPrice, format.mintick)
+
+string warningPriceText = na(momentumWarningPrice) ? "None" : str.tostring(momentumWarningPrice, format.mintick)
+
+string bearTriggerPriceText = na(bearTriggerPrice) ? "Waiting" : str.tostring(bearTriggerPrice, format.mintick)
+
+string bearResistancePriceText = na(bearResistancePrice) ? "Waiting" : str.tostring(bearResistancePrice, format.mintick)
+
+string bearWarningPriceText = na(bearWarningPrice) ? "None" : str.tostring(bearWarningPrice, format.mintick)
+
+int bullSignalAge = na(bullishSignalBar) ? -1 : bar_index - bullishSignalBar
+
+int bearSignalAge = na(bearSignalBar) ? -1 : bar_index - bearSignalBar
+
+int maxSignalAge = math.max(bullSignalAge, bearSignalAge)
+
+string signalAgeText =
+     bullSignalAge >= 0 and bearSignalAge >= 0
+     ? "Bull " + str.tostring(bullSignalAge) + " | Bear " + str.tostring(bearSignalAge)
+     : bullSignalAge >= 0
+     ? "Bull " + str.tostring(bullSignalAge) + " bars"
+     : bearSignalAge >= 0
+     ? "Bear " + str.tostring(bearSignalAge) + " bars"
+     : "No active signal"
+
+color signalAgeColor =
+     maxSignalAge >= signalAgeWarningBars
+     ? color.rgb(210, 100, 40)
+     : color.rgb(100, 110, 125)
+
+string atrRowText =
+     na(dailyAtrPercent)
+     ? "Loading"
+     : str.tostring(dailyAtrPercent, "#.0") + "% (floor " + str.tostring(atrPercentFloor, "#.0") + ")"
+
+color atrRowColor =
+     na(dailyAtrPercent)
+     ? color.rgb(100, 110, 125)
+     : movementFloorPassed
+     ? color.rgb(20, 145, 80)
+     : color.rgb(190, 55, 55)
+
+//=============================================================================
+// STATUS TABLE
+//=============================================================================
+
+var table momentumTable = table.new(
+     position.top_right,
+     2,
+     16,
+     bgcolor = color.new(color.black, 8),
+     frame_color = color.new(color.gray, 60),
+     frame_width = 1,
+     border_color = color.new(color.gray, 78),
+     border_width = 1
+)
+
+f_tableRow(int rowIndex, string labelText, string valueText, color valueColor) =>
+    table.cell(
+         momentumTable,
+         0,
+         rowIndex,
+         labelText,
+         text_color = color.white,
+         text_size = size.tiny,
+         bgcolor = color.rgb(40, 45, 55)
+    )
+    table.cell(
+         momentumTable,
+         1,
+         rowIndex,
+         valueText,
+         text_color = color.white,
+         text_size = size.tiny,
+         bgcolor = valueColor
+    )
+
+if barstate.islast
+
+    table.clear(momentumTable, 0, 0, 1, 15)
+
+    if showStatusTable
+
+        int rowIndex = 0
+
+        if bullSideEnabled
+            f_tableRow(rowIndex, "BULL SCORE", str.tostring(momentumScore) + "/100", momentumScoreColor)
+            rowIndex += 1
+
+        if bearSideEnabled
+            f_tableRow(rowIndex, "BEAR SCORE", str.tostring(bearMomentumScore) + "/100", bearMomentumScoreColor)
+            rowIndex += 1
+
+        f_tableRow(rowIndex, "RSI", str.tostring(rsiValue, "#.0") + ", " + rsiState, rsiStateColor)
+        rowIndex += 1
+
+        f_tableRow(rowIndex, "MACD", macdState, macdStateColor)
+        rowIndex += 1
+
+        f_tableRow(rowIndex, "Higher TF", htfStateText, htfStateColor)
+        rowIndex += 1
+
+        f_tableRow(rowIndex, "Overall", displayOverallState, displayOverallColor)
+        rowIndex += 1
+
+        f_tableRow(rowIndex, "Structure", trendStructureState, trendStructureColor)
+        rowIndex += 1
+
+        if bullSideEnabled
+            f_tableRow(rowIndex, "Bull Trigger", triggerPriceText, color.rgb(45, 145, 70))
+            rowIndex += 1
+            f_tableRow(rowIndex, "Bull Support", supportPriceText, color.rgb(20, 125, 125))
+            rowIndex += 1
+            f_tableRow(rowIndex, "Bull Warning", warningPriceText, color.rgb(210, 125, 30))
+            rowIndex += 1
+
+        if bearSideEnabled
+            f_tableRow(rowIndex, "Bear Trigger", bearTriggerPriceText, color.rgb(170, 45, 45))
+            rowIndex += 1
+            f_tableRow(rowIndex, "Bear Resist", bearResistancePriceText, color.rgb(120, 35, 55))
+            rowIndex += 1
+            f_tableRow(rowIndex, "Bear Warning", bearWarningPriceText, color.rgb(180, 150, 30))
+            rowIndex += 1
+
+        f_tableRow(rowIndex, "Signal Age", signalAgeText, signalAgeColor)
+        rowIndex += 1
+
+        f_tableRow(rowIndex, "Daily ATR%", atrRowText, atrRowColor)
+
+//=============================================================================
+// DATA WINDOW VALUES
+//=============================================================================
+
+plot(momentumScore, title = "Bull Momentum Score", display = display.data_window)
+
+plot(bearMomentumScore, title = "Bear Momentum Score", display = display.data_window)
+
+plot(macdLine, title = "MACD Line", display = display.data_window)
+
+plot(macdSignal, title = "MACD Signal", display = display.data_window)
+
+plot(macdHistogram, title = "MACD Histogram", display = display.data_window)
+
+plot(htfRsi, title = "Higher Timeframe RSI", display = display.data_window)
+
+plot(htfMacd, title = "Higher Timeframe MACD", display = display.data_window)
+
+plot(htfSignal, title = "Higher Timeframe MACD Signal", display = display.data_window)
+
+plot(htfHistogram, title = "Higher Timeframe MACD Histogram", display = display.data_window)
+
+plot(dailyAtrPercent, title = "Daily ATR Percent", display = display.data_window)
+
+plot(risingSupportTrendPrice, title = "Rising Support Trend Price", display = display.data_window)
+
+plot(fallingResistanceTrendPrice, title = "Falling Resistance Trend Price", display = display.data_window)
+
+plot(priceTrendLine, title = "Momentum Trend Line Value", display = display.data_window)
+
+plot(slowTrendLine, title = "Slow Trend Reference Value", display = display.data_window)
+
+//=============================================================================
+// ACTIVE PRICE LEVEL CONDITIONS
+//=============================================================================
+
+bool bullishLevelsActive =
+     not na(bullishSignalBar) and
+     bar_index <= bullishSignalBar + reactionLineBars
+
+bool warningLevelActive =
+     not na(warningSignalBar) and
+     bar_index <= warningSignalBar + reactionLineBars
+
+bool bearLevelsActive =
+     not na(bearSignalBar) and
+     bar_index <= bearSignalBar + reactionLineBars
+
+bool bearWarningLevelActive =
+     not na(bearWarningSignalBar) and
+     bar_index <= bearWarningSignalBar + reactionLineBars
+
+// Cross calls are computed unconditionally in global scope so their internal
+// history stays consistent on every bar (Pine v6 lazy boolean evaluation).
+bool closeCrossedOverBullTrigger = ta.crossover(close, bullishTriggerPrice)
+
+bool closeCrossedUnderBullSupport = ta.crossunder(close, bullishSupportPrice)
+
+bool closeCrossedUnderBullWarning = ta.crossunder(close, momentumWarningPrice)
+
+bool closeCrossedUnderBearTrigger = ta.crossunder(close, bearTriggerPrice)
+
+bool closeCrossedOverBearResistance = ta.crossover(close, bearResistancePrice)
+
+bool closeCrossedOverBearWarning = ta.crossover(close, bearWarningPrice)
+
+bool triggerPriceBreak =
+     bullishLevelsActive and
+     not na(bullishTriggerPrice) and
+     closeCrossedOverBullTrigger
+
+bool supportPriceLoss =
+     bullishLevelsActive and
+     not na(bullishSupportPrice) and
+     closeCrossedUnderBullSupport
+
+bool warningPriceLoss =
+     warningLevelActive and
+     not na(momentumWarningPrice) and
+     closeCrossedUnderBullWarning
+
+bool bearTriggerPriceBreak =
+     bearLevelsActive and
+     not na(bearTriggerPrice) and
+     closeCrossedUnderBearTrigger
+
+bool bearResistancePriceLoss =
+     bearLevelsActive and
+     not na(bearResistancePrice) and
+     closeCrossedOverBearResistance
+
+bool bearWarningPriceLoss =
+     bearWarningLevelActive and
+     not na(bearWarningPrice) and
+     closeCrossedOverBearWarning
+
+//=============================================================================
+// COMPONENT ALERT CONDITIONS
+//=============================================================================
+
+bool rsiCrossAbove50 = ta.crossover(rsiValue, 50)
+
+bool rsiCrossAbove60 = ta.crossover(rsiValue, 60)
+
+bool rsiCrossBelow50 = ta.crossunder(rsiValue, 50)
+
+bool rsiCrossBelow40 = ta.crossunder(rsiValue, 40)
+
+bool macdBullishCross = ta.crossover(macdLine, macdSignal)
+
+bool macdBearishCross = ta.crossunder(macdLine, macdSignal)
+
+bool momentumLossCondition =
+     rsiValue < 50 and
+     macdBelowSignal and
+     histogramFalling
+
+bool momentumLossStarted =
+     momentumLossCondition and
+     not momentumLossCondition[1] and
+     signalBarAllowed
+
+bool bearMomentumLossCondition =
+     rsiValue > 50 and
+     macdAboveSignal and
+     histogramRising
+
+bool bearMomentumLossStarted =
+     bearMomentumLossCondition and
+     not bearMomentumLossCondition[1] and
+     signalBarAllowed
+
+//=============================================================================
+// ALERTS — BULL SIDE (TITLES UNCHANGED FROM V1)
+//=============================================================================
+
+alertcondition(
+     highConfidenceStarted,
+     title = "High Confidence Momentum Setup",
+     message = "{{ticker}} entered a high confidence bullish momentum state on {{interval}}."
+)
+
+alertcondition(
+     confirmedBullishSignal,
+     title = "Bullish Momentum Confirmed",
+     message = "{{ticker}} has bullish RSI and MACD confirmation with the selected higher timeframe filter on {{interval}}."
+)
+
+alertcondition(
+     momentumLossStarted,
+     title = "Bullish Momentum Weakening",
+     message = "{{ticker}} has lost bullish RSI and MACD momentum confirmation on {{interval}}."
+)
+
+alertcondition(
+     rsiCrossAbove50 and signalBarAllowed,
+     title = "RSI Crossed Above 50",
+     message = "{{ticker}} RSI crossed above 50 on {{interval}}."
+)
+
+alertcondition(
+     rsiCrossAbove60 and signalBarAllowed,
+     title = "RSI Crossed Above 60",
+     message = "{{ticker}} RSI crossed above 60 on {{interval}}."
+)
+
+alertcondition(
+     rsiCrossBelow50 and signalBarAllowed,
+     title = "RSI Crossed Below 50",
+     message = "{{ticker}} RSI crossed below 50 on {{interval}}."
+)
+
+alertcondition(
+     rsiCrossBelow40 and signalBarAllowed,
+     title = "RSI Crossed Below 40",
+     message = "{{ticker}} RSI crossed below 40 on {{interval}}."
+)
+
+alertcondition(
+     macdBullishCross and signalBarAllowed,
+     title = "MACD Bullish Cross",
+     message = "{{ticker}} MACD crossed above its signal line on {{interval}}."
+)
+
+alertcondition(
+     macdBearishCross and signalBarAllowed,
+     title = "MACD Bearish Cross",
+     message = "{{ticker}} MACD crossed below its signal line on {{interval}}."
+)
+
+alertcondition(
+     triggerPriceBreak and signalBarAllowed,
+     title = "Momentum Trigger Broken",
+     message = "{{ticker}} closed above its active bullish momentum trigger on {{interval}}."
+)
+
+alertcondition(
+     supportPriceLoss and signalBarAllowed,
+     title = "Momentum Support Lost",
+     message = "{{ticker}} closed below its active momentum support level on {{interval}}."
+)
+
+alertcondition(
+     warningPriceLoss and signalBarAllowed,
+     title = "Momentum Warning Level Lost",
+     message = "{{ticker}} closed below its active momentum warning level on {{interval}}."
+)
+
+alertcondition(
+     bullishDivergence and signalBarAllowed,
+     title = "Confirmed Bullish Divergence",
+     message = "{{ticker}} formed a confirmed bullish RSI divergence on {{interval}}."
+)
+
+alertcondition(
+     fallingResistanceBreakout,
+     title = "Falling Resistance Broken",
+     message = "{{ticker}} closed above its active falling resistance trend line on {{interval}}."
+)
+
+alertcondition(
+     risingSupportBreakdown,
+     title = "Rising Support Broken",
+     message = "{{ticker}} closed below its active rising support trend line on {{interval}}."
+)
+
+alertcondition(
+     bearishDivergence and signalBarAllowed,
+     title = "Confirmed Bearish Divergence",
+     message = "{{ticker}} formed a confirmed bearish RSI divergence on {{interval}}."
+)
+
+//=============================================================================
+// ALERTS — BEAR SIDE (NEW IN V2)
+//=============================================================================
+
+alertcondition(
+     highConfidenceBearStarted,
+     title = "High Confidence Bearish Momentum Setup",
+     message = "{{ticker}} entered a high confidence bearish momentum state on {{interval}}."
+)
+
+alertcondition(
+     confirmedBearishSignal,
+     title = "Bearish Momentum Confirmed",
+     message = "{{ticker}} has bearish RSI and MACD confirmation with the selected higher timeframe filter on {{interval}}."
+)
+
+alertcondition(
+     bearMomentumLossStarted,
+     title = "Bearish Momentum Weakening",
+     message = "{{ticker}} has lost bearish RSI and MACD momentum confirmation on {{interval}}."
+)
+
+alertcondition(
+     bearTriggerPriceBreak and signalBarAllowed,
+     title = "Bearish Trigger Broken",
+     message = "{{ticker}} closed below its active bearish momentum trigger on {{interval}}."
+)
+
+alertcondition(
+     bearResistancePriceLoss and signalBarAllowed,
+     title = "Bearish Resistance Lost",
+     message = "{{ticker}} closed above its active bearish resistance level on {{interval}}."
+)
+
+alertcondition(
+     bearWarningPriceLoss and signalBarAllowed,
+     title = "Bearish Warning Level Lost",
+     message = "{{ticker}} closed above its active bearish warning level on {{interval}}."
+)
