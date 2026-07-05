@@ -383,9 +383,18 @@ def _mark_weekly_radar_sent() -> None:
 
 
 def _weekly_radar_sent_today() -> bool:
-    """True when the weekly radar already delivered charts today (Sunday overlap)."""
+    """True when the weekly radar covers today's charts (Sunday overlap).
+
+    The state marker catches same-process or same-state overlaps, but on GitHub
+    Actions the radar job's state cache is saved only after its hold window
+    closes, which is later than the nightly prep job restores state. Sundays are
+    therefore skipped deterministically: the weekly radar owns Sunday charts.
+    """
+    now = datetime.now(NY)
+    if now.weekday() == 6:
+        return True
     state = NotificationState(LocalJsonStorage())
-    return state.last_event(WEEKLY_RADAR_SENT_EVENT) == datetime.now(NY).date().isoformat()
+    return state.last_event(WEEKLY_RADAR_SENT_EVENT) == now.date().isoformat()
 
 
 def _send_watchlist_charts(
