@@ -36,3 +36,14 @@
 - Added near-target backup wakeups and post-alert schedule holds to reduce missed alerts without duplicating texts.
 - Added target stock prices, research call strikes, 45-60 DTE planning, and 5-14 day swing windows to alerts and reports.
 - Added Alpaca 429/5xx retry throttling and made manual GitHub workflow runs bypass schedule gates.
+
+## 2.0.0 - 2026-07-05
+
+Aggressive contract profile v2 — approved by user; stock-selection gates intentionally unchanged.
+
+- Moved the contract layer to a 14-21 DTE window (hard bounds 10-25) and a 0.25-0.35 absolute delta band.
+- Added `delta_hard_floor: 0.20`; any contract below 0.20 absolute delta classifies as Poor liquidity.
+- Replaced ATM research strikes with OTM placement: calls at `trigger + 0.5 * (target - trigger)` rounded up, puts at `trigger - 0.5 * (trigger - target)` rounded down.
+- Shortened the intended hold window to 3-7 days.
+- Added a movement-capability filter (target gain >= 1.5x required move including a 1% premium cushion, daily ATR percent >= 2.0) that blocks S tier and A Plus with reason codes `insufficient_movement_capability` and `atr_percent_below_floor`; B tier and watch remain reachable.
+- Added a management footer to S tier and A Plus reports and Telegram messages.

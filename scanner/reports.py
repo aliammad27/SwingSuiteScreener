@@ -7,9 +7,21 @@ from typing import Any
 
 from scanner.clocks import format_et
 from scanner.config import ROOT
-from scanner.models import Candidate, ScanResult
+from scanner.models import Candidate, Grade, ScanResult
 
 FIXTURE_LABEL = "SIMULATED FIXTURE OUTPUT — NOT CURRENT MARKET DATA"
+
+MANAGEMENT_FOOTER = (
+    "Management: -50% premium hard stop | 2-3 day time stop | sell half at +100% | "
+    "exit or roll by 5 DTE | max 5% of account per trade | max 4 concurrent "
+    "positions, correlated sector names count as one"
+)
+
+STRIKE_VALIDATION_NOTE = (
+    "Strike note: research strike only — validate against a 0.25-0.35 absolute "
+    "delta band in the broker; the delta band is primary, the computed strike is "
+    "a sanity check."
+)
 
 
 def _candidate_block(candidate: Candidate, index: int, include_a_plus: bool = False) -> list[str]:
@@ -49,6 +61,7 @@ def _candidate_block(candidate: Candidate, index: int, include_a_plus: bool = Fa
         f"Entry status: {entry.status}",
         f"Option liquidity: {candidate.option_liquidity}",
         f"Research call strike: {entry.research_call_strike:.2f}",
+        STRIKE_VALIDATION_NOTE,
         f"Preferred DTE range: {entry.preferred_dte_minimum}-{entry.preferred_dte_maximum}",
         (
             "Intended hold window: "
@@ -65,6 +78,8 @@ def _candidate_block(candidate: Candidate, index: int, include_a_plus: bool = Fa
         "What invalidates it: support loss, stale data, hostile regime, event risk, or extension.",
         f"Reason it is S tier: {'all S tier requirements passed' if candidate.grade.value == 'S' else 'not S tier'}",
     ]
+    if candidate.grade in {Grade.S_TIER, Grade.A_PLUS}:
+        lines.append(MANAGEMENT_FOOTER)
     if include_a_plus:
         lines.extend(
             [

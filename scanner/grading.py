@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from scanner.catalyst_research import catalyst_allows_primary_grade
 from scanner.models import Candidate, Catalyst, CommandResult, EntryPlan, Grade, MomentumResult
+from scanner.movement_filter import movement_filter_reasons
 
 
 def automatic_rejections(
@@ -11,6 +12,7 @@ def automatic_rejections(
     option_liquidity: str,
     catalyst: Catalyst,
     market_regime: str,
+    entry_plan: EntryPlan | None = None,
 ) -> list[str]:
     reasons = list(command.rejection_reasons)
     if command.score < 60:
@@ -27,6 +29,15 @@ def automatic_rejections(
         reasons.append("daily_filter_blocked_four_hour_only")
     if daily_momentum.state == "Warning active":
         reasons.append("daily_momentum_warning")
+    if entry_plan is not None:
+        reasons.extend(
+            movement_filter_reasons(
+                command.close,
+                entry_plan.research_call_strike,
+                entry_plan.target_gain_percent,
+                command.atr_percent,
+            )
+        )
     return sorted(set(reasons))
 
 
@@ -44,8 +55,17 @@ def grade_candidate(
     entry_plan: EntryPlan,
     allow_technical_watch: bool = True,
 ) -> Candidate:
-    rejection_reasons = automatic_rejections(
+    base_rejection_reasons = automatic_rejections(
         command, daily_momentum, four_hour, option_liquidity, catalyst, market_regime
+    )
+    rejection_reasons = automatic_rejections(
+        command,
+        daily_momentum,
+        four_hour,
+        option_liquidity,
+        catalyst,
+        market_regime,
+        entry_plan=entry_plan,
     )
     s_requirements = [
         command.score >= 85,
@@ -105,7 +125,7 @@ def grade_candidate(
                 option_liquidity in {"Unknown", "Indicative"},
                 market_regime != "Hostile",
                 not catalyst.major_event_risk,
-                not rejection_reasons,
+                not base_rejection_reasons,
             ]
         ):
             grade = Grade.TECHNICAL_WATCH
@@ -122,7 +142,7 @@ def grade_candidate(
                 market_regime != "Hostile",
                 option_liquidity not in {"Poor"},
                 not catalyst.major_event_risk,
-                not rejection_reasons,
+                not base_rejection_reasons,
             ]
         ):
             grade = Grade.B_TIER

@@ -4,10 +4,10 @@ from math import ceil
 
 from scanner.models import CommandResult, EntryPlan, MomentumResult
 
-PREFERRED_DTE_MINIMUM = 45
-PREFERRED_DTE_MAXIMUM = 60
-INTENDED_HOLD_DAYS_MINIMUM = 5
-INTENDED_HOLD_DAYS_MAXIMUM = 14
+PREFERRED_DTE_MINIMUM = 14
+PREFERRED_DTE_MAXIMUM = 21
+INTENDED_HOLD_DAYS_MINIMUM = 3
+INTENDED_HOLD_DAYS_MAXIMUM = 7
 
 
 def _strike_increment(price: float) -> float:
@@ -22,9 +22,16 @@ def _strike_increment(price: float) -> float:
     return 10.0
 
 
-def research_call_strike(trigger: float) -> float:
-    increment = _strike_increment(trigger)
-    return round(ceil(trigger / increment) * increment, 2)
+def research_call_strike(trigger: float, target: float) -> float:
+    """Return an OTM research strike halfway between trigger and target, rounded UP.
+
+    Research strike only. It must be validated against a 0.25-0.35 absolute
+    delta band in the broker before entry; the delta band is primary and the
+    computed strike is a sanity check.
+    """
+    raw = trigger + 0.5 * (target - trigger)
+    increment = _strike_increment(raw)
+    return round(ceil(raw / increment) * increment, 2)
 
 
 def build_entry_plan(command: CommandResult, four_hour: MomentumResult) -> EntryPlan:
@@ -59,7 +66,7 @@ def build_entry_plan(command: CommandResult, four_hour: MomentumResult) -> Entry
         nearest_resistance=nearest_resistance,
         target_price=target_price,
         target_gain_percent=target_gain_percent,
-        research_call_strike=research_call_strike(trigger),
+        research_call_strike=research_call_strike(trigger, target_price),
         preferred_dte_minimum=PREFERRED_DTE_MINIMUM,
         preferred_dte_maximum=PREFERRED_DTE_MAXIMUM,
         intended_hold_days_minimum=INTENDED_HOLD_DAYS_MINIMUM,

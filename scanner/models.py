@@ -87,6 +87,7 @@ class CommandResult:
     ema21: float
     sma50: float
     sma200: float
+    atr_percent: float = 0.0
     rejection_reasons: list[str] = field(default_factory=list)
 
 
@@ -172,6 +173,7 @@ class PutCommandResult:
     ema21: float
     sma50: float
     sma200: float
+    atr_percent: float = 0.0
     rejection_reasons: list[str] = field(default_factory=list)
 
 

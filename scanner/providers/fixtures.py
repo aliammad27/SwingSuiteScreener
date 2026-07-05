@@ -58,12 +58,13 @@ class FixtureDataProvider(MarketDataProvider, OptionDataProvider, CatalystProvid
         # Put scenarios: bearish profiles.  Amplitude must be large enough for real RSI
         # oscillation (amp * 0.12 > |drift| ensures some up bars exist), but counts
         # are chosen so the LAST bars fall in the negative sin phase (keeping MACD bearish).
+        # Bases are low enough that ATR percent clears the 2.0 movement-filter floor.
         if symbol in {"SPUT", "APUT", "BPUT"}:
             if symbol == "APUT":
-                return 120, -0.055, 1.5
+                return 90, -0.055, 1.5
             if symbol == "BPUT":
                 return 80, -0.018, 0.6
-            return 150, -0.05, 2.0  # SPUT: moderate drift so RSI stays 30-40, not pinned at 0
+            return 115, -0.05, 2.0  # SPUT: moderate drift so RSI stays 30-40, not pinned at 0
         # SPY/QQQ in put scenarios: falling market for put-supportive regime
         if self.scenario in {"put_s_tier", "put_a_plus", "put_b_tier"}:
             if symbol in {"SPY", "QQQ"}:
@@ -131,18 +132,18 @@ class FixtureDataProvider(MarketDataProvider, OptionDataProvider, CatalystProvid
         if symbol == "ZERO":
             return [OptionQuote("FIXTURE", 21, 0.30, 1.0, 1.4, 50, 10, 85, FIXTURE_TIMESTAMP)]
         if symbol == "APLUS":
-            return [OptionQuote("FIXTURE", 52, 0.50, 2.00, 2.22, 650, 180, 58, FIXTURE_TIMESTAMP)]
+            return [OptionQuote("FIXTURE", 17, 0.30, 2.00, 2.22, 650, 180, 58, FIXTURE_TIMESTAMP)]
         if symbol == "BTIER":
-            return [OptionQuote("FIXTURE", 52, 0.50, 2.00, 2.22, 650, 180, 58, FIXTURE_TIMESTAMP)]
-        # Put fixture symbols: use absolute delta ~0.50 (call-side from free feed).
+            return [OptionQuote("FIXTURE", 17, 0.30, 2.00, 2.22, 650, 180, 58, FIXTURE_TIMESTAMP)]
+        # Put fixture symbols: use absolute delta ~0.30 (call-side from free feed).
         # SPUT uses tighter spread so classify_put_option_liquidity returns "Good" (S-tier requires it).
         if symbol == "SPUT":
-            return [OptionQuote("FIXTURE", 57, 0.50, 3.80, 4.18, 1200, 450, 38, FIXTURE_TIMESTAMP)]
+            return [OptionQuote("FIXTURE", 17, 0.30, 3.80, 4.18, 1200, 450, 38, FIXTURE_TIMESTAMP)]
         if symbol == "APUT":
-            return [OptionQuote("FIXTURE", 58, 0.50, 2.00, 2.22, 800, 220, 38, FIXTURE_TIMESTAMP)]
+            return [OptionQuote("FIXTURE", 18, 0.30, 2.00, 2.22, 800, 220, 38, FIXTURE_TIMESTAMP)]
         if symbol == "BPUT":
-            return [OptionQuote("FIXTURE", 58, 0.50, 2.00, 2.22, 650, 180, 38, FIXTURE_TIMESTAMP)]
-        return [OptionQuote("FIXTURE", 52, 0.55, 2.10, 2.26, 1200, 350, 42, FIXTURE_TIMESTAMP)]
+            return [OptionQuote("FIXTURE", 18, 0.30, 2.00, 2.22, 650, 180, 38, FIXTURE_TIMESTAMP)]
+        return [OptionQuote("FIXTURE", 17, 0.30, 2.10, 2.26, 1200, 350, 42, FIXTURE_TIMESTAMP)]
 
     def catalyst(self, symbol: str) -> Catalyst:
         now = FIXTURE_TIMESTAMP

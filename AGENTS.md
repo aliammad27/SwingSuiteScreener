@@ -1110,16 +1110,17 @@ Do not add trend line points to the main score unless the user explicitly approv
 
 A candidate cannot receive S tier or A plus when its options are not practically tradable.
 
-Create these initial defaults in `config/strategy.yaml`:
+Create these defaults in `config/strategy.yaml` (aggressive contract profile v2):
 
 ```yaml
-preferred_dte_target_minimum: 45
-preferred_dte_target_maximum: 60
-preferred_dte_hard_minimum: 30
-preferred_dte_maximum: 60
+preferred_dte_target_minimum: 14
+preferred_dte_target_maximum: 21
+preferred_dte_hard_minimum: 10
+preferred_dte_maximum: 25
 
-preferred_delta_minimum: 0.45
-preferred_delta_maximum: 0.65
+preferred_delta_minimum: 0.25
+preferred_delta_maximum: 0.35
+delta_hard_floor: 0.20
 
 maximum_bid_ask_spread_percent_of_mid: 10
 
@@ -1137,11 +1138,14 @@ Acceptable:
 One minor requirement misses by no more than 20 percent
 
 Poor:
-Spread, open interest, volume, or pricing quality is materially inadequate
+Spread, open interest, volume, or pricing quality is materially inadequate,
+or absolute delta is below the delta hard floor
 
 Unknown:
 Current option data is unavailable
 ```
+
+Any contract with absolute delta below `delta_hard_floor` (0.20) is classified Poor regardless of other checks. This applies to calls and puts.
 
 Poor or unknown liquidity cannot receive S tier.
 
@@ -1149,13 +1153,11 @@ Unknown liquidity should normally prevent A plus unless the candidate is labeled
 
 Do not recommend a specific contract unless the option data is current.
 
-The intended holding period is several days to roughly two weeks.
+The intended holding period is roughly three to seven days.
 
-Prefer expiration dates that provide at least two to three times the expected holding period.
+The normal target is approximately 14 to 21 days to expiration for a swing intended to last three to seven days.
 
-The normal target is approximately 45 to 60 days to expiration for a swing intended to last several days to roughly two weeks.
-
-Avoid very short dated weekly contracts for the normal strategy.
+The preferred contract sits in a 0.25 to 0.35 absolute delta band (calls and puts).
 
 Evaluate implied volatility before entry.
 
@@ -1325,10 +1327,56 @@ For every qualifying candidate calculate:
 8. ATR extension.
 9. Underlying reward to risk estimate.
 10. Entry status, valid now, approaching, or waiting.
+11. Research strike (OTM placement, aggressive contract profile v2).
 
 Invalidation must come from price structure.
 
 Do not manufacture false precision.
+
+### 17.1 Research Strike (Aggressive Contract Profile v2)
+
+Call research strike:
+
+```text
+research_call_strike = trigger + 0.5 * (target - trigger)
+rounded UP to the standard strike increment
+```
+
+Put research strike (mirrored):
+
+```text
+research_put_strike = trigger - 0.5 * (trigger - target)
+rounded DOWN to the standard strike increment
+```
+
+The intended hold window is 3 to 7 days with a preferred DTE window of 14 to 21 days.
+
+The computed strike is a research strike only. It must be validated against a 0.25 to 0.35 absolute delta band in the broker before entry. The delta band is primary; the computed strike is a sanity check.
+
+### 17.2 Movement Filter (Aggressive Contract Profile v2)
+
+Applied before grading, to calls and puts:
+
+```text
+required_move_percent = percent move from current close to the research strike
+                        plus an assumed premium cushion of 1.0 percent of the
+                        underlying price
+                        (calls: close up to strike; puts: close down to strike)
+
+Requirement A: target_gain_percent >= 1.5 * required_move_percent
+Requirement B: daily ATR percent >= 2.0
+```
+
+When either requirement fails, the candidate cannot be S tier or A Plus. It may still appear as B tier or watch.
+
+Rejection reason codes:
+
+```text
+insufficient_movement_capability
+atr_percent_below_floor
+```
+
+These codes flow through the rejection reasons list; the tier requirement lists themselves are unchanged.
 
 ## 18. Telegram Notification Configuration
 
@@ -1550,8 +1598,11 @@ Invalidation: {invalidation}
 Nearest Resistance: {nearest_resistance}
 Target Stock Price: {target_stock_price}
 Research Call Strike: {research_call_strike}
-DTE Window: 45-60
-Hold Window: 5-14 days
+DTE Window: 14-21
+Hold Window: 3-7 days
+Management: -50% premium hard stop | 2-3 day time stop | sell half at +100% |
+exit or roll by 5 DTE | max 5% of account per trade | max 4 concurrent
+positions, correlated sector names count as one
 
 Relative Strength: {relative_strength}
 Relative Volume: {relative_volume}
@@ -1582,9 +1633,14 @@ Invalidation: {invalidation}
 
 Missing Confirmation: {missing_confirmation}
 Reason It Is Not S Tier: {not_s_tier_reason}
+Management: -50% premium hard stop | 2-3 day time stop | sell half at +100% |
+exit or roll by 5 DTE | max 5% of account per trade | max 4 concurrent
+positions, correlated sector names count as one
 
 Report: {report_path}
 ```
+
+The research strike in notifications is a research value only. It must be validated against a 0.25-0.35 absolute delta band in the broker; the delta band is primary and the computed strike is a sanity check. The same DTE window, hold window, and management footer apply to the put-side S tier and A Plus formats.
 
 For invalidation:
 
@@ -1747,8 +1803,8 @@ Research call strike:
 Entry mode:
 Entry status:
 Option liquidity:
-Preferred DTE range: 45-60
-Intended hold window: 5-14 days
+Preferred DTE range: 14-21
+Intended hold window: 3-7 days
 Catalyst:
 Catalyst source:
 Earnings date:
@@ -2077,6 +2133,8 @@ Key finalized changes:
 10. Signal markers are off by default.
 11. The momentum status table is currently displayed in the top right corner, but location is cosmetic.
 12. Telegram remains the version one notification channel.
+
+Changelog note: aggressive contract profile v2 — approved by user; stock-selection gates intentionally unchanged. The options contract layer moved to a 14-21 DTE window, a 0.25-0.35 absolute delta band with a 0.20 delta hard floor, OTM research strike formulas on both sides, a 3-7 day hold window, and a movement-capability filter that blocks S tier and A Plus when the underlying cannot realistically reach the strike plus premium cushion.
 
 ## 34. Response Style
 

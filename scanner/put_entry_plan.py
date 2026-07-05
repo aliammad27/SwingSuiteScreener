@@ -4,10 +4,10 @@ from math import floor
 
 from scanner.models import MomentumResult, PutCommandResult, PutEntryPlan
 
-PREFERRED_DTE_MINIMUM = 45
-PREFERRED_DTE_MAXIMUM = 70
-INTENDED_HOLD_DAYS_MINIMUM = 5
-INTENDED_HOLD_DAYS_MAXIMUM = 14
+PREFERRED_DTE_MINIMUM = 14
+PREFERRED_DTE_MAXIMUM = 21
+INTENDED_HOLD_DAYS_MINIMUM = 3
+INTENDED_HOLD_DAYS_MAXIMUM = 7
 
 
 def _strike_increment(price: float) -> float:
@@ -22,10 +22,16 @@ def _strike_increment(price: float) -> float:
     return 10.0
 
 
-def research_put_strike(price: float) -> float:
-    """Return nearest standard strike at or above price (ATM-to-slightly-ITM put)."""
-    increment = _strike_increment(price)
-    return round(floor(price / increment) * increment + increment, 2)
+def research_put_strike(trigger: float, target: float) -> float:
+    """Return an OTM research strike halfway between trigger and target, rounded DOWN.
+
+    Research strike only. It must be validated against a 0.25-0.35 absolute
+    delta band in the broker before entry; the delta band is primary and the
+    computed strike is a sanity check.
+    """
+    raw = trigger - 0.5 * (trigger - target)
+    increment = _strike_increment(raw)
+    return round(floor(raw / increment) * increment, 2)
 
 
 def build_put_entry_plan(command: PutCommandResult, four_hour: MomentumResult) -> PutEntryPlan:
@@ -83,7 +89,7 @@ def build_put_entry_plan(command: PutCommandResult, four_hour: MomentumResult) -
         nearest_support=nearest_support,
         target_price=target_price,
         target_gain_percent=target_gain_percent,
-        research_put_strike=research_put_strike(command.close),
+        research_put_strike=research_put_strike(trigger, target_price),
         preferred_dte_minimum=PREFERRED_DTE_MINIMUM,
         preferred_dte_maximum=PREFERRED_DTE_MAXIMUM,
         intended_hold_days_minimum=INTENDED_HOLD_DAYS_MINIMUM,

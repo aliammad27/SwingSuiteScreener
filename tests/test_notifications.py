@@ -35,10 +35,12 @@ def test_candidate_and_completion_messages() -> None:
     assert "S TIER SETUP" in candidate_text
     assert "Tgt $" in candidate_text
     assert "Strike $" in candidate_text
-    assert "45-60DTE" in candidate_text
+    assert "14-21DTE" in candidate_text
+    assert "-50% premium hard stop" in candidate_text
+    assert "max 4 concurrent" in candidate_text
     # completion format
     assert "POST CLOSE SCAN COMPLETE" in completion_text
-    assert "45-60DTE" in completion_text
+    assert "14-21DTE" in completion_text
     assert "SSTR S | $" in completion_text
     assert "Tgt $" in completion_text
     assert "ET" in completion_text  # ET timestamp present
@@ -53,9 +55,9 @@ def test_technical_watch_messages_include_option_plan() -> None:
     assert "TECHNICAL WATCH" in candidate_text
     assert "Tgt $" in candidate_text
     assert "Strike $" in candidate_text
-    assert "45-60DTE" in candidate_text
+    assert "14-21DTE" in candidate_text
     assert "SSTR TW | $" in completion_text
-    assert "45-60DTE" in completion_text
+    assert "14-21DTE" in completion_text
 
 
 def test_post_close_zero_setup_notification() -> None:

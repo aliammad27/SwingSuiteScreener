@@ -159,3 +159,46 @@ def test_put_target_gain_positive() -> None:
     """Target gain percent must be positive (stock must fall for put to profit)."""
     candidate = _fixture_put_grade("SPUT", "put_s_tier")
     assert candidate.entry_plan.target_gain_percent > 0
+
+
+def _regrade_put(candidate, command=None):
+    return grade_put_candidate(
+        candidate.symbol,
+        candidate.company,
+        candidate.sector,
+        candidate.benchmark,
+        command if command is not None else candidate.command,
+        candidate.daily_momentum,
+        candidate.four_hour_momentum,
+        candidate.option_liquidity,
+        candidate.catalyst,
+        candidate.market_regime,
+        candidate.entry_plan,
+    )
+
+
+def test_put_movement_filter_blocks_s_tier_but_allows_b_tier() -> None:
+    candidate = _fixture_put_grade("SPUT", "put_s_tier")
+    assert candidate.grade == Grade.S_TIER
+    slow = dc_replace(candidate.command, atr_percent=1.5)
+    result = _regrade_put(candidate, command=slow)
+    assert result.grade not in {Grade.S_TIER, Grade.A_PLUS}
+    assert result.grade == Grade.B_TIER
+    assert "atr_percent_below_floor" in result.rejection_reasons
+
+
+def test_put_tier_threshold_lists_unchanged() -> None:
+    candidate = _fixture_put_grade("SPUT", "put_s_tier")
+    # S-Put requires command score >= 85
+    s_at = _regrade_put(candidate, command=dc_replace(candidate.command, score=85))
+    below_s = _regrade_put(candidate, command=dc_replace(candidate.command, score=84))
+    assert s_at.grade == Grade.S_TIER
+    assert below_s.grade != Grade.S_TIER
+    # A-Plus-Put requires command score >= 75
+    assert below_s.grade == Grade.A_PLUS
+    below_a = _regrade_put(candidate, command=dc_replace(candidate.command, score=74))
+    assert below_a.grade not in {Grade.S_TIER, Grade.A_PLUS}
+    # B-Put requires command score >= 65
+    assert below_a.grade == Grade.B_TIER
+    rejected = _regrade_put(candidate, command=dc_replace(candidate.command, score=64))
+    assert rejected.grade == Grade.REJECTED

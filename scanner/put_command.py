@@ -177,5 +177,6 @@ def calculate_put_command(
         ema21=ema21,
         sma50=sma50,
         sma200=sma200,
+        atr_percent=atr_percent,
         rejection_reasons=rejection_reasons,
     )

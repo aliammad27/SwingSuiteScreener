@@ -200,6 +200,13 @@ def _scores_line(candidate: Candidate) -> str:
     )
 
 
+MANAGEMENT_FOOTER = (
+    "Management: -50% premium hard stop | 2-3 day time stop | sell half at +100% | "
+    "exit or roll by 5 DTE | max 5% of account per trade | max 4 concurrent "
+    "positions, correlated sector names count as one"
+)
+
+
 def _option_line(candidate: Candidate) -> str:
     entry = candidate.entry_plan
     return (
@@ -218,7 +225,8 @@ def candidate_message(candidate: Candidate, report_path: Path) -> str:
             f"{_scores_line(candidate)}\n"
             f"{_option_line(candidate)}\n"
             f"Earnings: {candidate.catalyst.earnings_date or 'Unknown'} | "
-            f"Catalyst: {candidate.catalyst.summary[:60]}\n\n"
+            f"Catalyst: {candidate.catalyst.summary[:60]}\n"
+            f"{MANAGEMENT_FOOTER}\n\n"
             f"Report: {report_path}"
         )
     if grade == "A+":
@@ -227,7 +235,8 @@ def candidate_message(candidate: Candidate, report_path: Path) -> str:
             f"{_levels_line(candidate)}\n"
             f"{_scores_line(candidate)}\n"
             f"{_option_line(candidate)}\n"
-            f"Missing: {candidate.missing_confirmation or 'None'}\n\n"
+            f"Missing: {candidate.missing_confirmation or 'None'}\n"
+            f"{MANAGEMENT_FOOTER}\n\n"
             f"Report: {report_path}"
         )
     if grade == "B":
@@ -340,7 +349,8 @@ def put_candidate_message(candidate: PutCandidate, report_path: Path) -> str:
             f"{_put_scores_line(candidate)}\n"
             f"{_put_option_line(candidate)}\n"
             f"Earnings: {candidate.catalyst.earnings_date or 'Unknown'} | "
-            f"Catalyst: {candidate.catalyst.summary[:60]}\n\n"
+            f"Catalyst: {candidate.catalyst.summary[:60]}\n"
+            f"{MANAGEMENT_FOOTER}\n\n"
             f"Report: {report_path}"
         )
     if grade == "A+":
@@ -349,7 +359,8 @@ def put_candidate_message(candidate: PutCandidate, report_path: Path) -> str:
             f"{_put_levels_line(candidate)}\n"
             f"{_put_scores_line(candidate)}\n"
             f"{_put_option_line(candidate)}\n"
-            f"Missing: {candidate.missing_confirmation or 'None'}\n\n"
+            f"Missing: {candidate.missing_confirmation or 'None'}\n"
+            f"{MANAGEMENT_FOOTER}\n\n"
             f"Report: {report_path}"
         )
     if grade == "B":

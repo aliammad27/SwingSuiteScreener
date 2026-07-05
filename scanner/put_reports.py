@@ -7,9 +7,21 @@ from typing import Any
 
 from scanner.clocks import format_et
 from scanner.config import ROOT
-from scanner.models import PutCandidate, PutScanResult
+from scanner.models import Grade, PutCandidate, PutScanResult
 
 FIXTURE_LABEL = "SIMULATED FIXTURE OUTPUT — NOT CURRENT MARKET DATA"
+
+MANAGEMENT_FOOTER = (
+    "Management: -50% premium hard stop | 2-3 day time stop | sell half at +100% | "
+    "exit or roll by 5 DTE | max 5% of account per trade | max 4 concurrent "
+    "positions, correlated sector names count as one"
+)
+
+STRIKE_VALIDATION_NOTE = (
+    "Strike note: research strike only — validate against a 0.25-0.35 absolute "
+    "delta band in the broker; the delta band is primary, the computed strike is "
+    "a sanity check."
+)
 
 
 def _put_candidate_block(
@@ -50,6 +62,7 @@ def _put_candidate_block(
         f"Entry status: {entry.status}",
         f"Option liquidity: {candidate.option_liquidity}",
         f"Research put strike: {entry.research_put_strike:.2f}",
+        STRIKE_VALIDATION_NOTE,
         f"Preferred DTE range: {entry.preferred_dte_minimum}-{entry.preferred_dte_maximum}",
         (
             "Intended hold window: "
@@ -66,6 +79,8 @@ def _put_candidate_block(
         "What invalidates it: resistance reclaimed, stale data, supportive regime, event risk, or extension.",
         f"Reason it is S-Put tier: {'all S-Put tier requirements passed' if candidate.grade.value == 'S' else 'not S-Put tier'}",
     ]
+    if candidate.grade in {Grade.S_TIER, Grade.A_PLUS}:
+        lines.append(MANAGEMENT_FOOTER)
     if include_detail:
         lines.extend(
             [

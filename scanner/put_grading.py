@@ -9,6 +9,7 @@ from scanner.models import (
     PutCommandResult,
     PutEntryPlan,
 )
+from scanner.movement_filter import movement_filter_reasons
 
 
 def automatic_put_rejections(
@@ -18,6 +19,7 @@ def automatic_put_rejections(
     option_liquidity: str,
     catalyst: Catalyst,
     market_regime: str,
+    entry_plan: PutEntryPlan | None = None,
 ) -> list[str]:
     """Return reasons that automatically prevent a primary put grade.
 
@@ -40,6 +42,16 @@ def automatic_put_rejections(
         reasons.append("bearish_daily_filter_blocked")
     if daily_momentum.state == "Warning active":
         reasons.append("daily_momentum_warning")
+    if entry_plan is not None:
+        reasons.extend(
+            movement_filter_reasons(
+                command.close,
+                entry_plan.research_put_strike,
+                entry_plan.target_gain_percent,
+                command.atr_percent,
+                bearish=True,
+            )
+        )
     return sorted(set(reasons))
 
 
@@ -57,8 +69,17 @@ def grade_put_candidate(
     entry_plan: PutEntryPlan,
     allow_technical_watch: bool = True,
 ) -> PutCandidate:
-    rejection_reasons = automatic_put_rejections(
+    base_rejection_reasons = automatic_put_rejections(
         command, daily_momentum, four_hour, option_liquidity, catalyst, market_regime
+    )
+    rejection_reasons = automatic_put_rejections(
+        command,
+        daily_momentum,
+        four_hour,
+        option_liquidity,
+        catalyst,
+        market_regime,
+        entry_plan=entry_plan,
     )
 
     # S-Put tier: every condition must pass
@@ -120,7 +141,7 @@ def grade_put_candidate(
                 option_liquidity in {"Unknown", "Indicative"},
                 market_regime != "Supportive",
                 not catalyst.major_event_risk,
-                not rejection_reasons,
+                not base_rejection_reasons,
             ]
         ):
             grade = Grade.TECHNICAL_WATCH
@@ -137,7 +158,7 @@ def grade_put_candidate(
                 market_regime != "Supportive",
                 option_liquidity not in {"Poor"},
                 not catalyst.major_event_risk,
-                not rejection_reasons,
+                not base_rejection_reasons,
             ]
         ):
             grade = Grade.B_TIER
