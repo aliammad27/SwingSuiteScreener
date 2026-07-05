@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: swingsuite-post-close
@@ -45,13 +46,31 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
-      - name: Wait until 4:20 PM ET
+      - name: Skip backup wakeup if already delivered
         if: github.event_name == 'schedule'
+        id: dedupe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cutoff=$(date -u -d '6 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          count=$(gh run list --workflow "${{ github.workflow }}" --event schedule --status success --limit 10 \
+            --json createdAt --jq "[.[] | select(.createdAt >= \"$cutoff\")] | length" 2>/dev/null || echo 0)
+          if [ "${count:-0}" -gt 0 ]; then
+            echo "A scheduled run of this workflow already succeeded in the current window."
+            echo "Skipping duplicate backup wakeup cleanly (no stale alert, no red failure)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No prior success in the current window; proceeding to the schedule gate."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Wait until 4:20 PM ET
+        if: github.event_name == 'schedule' && steps.dedupe.outputs.skip != 'true'
         run: python -m scanner.schedule_gate --target 16:20 --max-late-minutes 90
       - name: Run post close scan
+        if: steps.dedupe.outputs.skip != 'true'
         run: python -m scanner.run_scan post_close
       - name: Hold schedule window
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'schedule' && steps.dedupe.outputs.skip != 'true'
         run: python -m scanner.schedule_gate --target 16:20 --max-late-minutes 90 --hold-window-open
       - name: Upload report artifact
         if: always()
