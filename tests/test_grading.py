@@ -151,35 +151,21 @@ def _regrade(candidate, command=None):
     )
 
 
-def test_movement_filter_blocks_s_tier_but_allows_b_tier() -> None:
+def test_low_atr_does_not_block_participation_profile() -> None:
     candidate = _s_tier_candidate()
     assert candidate.grade == Grade.S_TIER
-    # ATR percent below the 2.0 floor: cannot be S tier or A Plus
     slow = replace(candidate.command, atr_percent=1.5)
     result = _regrade(candidate, command=slow)
-    assert result.grade not in {Grade.S_TIER, Grade.A_PLUS}
-    assert result.grade == Grade.B_TIER
-    assert "atr_percent_below_floor" in result.rejection_reasons
+    assert result.grade == Grade.S_TIER
+    assert "atr_percent_below_floor" not in result.rejection_reasons
 
 
-def test_movement_filter_reason_codes_in_json_rejected_output() -> None:
-    from scanner.models import RejectedRecord, ScanType
-    from scanner.reports import result_to_json
-    from scanner.run_scan import run_scan
-
+def test_low_atr_is_not_added_as_a_rejection_reason() -> None:
     candidate = _s_tier_candidate()
-    # Fail movement (low ATR) and B tier scores so the candidate fully rejects
     weak = replace(candidate.command, score=62, atr_percent=1.0)
     result = _regrade(candidate, command=weak)
     assert result.grade == Grade.REJECTED
-    assert "atr_percent_below_floor" in result.rejection_reasons
-
-    scan = run_scan(ScanType.POST_CLOSE, fixture=True, scenario="zero")
-    record = RejectedRecord(result.symbol, "grading", result.rejection_reasons, {})
-    scan = replace(scan, rejected=[record])
-    data = result_to_json(scan)
-    codes = data["rejected"][0]["reason_codes"]
-    assert "atr_percent_below_floor" in codes
+    assert "atr_percent_below_floor" not in result.rejection_reasons
 
 
 def test_tier_threshold_lists_unchanged() -> None:

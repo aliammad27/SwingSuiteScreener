@@ -13,7 +13,8 @@ from urllib import parse, request
 
 from scanner.clocks import NY
 from scanner.config import ROOT, load_local_env
-from scanner.models import Candidate, PutCandidate, PutScanResult, ScanResult
+from scanner.models import Candidate, Grade, PutCandidate, PutScanResult, ScanResult
+from scanner.strategy_profile import PROFILE
 
 TELEGRAM_TEST_MESSAGE = (
     "ALI'S SCREENER BOT TEST\n\n"
@@ -164,7 +165,7 @@ def _dist_to_trigger(candidate: Candidate) -> str:
 def _compact_plan_line(candidate: Candidate) -> str:
     entry = candidate.entry_plan
     price = candidate.command.close
-    bucket = "TW" if candidate.grade.value == "Technical Watch" else candidate.grade.value
+    bucket = candidate.grade.label
     dist = _dist_to_trigger(candidate)
     dist_str = f" ({dist})" if dist else ""
     return (
@@ -185,7 +186,7 @@ def _levels_line(candidate: Candidate) -> str:
     return (
         f"${price:.2f} → ${entry.trigger:.2f}{dist_str} | "
         f"Sup ${entry.support:.2f} | "
-        f"Res ${entry.nearest_resistance:.2f} | "
+        f"Res ${entry.resistance_level:.2f} | "
         f"Tgt ${entry.target_price:.2f}"
     )
 
@@ -201,9 +202,8 @@ def _scores_line(candidate: Candidate) -> str:
 
 
 MANAGEMENT_FOOTER = (
-    "Management: -50% premium hard stop | 2-3 day time stop | sell half at +100% | "
-    "exit or roll by 5 DTE | max 5% of account per trade | max 4 concurrent "
-    "positions, correlated sector names count as one"
+    "Management: underlying invalidation | reassess after 5 sessions without progress | "
+    f"no earnings holds | exit or re-qualify by {PROFILE.exit_or_roll_dte} DTE | size for full premium risk"
 )
 
 
@@ -217,10 +217,9 @@ def _option_line(candidate: Candidate) -> str:
 
 
 def candidate_message(candidate: Candidate, report_path: Path) -> str:
-    grade = candidate.grade.value
-    if grade == "S":
+    if candidate.grade == Grade.S_TIER:
         return (
-            f"S TIER SETUP — {candidate.symbol}\n\n"
+            f"READY FOR REVIEW - {candidate.symbol}\n\n"
             f"{_levels_line(candidate)}\n"
             f"{_scores_line(candidate)}\n"
             f"{_option_line(candidate)}\n"
@@ -229,9 +228,9 @@ def candidate_message(candidate: Candidate, report_path: Path) -> str:
             f"{MANAGEMENT_FOOTER}\n\n"
             f"Report: {report_path}"
         )
-    if grade == "A+":
+    if candidate.grade == Grade.A_PLUS:
         return (
-            f"A PLUS SETUP — {candidate.symbol}\n\n"
+            f"READY - VERIFY - {candidate.symbol}\n\n"
             f"{_levels_line(candidate)}\n"
             f"{_scores_line(candidate)}\n"
             f"{_option_line(candidate)}\n"
@@ -239,9 +238,9 @@ def candidate_message(candidate: Candidate, report_path: Path) -> str:
             f"{MANAGEMENT_FOOTER}\n\n"
             f"Report: {report_path}"
         )
-    if grade == "B":
+    if candidate.grade == Grade.B_TIER:
         return (
-            f"B TIER SETUP — {candidate.symbol}\n\n"
+            f"DEVELOPING - {candidate.symbol}\n\n"
             f"{_levels_line(candidate)}\n"
             f"{_scores_line(candidate)}\n"
             f"{_option_line(candidate)}\n"
@@ -249,7 +248,7 @@ def candidate_message(candidate: Candidate, report_path: Path) -> str:
             f"Report: {report_path}"
         )
     return (
-        f"TECHNICAL WATCH — {candidate.symbol}\n\n"
+        f"VERIFY CONTRACT - {candidate.symbol}\n\n"
         f"{_levels_line(candidate)}\n"
         f"{_scores_line(candidate)}\n"
         f"{_option_line(candidate)}\n"
@@ -264,8 +263,8 @@ def completion_message(result: ScanResult, report_path: Path) -> str:
     all_setups = result.s_tier + result.a_plus + result.b_tier + result.technical_watch
     if all_setups:
         count_line = (
-            f"S: {len(result.s_tier)} | A+: {len(result.a_plus)} | "
-            f"B: {len(result.b_tier)} | TW: {len(result.technical_watch)}"
+            f"Ready: {len(result.s_tier)} | Ready-check: {len(result.a_plus)} | "
+            f"Developing: {len(result.b_tier)} | Verify: {len(result.technical_watch)}"
         )
         setup_lines = [_compact_plan_line(c) for c in all_setups]
         return (
@@ -278,7 +277,7 @@ def completion_message(result: ScanResult, report_path: Path) -> str:
     return (
         f"{title} SCAN COMPLETE\n"
         f"Market: {result.market_regime} | Scanned: {result.universe_count} | {now_et}\n\n"
-        "No setups qualified. Standards not lowered."
+        "No setups are ready for review. Wait for alignment."
     )
 
 

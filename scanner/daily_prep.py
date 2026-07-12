@@ -61,10 +61,10 @@ def ticker_watchlist_section(result: ScanResult, report_path: Path | None = None
         lines.extend([FIXTURE_LABEL, ""])
     lines.extend(
         [
-            f"S: {_item_symbols(items, 'S')}",
-            f"A+: {_item_symbols(items, 'A+')}",
-            f"B: {_item_symbols(items, 'B')}",
-            f"TW: {_item_symbols(items, 'TW')}",
+            f"Ready: {_item_symbols(items, 'Ready')}",
+            f"Ready - verify: {_item_symbols(items, 'Ready-Check')}",
+            f"Developing: {_item_symbols(items, 'Developing')}",
+            f"Verify contract: {_item_symbols(items, 'Verify')}",
             f"Watch: {_item_symbols(items, 'Watch')}",
         ]
     )
@@ -76,8 +76,8 @@ def ticker_watchlist_section(result: ScanResult, report_path: Path | None = None
         lines.extend(no_results)
     else:
         lines.extend(_top_lines(items))
-    if any(item.bucket == "TW" for item in items):
-        lines.extend(["", "TW = technical watch only; verify options."])
+    if any(item.bucket == "Verify" for item in items):
+        lines.extend(["", "Verify contract = confirm the live option chain before considering entry."])
     return "\n".join(lines)
 
 

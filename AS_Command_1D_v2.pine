@@ -1,4 +1,6 @@
 //@version=6
+// LEGACY NOTICE: chart-selection math remains useful, but v2 contract labels may not
+// match Bullish Participation v3. config/strategy.yaml is authoritative.
 indicator(
     title = "Ali Swing Suite: Command Center 1D v2 (Calls + Puts)",
     shorttitle = "AS Command v2",

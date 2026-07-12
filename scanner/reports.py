@@ -8,19 +8,20 @@ from typing import Any
 from scanner.clocks import format_et
 from scanner.config import ROOT
 from scanner.models import Candidate, Grade, ScanResult
+from scanner.strategy_profile import PROFILE
 
 FIXTURE_LABEL = "SIMULATED FIXTURE OUTPUT — NOT CURRENT MARKET DATA"
 
 MANAGEMENT_FOOTER = (
-    "Management: -50% premium hard stop | 2-3 day time stop | sell half at +100% | "
-    "exit or roll by 5 DTE | max 5% of account per trade | max 4 concurrent "
-    "positions, correlated sector names count as one"
+    "Management: use the underlying invalidation | reassess after 5 sessions without "
+    f"progress | never hold through earnings | exit or re-qualify by {PROFILE.exit_or_roll_dte} DTE | "
+    "size every position for the possibility of a full premium loss"
 )
 
 STRIKE_VALIDATION_NOTE = (
-    "Strike note: research strike only — validate against a 0.25-0.35 absolute "
-    "delta band in the broker; the delta band is primary, the computed strike is "
-    "a sanity check."
+    f"Strike note: research strike only - validate against a {PROFILE.preferred_delta_minimum:.2f}-"
+    f"{PROFILE.preferred_delta_maximum:.2f} delta band in the broker. Live delta, spread, "
+    "and liquidity determine the usable contract."
 )
 
 
@@ -32,7 +33,7 @@ def _candidate_block(candidate: Candidate, index: int, include_a_plus: bool = Fa
     lines = [
         f"{index}. {candidate.symbol}",
         "",
-        f"Grade: {candidate.grade.value}",
+        f"Setup state: {candidate.grade.label}",
         f"Status: {entry.status}",
         f"Company: {candidate.company}",
         f"Sector: {candidate.sector}",
@@ -54,8 +55,9 @@ def _candidate_block(candidate: Candidate, index: int, include_a_plus: bool = Fa
         f"Breakout trigger: {entry.trigger:.2f}",
         f"Pullback support: {entry.support:.2f}",
         f"Invalidation: {entry.invalidation:.2f}",
-        f"Nearest resistance: {entry.nearest_resistance:.2f}",
+        f"Nearest confirmed resistance: {entry.resistance_level:.2f}",
         f"Target stock price: {entry.target_price:.2f}",
+        f"Target basis: {entry.target_basis}",
         f"Target gain from current price: {entry.target_gain_percent:.2f}%",
         f"Entry mode: {entry.entry_mode}",
         f"Entry status: {entry.status}",
@@ -73,10 +75,10 @@ def _candidate_block(candidate: Candidate, index: int, include_a_plus: bool = Fa
         f"Earnings date: {candidate.catalyst.earnings_date or 'Unknown'}",
         f"Event risk: {'major unresolved risk' if candidate.catalyst.major_event_risk else 'none identified'}",
         f"Market regime: {candidate.market_regime}",
-        "Why it qualifies: deterministic Command, Momentum, liquidity, and risk gates passed.",
+        "Why it qualifies: trend, timing, liquidity, and event-risk gates passed.",
         "What must happen next: user reviews the report and authorizes any trade decision manually.",
         "What invalidates it: support loss, stale data, hostile regime, event risk, or extension.",
-        f"Reason it is S tier: {'all S tier requirements passed' if candidate.grade.value == 'S' else 'not S tier'}",
+        f"Readiness: {'ready for manual review' if candidate.grade == Grade.S_TIER else 'additional verification required'}",
     ]
     if candidate.grade in {Grade.S_TIER, Grade.A_PLUS}:
         lines.append(MANAGEMENT_FOOTER)
@@ -84,7 +86,7 @@ def _candidate_block(candidate: Candidate, index: int, include_a_plus: bool = Fa
         lines.extend(
             [
                 f"Missing confirmation: {candidate.missing_confirmation or 'None'}",
-                f"Reason it is not S tier: {candidate.not_s_tier_reason or 'N/A'}",
+                f"Readiness note: {candidate.not_s_tier_reason or 'N/A'}",
             ]
         )
     return lines
@@ -93,6 +95,7 @@ def _candidate_block(candidate: Candidate, index: int, include_a_plus: bool = Fa
 def result_to_json(result: ScanResult) -> dict[str, Any]:
     return {
         "scan_type": result.scan_type.value,
+        "strategy_profile": PROFILE.name,
         "generated_at": result.generated_at.isoformat(),
         "market_data_timestamp": result.market_data_timestamp.isoformat(),
         "market_regime": result.market_regime,
@@ -124,10 +127,10 @@ def write_reports(result: ScanResult) -> tuple[Path, Path]:
             f"Securities scanned: {result.universe_count}",
             f"Passed deterministic filters: {result.deterministic_pass_count}",
             f"Received catalyst review: {result.research_count}",
-            f"B tier developing: {len(result.b_tier)}",
-            f"Free technical watch: {len(result.technical_watch)}",
+            f"Developing: {len(result.b_tier)}",
+            f"Contracts requiring verification: {len(result.technical_watch)}",
             "",
-            "S TIER",
+            "READY",
             "",
         ]
     )
@@ -135,29 +138,28 @@ def write_reports(result: ScanResult) -> tuple[Path, Path]:
         for idx, candidate in enumerate(result.s_tier, 1):
             lines.extend(_candidate_block(candidate, idx))
             lines.append("")
-    lines.extend(["A PLUS TIER", ""])
+    lines.extend(["READY - VERIFY", ""])
     if result.a_plus:
         for idx, candidate in enumerate(result.a_plus, 1):
             lines.extend(_candidate_block(candidate, idx, include_a_plus=True))
             lines.append("")
-    lines.extend(["B TIER — DEVELOPING SETUPS", ""])
+    lines.extend(["DEVELOPING", ""])
     if result.b_tier:
         lines.extend(
             [
-                "These setups pass basic technical structure but do not yet meet A+ thresholds. "
-                "Monitor for score improvement before committing capital.",
+                "These trends are constructive but do not have a current, fully confirmed entry.",
                 "",
             ]
         )
         for idx, candidate in enumerate(result.b_tier, 1):
             lines.extend(_candidate_block(candidate, idx, include_a_plus=True))
             lines.append("")
-    lines.extend(["FREE TECHNICAL WATCH", ""])
+    lines.extend(["VERIFY CONTRACT", ""])
     if result.technical_watch:
         lines.extend(
             [
-                "These are not trade-ready options setups. They passed the technical gates, "
-                "but current tradable option liquidity is unavailable or only indicative.",
+                "The chart passed, but live option liquidity is unavailable or only indicative. "
+                "Verify the contract in the broker before making any decision.",
                 "",
             ]
         )
@@ -166,7 +168,7 @@ def write_reports(result: ScanResult) -> tuple[Path, Path]:
             lines.append("")
     if not result.s_tier and not result.a_plus and not result.b_tier and not result.technical_watch:
         lines.extend(
-            ["No S tier or A plus setups qualified today.", "", "Standards were not lowered.", ""]
+            ["No setups are ready for review today.", "", "Wait for alignment; do not force an entry.", ""]
         )
     lines.extend(
         [

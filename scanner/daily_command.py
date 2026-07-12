@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from scanner.indicators import anchored_vwap, atr, bollinger, ema, sma
 from scanner.models import Candle, CommandResult
-from scanner.structure import classify_structure, confirmed_pivot_lows, nearest_support_below
+from scanner.structure import (
+    classify_structure,
+    confirmed_pivot_highs,
+    confirmed_pivot_lows,
+    nearest_support_below,
+)
 
 
 def _relative_strength(stock_closes: list[float], benchmark_closes: list[float]) -> str:
@@ -79,6 +84,9 @@ def calculate_command(
     pivot_lows = confirmed_pivot_lows(lows, 5, 3)
     latest_pivot_low = pivot_lows[-1][1] if pivot_lows else min(lows[-20:])
     support = nearest_support_below(closes[-1], [ema21, sma50, vwap, latest_pivot_low])
+    pivot_highs = confirmed_pivot_highs(highs, 5, 3)
+    overhead_pivots = [value for _, value in pivot_highs if value > closes[-1]]
+    resistance_level = min(overhead_pivots) if overhead_pivots else breakout_level
     pullback_touched = daily[-1].low <= support + (0.30 * current_atr)
     pullback_held = closes[-1] > support and closes[-1] >= daily[-1].open
     pullback_setup = pullback_touched and pullback_held
@@ -140,6 +148,7 @@ def calculate_command(
         breakout_confirmed=breakout_confirmed,
         breakout_watch=breakout_watch,
         pullback_support=support,
+        resistance_level=resistance_level,
         pullback_setup=pullback_setup,
         extended=extended,
         close=closes[-1],

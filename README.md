@@ -1,17 +1,99 @@
 # SwingSuiteScreener
 
-SwingSuiteScreener is a deterministic bullish call swing-trading screener for liquid
-U.S. stocks with listed options. The daily Command Center selects candidates; the
-daily and four-hour Momentum Engine confirms thesis and timing.
+SwingSuiteScreener is a deterministic, bullish-only research screener for liquid
+U.S. stocks and call options. The active strategy is **Bullish Participation v3**:
+find leading stocks in healthy markets, wait for a controlled pullback or current
+breakout confirmation, and use options with enough time and delta to participate
+without requiring an immediate explosive move.
 
-This is research and decision-support software only. It has no account, position,
-order, paper-trading, or live-trading functionality.
+This project is decision support only. It does not connect to a brokerage account,
+size positions, place orders, or manage live trades.
 
-## Quick Start
+## Active Profile
+
+- Direction: bullish only
+- Preferred setup: controlled pullback in an established uptrend
+- Secondary setup: current confirmed breakout that is not extended
+- Preferred expiration: 30-60 DTE
+- Hard expiration bounds: 21-75 DTE
+- Preferred call delta: 0.45-0.65
+- Hard call-delta floor: 0.35
+- Planning window: 5-15 trading days
+- Re-qualification point: 21 DTE
+- Maximum spread: 8% of option mid
+- Minimum open interest: 500
+- Minimum daily contract volume: 100
+- Earnings-event trades: disabled
+
+The profile intentionally has no minimum ATR requirement. It seeks sustained
+participation, not only high-volatility names capable of reaching distant OTM
+strikes quickly.
+
+## Setup States
+
+- `Ready`: all technical, timing, market, event-risk, and option-quality gates pass.
+- `Ready - Verify`: the setup is close, with one minor confirmation requiring review.
+- `Developing`: the trend is constructive but the current entry is not ready.
+- `Verify Contract`: the chart passes, but live option quality is unavailable or indicative.
+- `Rejected`: one or more hard gates fail.
+
+The stored JSON grade codes remain `S`, `A+`, `B`, and `Technical Watch` for
+backward compatibility. Reports and notifications use the plain-language states.
+
+## Selection Logic
+
+The daily chart owns selection. Important inputs include:
+
+- price, EMA 21, SMA 50, and SMA 200 trend alignment
+- rising SMA 200
+- relative strength against QQQ
+- monthly anchored VWAP
+- weekly EMA 21 alignment
+- market structure and volume
+- pullback support or breakout confirmation
+- extension and market-regime gates
+
+The four-hour chart owns timing. It must agree with the daily trend and use only
+completed candles. Pullbacks receive a ranking advantage because they generally
+offer clearer invalidation and avoid paying for post-breakout volatility expansion.
+
+## Contract Research
+
+The screener produces a near-the-money research strike. It is only a starting
+point for opening the live chain. The usable contract must be verified against:
+
+- 30-60 DTE preference
+- 0.45-0.65 delta preference
+- bid/ask spread
+- open interest and daily volume
+- implied volatility
+- earnings and other event risk
+
+The former OTM midpoint-strike formula and movement-capability filter are inactive.
+
+## Target And Invalidation
+
+The report always shows the nearest confirmed daily pivot resistance. If that pivot
+offers sufficient room, it becomes the target. If it is too close, the report labels
+the target as a `2R planning objective` and explicitly requires review of the path
+through nearby resistance. A synthetic objective is never described as resistance.
+
+Management output is based on the underlying thesis:
+
+- exit when the underlying invalidation is confirmed
+- reassess after five sessions without meaningful progress
+- never hold through earnings
+- exit or fully re-qualify the idea by 21 DTE
+- size with the possibility of a full premium loss in mind
+
+The screener does not claim a win rate, average return, or expected value.
+
+## Commands
+
+Run deterministic fixture scans without credentials:
 
 ```bash
-python3 -m pip install -r requirements.txt
-python -m scanner.run_scan validate_configuration
+python -m scanner.run_scan validate_configuration --fixture
 python -m scanner.run_scan post_close --fixture
 python -m scanner.run_scan premarket --fixture
 python -m scanner.run_scan four_hour --fixture
@@ -19,30 +101,7 @@ python -m scanner.run_scan daily_prep --fixture
 python -m scanner.run_scan weekly_radar --fixture
 ```
 
-Fixture reports are always labeled:
-
-```text
-SIMULATED FIXTURE OUTPUT — NOT CURRENT MARKET DATA
-```
-
-## Required Commands
-
-```bash
-python -m scanner.run_scan validate_configuration
-python -m scanner.run_scan readiness_check
-python -m scanner.run_scan post_close --fixture
-python -m scanner.run_scan premarket --fixture
-python -m scanner.run_scan four_hour --fixture
-python -m scanner.run_scan daily_prep --fixture
-python -m scanner.run_scan weekly_radar --fixture
-python -m scanner.run_scan test_notification
-python -m scanner.notifications discover_chat_id
-pytest
-ruff check .
-mypy scanner
-```
-
-Additional deterministic fixture scenarios:
+Useful fixture scenarios:
 
 ```bash
 python -m scanner.run_scan post_close --fixture --scenario s_tier
@@ -51,219 +110,56 @@ python -m scanner.run_scan post_close --fixture --scenario technical_watch
 python -m scanner.run_scan post_close --fixture --scenario zero
 ```
 
-## Free-First Provider Mode
+Legacy put modules remain in the repository for compatibility and historical
+tests, but put commands are not exposed by the active CLI and `enable_put_scans`
+must remain `false` for this profile.
 
-The default setup is designed to stay free:
+## Live Data
 
-- Equities: Alpaca Basic / free IEX feed through `ALPACA_FEED=iex`
-- Options: Alpaca indicative options feed through `ALPACA_OPTION_FEED=indicative`
-- Notifications: Telegram Bot API
-- Storage: local JSON unless you later choose a free/paid external database
-
-Alpaca's Basic plan has important limits: IEX-only equity coverage, indicative
-options rather than OPRA, and latest-15-minute restrictions on historical data.
-Because of that, free mode is intentionally conservative:
-
-- True S tier still requires current good option liquidity.
-- True A Plus still requires good or acceptable option liquidity.
-- If a setup passes the technical gates but only indicative/unknown option data is
-  available, it is labeled `Technical Watch`, not trade-ready.
-
-This keeps the scanner useful without pretending free data is paid OPRA-quality.
-
-Source: https://docs.alpaca.markets/us/docs/about-market-data-api
-
-## Default Universe
-
-The live default universe is a broad seed list of 161 liquid, optionable U.S.-listed
-large-cap and mid-cap stocks across technology, financials, consumer, health care,
-industrials, and energy. The scanner still applies the full strategy gates before
-anything appears in `S`, `A+`, `TW`, or `Watch`.
-
-The nightly `Watch` bucket is not the whole universe. It includes only names that
-pass the strategy's daily watch-quality gates.
-
-Nightly and weekly Telegram messages include compact reason lines, TradingView
-chart links, target stock prices, research call strikes, 45-60 DTE windows, and
-daily chart image attachments for the top ranked names.
-
-## Providers
-
-Provider interfaces exist for:
-
-- equities market data
-- options data
-- catalysts
-- notifications
-- persistence
-
-The production `AlpacaDataProvider` uses Alpaca's market data HTTP API directly
-through environment credentials. Production code does not depend on Codex, MCP, or
-the Alpaca plugin.
-
-Free Alpaca plans can return `429 Too Many Requests` during broad scans. The
-provider throttles requests with `ALPACA_MIN_REQUEST_INTERVAL_SECONDS` and retries
-transient `429`/`5xx` responses with `ALPACA_MAX_RETRIES` before marking a symbol
-as unavailable.
-
-Required live market variables:
+Live scans use read-only Alpaca market-data endpoints. Configure these values in
+an untracked `.env` file:
 
 ```text
-ALPACA_API_KEY_ID
-ALPACA_API_SECRET_KEY
-ALPACA_DATA_BASE_URL
-ALPACA_FEED
-ALPACA_OPTION_FEED
+ALPACA_API_KEY_ID=
+ALPACA_API_SECRET_KEY=
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
 ```
 
-Alpaca feed limitation: the default `.env.example` uses `iex` for equities and
-`indicative` for options so the project can stay free. SIP equities and OPRA
-options require paid access.
+The free Alpaca option feed may be indicative. An indicative result becomes
+`Verify Contract`, never `Ready`. Contract selection must be confirmed in the
+broker using current option-chain data.
 
-## Telegram Setup
+## Automation
 
-Use the existing bot:
+GitHub Actions run the following Eastern Time research routines:
 
-- Bot display name: Ali's Screener Bot
-- Bot username: `AlisScreenerBot`
-- Bot link: https://t.me/AlisScreenerBot
+- Nightly preparation: 9:00 PM
+- Weekly radar: Sunday 8:00 PM
+- Premarket validation: 8:45 AM
+- Four-hour refresh: 1:35 PM
+- Post-close scan: 4:20 PM
 
-If a token has appeared in chat, documentation, issue text, or any shared location,
-treat it as compromised and regenerate it through BotFather.
+Reports are written to `reports/<scan_type>/latest.md` and `.json`. Runtime
+reports, charts, logs, environment files, and local state are ignored by Git.
 
-Setup:
-
-1. Open https://t.me/AlisScreenerBot.
-2. Press Start or send `hello`.
-3. Copy `.env.example` to `.env`.
-4. Put the regenerated token only in `.env` as `TELEGRAM_BOT_TOKEN`.
-5. Leave `TELEGRAM_CHAT_ID` blank.
-6. Run `python -m scanner.notifications discover_chat_id`.
-7. Set the detected chat id in `.env`.
-8. Run `python -m scanner.run_scan test_notification`.
-9. Run `python -m scanner.run_scan validate_configuration`.
-
-The token is never printed by discovery, tests, reports, or logs.
-
-The application loads the local `.env` file automatically for scanner and
-notification commands. You do not need to run `source .env`.
-
-## Nightly Prep Telegram
-
-`python -m scanner.run_scan daily_prep` sends one Telegram prep note for the
-next market session. It runs the same strict scanner, includes the S Tier, A Plus,
-and Technical Watch ticker lists, and explicitly says when no tickers qualified.
-The Telegram body is intentionally short:
-
-- next market session date
-- `S`, `A+`, `TW`, and `Watch` ticker buckets
-- `Watch` includes only strategy-qualified daily watch names, not the whole universe
-- top ranked ticker reasons and TradingView links
-- target stock price, research call strike, 45-60 DTE window, and 5-14 day swing window
-- daily chart image attachments for the top ranked names
-- a short note only when Technical Watch appears
-
-Use `python -m scanner.run_scan daily_prep --fixture` to print the message
-without sending Telegram.
-
-## Weekly Radar Telegram
-
-`python -m scanner.run_scan weekly_radar` sends a Sunday radar note using the same
-strict scanner, ranked reasons, TradingView links, and chart attachments. It is a
-weekly planning view, not a separate strategy.
-
-## Reports
-
-Markdown and JSON reports are written to:
-
-- `reports/post_close/latest.md` and `.json`
-- `reports/premarket/latest.md` and `.json`
-- `reports/four_hour/latest.md` and `.json`
-
-Only S tier and A Plus candidates appear in the primary report. Rejections and
-reason codes are retained in JSON.
-
-## Persistence
-
-Development and fixture runs use local JSON state in `data/state`. Production can
-select a PostgreSQL-compatible adapter suitable for Supabase through `DATABASE_URL`.
-The adapter surface is isolated behind `scanner.storage.base.Storage`.
-
-## Cloud Readiness
-
-The repository includes:
-
-- `Dockerfile`
-- `.dockerignore`
-- `render.yaml`
-- GitHub Actions schedules in `.github/workflows/`
-- scheduled shell scripts in `scripts/`
-
-Default free automation uses GitHub Actions:
-
-- Nightly prep: sends at 9:00 PM ET
-- Weekly radar: sends Sunday at 8:00 PM ET
-- Premarket validation: runs at 8:45 AM ET
-- Four-hour refresh: runs at 1:35 PM ET
-- Post-close scan: runs at 4:20 PM ET
-
-GitHub scheduled events are best-effort and can start late. To reduce late
-market texts, each workflow now wakes several hours early during daylight saving
-time, has a near-target backup wakeup, and uses `python -m scanner.schedule_gate`
-to wait inside the runner until the intended America/New_York time. After a
-successful alert, the workflow holds the concurrency window open until stale
-backup runs would be blocked. If GitHub wakes the job more than 20 minutes after
-the intended time, the gate fails the job instead of sending a stale scan. The
-app still validates market calendar rules internally.
-
-Manual workflow runs skip the schedule gate and start immediately.
-
-Render Cron Jobs can run the Docker commands in `render.yaml`. Google Cloud Run
-Jobs can build the same container and schedule equivalent commands with Cloud
-Scheduler. Do not create paid cloud resources without explicit approval.
-
-Estimated operating cost depends on provider plans, scan frequency, and selected
-cloud runtime. GitHub Actions is free for public repositories and includes a free
-minutes quota for private repositories. This scanner's scheduled Linux jobs are
-intended to stay inside that included quota.
-
-Required GitHub Actions secrets:
-
-```text
-ALPACA_API_KEY_ID
-ALPACA_API_SECRET_KEY
-TELEGRAM_BOT_TOKEN
-TELEGRAM_CHAT_ID
-```
-
-## Security
-
-`.env`, local state, logs, generated reports, raw data, and caches are ignored by
-Git. Never commit credentials or private market data.
-
-## Development Checks
+## Validation
 
 ```bash
-pytest
-ruff check .
-mypy scanner
-docker build -t swingsuite-screener .
+python -m pytest
+python -m ruff check scanner tests
+python -m mypy scanner
 ```
 
-## June 22, 2026 Readiness
+The test suite covers indicators, grading, contract classification, reports,
+notifications, fixtures, schedules, state, data quality, and the read-only
+provider boundary.
 
-June 19, 2026 is a U.S. market holiday. The next regular market open is Monday,
-June 22, 2026. Run this before then:
+## Important Limitations
 
-```bash
-python -m scanner.run_scan readiness_check
-python -m scanner.run_scan test_notification
-python -m scanner.run_scan post_close --fixture
-```
-
-Live scans require free Alpaca API keys in `.env`. Do not add paid plans unless
-you explicitly decide the OPRA/SIP upgrade is worth it.
-
-GitHub Actions scheduled runs require the same values as GitHub repository
-secrets. After secrets are set and workflows are pushed, the scanner runs while
-your laptop is off.
+- Technical scores are deterministic rankings, not probabilities.
+- A qualifying chart does not prove that an option is fairly priced.
+- Delta is not a guaranteed probability of profit.
+- Options can lose the full premium, including when the long-term market trend is up.
+- Historical upward drift does not guarantee appreciation during a specific option's life.
+- The user remains responsible for independent review and every trading decision.

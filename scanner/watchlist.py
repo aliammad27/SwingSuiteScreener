@@ -19,7 +19,7 @@ BLOCKING_DAILY_MOMENTUM_STATES = {
     "Weakening",
 }
 
-SETUP_BUCKETS = {"S", "A+", "B", "TW"}
+SETUP_BUCKETS = {"Ready", "Ready-Check", "Developing", "Verify"}
 
 
 @dataclass(frozen=True)
@@ -96,6 +96,7 @@ def watch_details(candidate: Candidate) -> dict[str, object]:
         "trigger": candidate.entry_plan.trigger,
         "support": candidate.entry_plan.support,
         "invalidation": candidate.entry_plan.invalidation,
+        "resistance_level": candidate.entry_plan.resistance_level,
         "target_price": candidate.entry_plan.target_price,
         "target_gain_percent": candidate.entry_plan.target_gain_percent,
         "research_call_strike": candidate.entry_plan.research_call_strike,
@@ -117,18 +118,20 @@ def rank_candidate(candidate: Candidate) -> int:
     daily = candidate.daily_momentum.score
     four_hour = candidate.four_hour_momentum.score
     rs_bonus = 10 if candidate.command.relative_strength == "Leading" else 5
-    bias_bonus = 5 if candidate.command.call_bias in {"Breakout confirmed", "Pullback setup"} else 0
+    bias_bonus = 12 if candidate.command.call_bias == "Pullback setup" else 4 if candidate.command.call_bias == "Breakout confirmed" else 0
     return command + daily + four_hour + rs_bonus + bias_bonus
 
 
 def _grade_bucket(candidate: Candidate) -> str:
-    if candidate.grade.value == "S":
-        return "S"
-    if candidate.grade.value == "A+":
-        return "A+"
-    if candidate.grade.value == "B":
-        return "B"
-    return "TW"
+    from scanner.models import Grade
+
+    if candidate.grade == Grade.S_TIER:
+        return "Ready"
+    if candidate.grade == Grade.A_PLUS:
+        return "Ready-Check"
+    if candidate.grade == Grade.B_TIER:
+        return "Developing"
+    return "Verify"
 
 
 def _missing_confirmation_reason(value: str | None) -> str:
@@ -144,16 +147,18 @@ def reason_for_candidate(candidate: Candidate) -> str:
     command = candidate.command
     daily = candidate.daily_momentum
     four_hour = candidate.four_hour_momentum
-    if candidate.grade.value == "S":
+    from scanner.models import Grade
+
+    if candidate.grade == Grade.S_TIER:
         return (
             f"C{command.score} D{daily.score} 4H{four_hour.score}, RS {command.relative_strength}"
         )
-    if candidate.grade.value == "A+":
+    if candidate.grade == Grade.A_PLUS:
         missing = _missing_confirmation_reason(candidate.missing_confirmation)
         return f"C{command.score} D{daily.score} 4H{four_hour.score}, {missing}"
-    if candidate.grade.value == "B":
+    if candidate.grade == Grade.B_TIER:
         return f"C{command.score} D{daily.score} 4H{four_hour.score}, developing"
-    if candidate.grade.value == "Technical Watch":
+    if candidate.grade == Grade.TECHNICAL_WATCH:
         return f"C{command.score} D{daily.score} 4H{four_hour.score}, options need broker check"
     return f"C{command.score}, {command.call_bias}, D{daily.score}, 4H{four_hour.score}"
 

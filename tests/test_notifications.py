@@ -32,16 +32,16 @@ def test_candidate_and_completion_messages() -> None:
     candidate_text = candidate_message(result.s_tier[0], md)
     completion_text = completion_message(result, md)
     # candidate format — compact and scannable
-    assert "S TIER SETUP" in candidate_text
+    assert "READY FOR REVIEW" in candidate_text
     assert "Tgt $" in candidate_text
     assert "Strike $" in candidate_text
-    assert "14-21DTE" in candidate_text
-    assert "-50% premium hard stop" in candidate_text
-    assert "max 4 concurrent" in candidate_text
+    assert "30-60DTE" in candidate_text
+    assert "underlying invalidation" in candidate_text
+    assert "full premium risk" in candidate_text
     # completion format
     assert "POST CLOSE SCAN COMPLETE" in completion_text
-    assert "14-21DTE" in completion_text
-    assert "SSTR S | $" in completion_text
+    assert "30-60DTE" in completion_text
+    assert "SSTR Ready | $" in completion_text
     assert "Tgt $" in completion_text
     assert "ET" in completion_text  # ET timestamp present
 
@@ -52,19 +52,19 @@ def test_technical_watch_messages_include_option_plan() -> None:
     candidate_text = candidate_message(result.technical_watch[0], md)
     completion_text = completion_message(result, md)
 
-    assert "TECHNICAL WATCH" in candidate_text
+    assert "VERIFY CONTRACT" in candidate_text
     assert "Tgt $" in candidate_text
     assert "Strike $" in candidate_text
-    assert "14-21DTE" in candidate_text
-    assert "SSTR TW | $" in completion_text
-    assert "14-21DTE" in completion_text
+    assert "30-60DTE" in candidate_text
+    assert "SSTR Verify Contract | $" in completion_text
+    assert "30-60DTE" in completion_text
 
 
 def test_post_close_zero_setup_notification() -> None:
     result = run_scan(ScanType.POST_CLOSE, fixture=True, scenario="zero")
     md, _ = write_reports(result)
     message = completion_message(result, md)
-    assert "No setups qualified. Standards not lowered." in message
+    assert "No setups are ready for review. Wait for alignment." in message
     assert "POST CLOSE SCAN COMPLETE" in message
     assert "ET" in message
 
@@ -76,13 +76,13 @@ def test_nightly_prep_message_for_monday_open() -> None:
 
     assert "NIGHTLY WATCHLIST" in message
     assert "Next: Monday, June 22, 2026" in message
-    assert "S: SSTR" in message
-    assert "A+: None" in message
-    assert "B: None" in message
-    assert "TW: None" in message
+    assert "Ready: SSTR" in message
+    assert "Ready - verify: None" in message
+    assert "Developing: None" in message
+    assert "Verify contract: None" in message
     assert "Watch: None" in message
     assert "Top setups:" in message
-    assert "SSTR S | " in message
+    assert "SSTR Ready | " in message
     assert "→ " in message
     assert "Sup " in message
     assert "https://www.tradingview.com/chart/?symbol=SSTR" in message
@@ -96,8 +96,8 @@ def test_nightly_prep_a_plus_reason_does_not_render_none() -> None:
     md, _ = write_reports(result)
     message = nightly_prep_message(result, md, datetime(2026, 6, 21, 21, 0, tzinfo=NY))
 
-    aplus_lines = [line for line in message.splitlines() if "APLUS A+" in line]
-    assert aplus_lines, "APLUS A+ line not found in message"
+    aplus_lines = [line for line in message.splitlines() if "APLUS Ready-Check" in line]
+    assert aplus_lines, "APLUS ready-check line not found in message"
     assert "minor gap" in aplus_lines[0]
     assert ", None" not in aplus_lines[0]
 
@@ -107,10 +107,10 @@ def test_nightly_prep_zero_candidate_message_keeps_standards() -> None:
     md, _ = write_reports(result)
     message = nightly_prep_message(result, md, datetime(2026, 6, 21, 21, 0, tzinfo=NY))
 
-    assert "S: None" in message
-    assert "A+: None" in message
-    assert "B: None" in message
-    assert "TW: None" in message
+    assert "Ready: None" in message
+    assert "Ready - verify: None" in message
+    assert "Developing: None" in message
+    assert "Verify contract: None" in message
     assert "Watch: None" in message
     assert "No qualified or watch tickers tonight." in message
     assert "Standards were not lowered." in message
@@ -152,8 +152,8 @@ def test_weekly_radar_uses_same_ranked_watchlist() -> None:
     message = weekly_radar_message(result, md, datetime(2026, 6, 21, 20, 0, tzinfo=NY))
 
     assert "WEEKLY RADAR" in message
-    assert "TW: SSTR" in message
-    assert "SSTR TW | " in message
+    assert "Verify contract: SSTR" in message
+    assert "SSTR Verify | " in message
     assert "https://www.tradingview.com/chart/?symbol=SSTR" in message
 
 
@@ -179,7 +179,7 @@ def test_setup_items_survive_watch_ranking_limit() -> None:
 
     items = ranked_nightly_items(result)
 
-    assert items[0].bucket == "TW"
+    assert items[0].bucket == "Verify"
     assert items[0].target_price is not None
     assert items[0].research_call_strike is not None
     assert len(items) == 8

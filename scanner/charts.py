@@ -128,7 +128,7 @@ def render_daily_chart(
         candidate.symbol,
         candles,
         (
-            f"{candidate.symbol} daily | {candidate.grade.value} | "
+            f"{candidate.symbol} daily | {candidate.grade.label} | "
             f"C{candidate.command.score} D{candidate.daily_momentum.score} "
             f"4H{candidate.four_hour_momentum.score}"
         ),

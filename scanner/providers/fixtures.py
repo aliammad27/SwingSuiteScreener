@@ -130,11 +130,11 @@ class FixtureDataProvider(MarketDataProvider, OptionDataProvider, CatalystProvid
         if self.scenario == "technical_watch":
             return []
         if symbol == "ZERO":
-            return [OptionQuote("FIXTURE", 21, 0.30, 1.0, 1.4, 50, 10, 85, FIXTURE_TIMESTAMP)]
+            return [OptionQuote("FIXTURE", 21, 0.35, 1.0, 1.4, 50, 10, 85, FIXTURE_TIMESTAMP)]
         if symbol == "APLUS":
-            return [OptionQuote("FIXTURE", 17, 0.30, 2.00, 2.22, 650, 180, 58, FIXTURE_TIMESTAMP)]
+            return [OptionQuote("FIXTURE", 45, 0.55, 3.00, 3.30, 650, 180, 58, FIXTURE_TIMESTAMP)]
         if symbol == "BTIER":
-            return [OptionQuote("FIXTURE", 17, 0.30, 2.00, 2.22, 650, 180, 58, FIXTURE_TIMESTAMP)]
+            return [OptionQuote("FIXTURE", 45, 0.55, 3.00, 3.30, 650, 180, 58, FIXTURE_TIMESTAMP)]
         # Put fixture symbols: use absolute delta ~0.30 (call-side from free feed).
         # SPUT uses tighter spread so classify_put_option_liquidity returns "Good" (S-tier requires it).
         if symbol == "SPUT":
@@ -143,7 +143,7 @@ class FixtureDataProvider(MarketDataProvider, OptionDataProvider, CatalystProvid
             return [OptionQuote("FIXTURE", 18, 0.30, 2.00, 2.22, 800, 220, 38, FIXTURE_TIMESTAMP)]
         if symbol == "BPUT":
             return [OptionQuote("FIXTURE", 18, 0.30, 2.00, 2.22, 650, 180, 38, FIXTURE_TIMESTAMP)]
-        return [OptionQuote("FIXTURE", 17, 0.30, 2.10, 2.26, 1200, 350, 42, FIXTURE_TIMESTAMP)]
+        return [OptionQuote("FIXTURE", 45, 0.55, 4.10, 4.38, 1200, 350, 42, FIXTURE_TIMESTAMP)]
 
     def catalyst(self, symbol: str) -> Catalyst:
         now = FIXTURE_TIMESTAMP

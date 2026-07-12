@@ -42,7 +42,6 @@ from scanner.put_command import calculate_put_command
 from scanner.put_entry_plan import build_put_entry_plan
 from scanner.put_grading import grade_put_candidate
 from scanner.put_momentum import calculate_put_momentum, strict_bearish_daily_filter
-from scanner.put_reports import write_put_reports
 from scanner.reports import write_reports
 from scanner.state import NotificationState, completion_snapshot, should_send_completion
 from scanner.storage.local_json import LocalJsonStorage
@@ -456,9 +455,6 @@ def main() -> int:
             "weekly_radar",
             "validate_configuration",
             "readiness_check",
-            "put_post_close",
-            "put_premarket",
-            "put_four_hour",
         ],
     )
     parser.add_argument("--fixture", action="store_true")
@@ -472,9 +468,6 @@ def main() -> int:
             "b_tier",
             "technical_watch",
             "zero",
-            "put_s_tier",
-            "put_a_plus",
-            "put_b_tier",
         ],
     )
     args = parser.parse_args()
@@ -555,15 +548,6 @@ def main() -> int:
             _send_watchlist_charts(result, market, notifier, fixture=args.fixture)
             _mark_weekly_radar_sent()
             print("Weekly radar Telegram notification delivered.")
-            return 0
-        if args.command in {"put_post_close", "put_premarket", "put_four_hour"}:
-            put_scan_type = ScanType(args.command)
-            put_result = run_put_scan(
-                put_scan_type, fixture=args.fixture, scenario=args.scenario
-            )
-            md_path, json_path = write_put_reports(put_result)
-            print(f"Markdown report: {md_path}")
-            print(f"JSON report: {json_path}")
             return 0
         scan_type = ScanType(args.command)
         result = run_scan(scan_type, fixture=args.fixture, scenario=args.scenario)

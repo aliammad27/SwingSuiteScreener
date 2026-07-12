@@ -90,6 +90,17 @@ def validate_configuration(fixture: bool = False) -> list[str]:
     warnings: list[str] = []
     for name in required:
         load_config(name)
+    strategy = load_config("strategy")
+    if strategy.get("direction") != "bullish_only":
+        raise ConfigurationError("Bullish Participation v3 requires direction: bullish_only.")
+    if int(strategy["preferred_dte_target_minimum"]) < int(
+        strategy["preferred_dte_hard_minimum"]
+    ):
+        raise ConfigurationError("Preferred DTE minimum cannot be below the hard DTE minimum.")
+    if float(strategy["preferred_delta_minimum"]) < float(strategy["delta_hard_floor"]):
+        raise ConfigurationError("Preferred delta minimum cannot be below the delta hard floor.")
+    if bool(strategy.get("enable_put_scans")):
+        raise ConfigurationError("Put scans must remain disabled for the bullish-only profile.")
     if not (ROOT / "CLAUDE.md").exists():
         raise ConfigurationError("Root CLAUDE.md is required.")
     if fixture:
