@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.0.0 - 2026-07-12
+
+Bullish Participation profile.
+
+- Changed the active screener to bullish-only operation and removed put commands from the CLI.
+- Moved call research to 30-60 DTE and 0.45-0.65 delta, with 21-75 DTE hard bounds.
+- Extended the planning window to 5-15 trading days and set re-qualification at 21 DTE.
+- Replaced the distant OTM strike formula with a near-the-money research strike.
+- Removed the minimum ATR and movement-capability gates that forced high-volatility names.
+- Added pullback-first ranking and required a current trigger for the highest readiness state.
+- Replaced user-facing tier language with Ready, Ready - Verify, Developing, and Verify Contract.
+- Replaced universal premium-return management rules with underlying invalidation and time-based reassessment.
+- Corrected synthetic target labeling: confirmed pivot resistance is used when available; otherwise the report says 2R planning objective.
+- Centralized active contract settings in a typed strategy profile.
+- Removed the duplicate 2,153-line specifications, obsolete aggressive prompt, and obsolete v2 training manual.
+- Added a new Bullish Participation v3 Word training manual.
+
 ## 1.0.0 - 2026-06-19
 
 - Built the version one deterministic Command Center and Momentum Engine.

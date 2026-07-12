@@ -1,4 +1,6 @@
 //@version=6
+// LEGACY NOTICE: timing remains a visual aid, but v2 contract labels may not match
+// Bullish Participation v3. config/strategy.yaml is authoritative.
 indicator(
      title = "Ali Swing Suite: Momentum Confirmation Overlay v2 (Bull + Bear)",
      shorttitle = "AS Momentum v2",

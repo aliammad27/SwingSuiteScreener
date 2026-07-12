@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from scanner.catalyst_research import catalyst_allows_primary_grade
 from scanner.models import Candidate, Catalyst, CommandResult, EntryPlan, Grade, MomentumResult
-from scanner.movement_filter import movement_filter_reasons
 
 
 def automatic_rejections(
@@ -29,15 +28,6 @@ def automatic_rejections(
         reasons.append("daily_filter_blocked_four_hour_only")
     if daily_momentum.state == "Warning active":
         reasons.append("daily_momentum_warning")
-    if entry_plan is not None:
-        reasons.extend(
-            movement_filter_reasons(
-                command.close,
-                entry_plan.research_call_strike,
-                entry_plan.target_gain_percent,
-                command.atr_percent,
-            )
-        )
     return sorted(set(reasons))
 
 
@@ -69,7 +59,7 @@ def grade_candidate(
     )
     s_requirements = [
         command.score >= 85,
-        command.call_bias in {"Bullish", "Pullback setup", "Breakout confirmed"},
+        command.call_bias in {"Pullback setup", "Breakout confirmed"},
         daily_momentum.score >= 80,
         daily_momentum.state in {"Bullish", "Strong bullish"},
         four_hour.score >= 85,
@@ -114,7 +104,7 @@ def grade_candidate(
         if all(a_requirements):
             grade = Grade.A_PLUS
             missing = "; ".join(missing_labels) if missing_labels else "None"
-            reason = "One or more S tier requirements did not pass."
+            reason = "Ready after the remaining confirmation is verified."
         elif allow_technical_watch and all(
             [
                 command.score >= 75,
@@ -130,7 +120,7 @@ def grade_candidate(
         ):
             grade = Grade.TECHNICAL_WATCH
             missing = "Current tradable option liquidity is unavailable on the free data plan"
-            reason = "Not S tier or A Plus because OPRA-quality option liquidity is unavailable."
+            reason = "Live option-chain quality must be verified in the broker."
         elif all(
             [
                 command.score >= 65,
@@ -146,8 +136,8 @@ def grade_candidate(
             ]
         ):
             grade = Grade.B_TIER
-            missing = "Developing setup — scores below A+ thresholds"
-            reason = "Developing setup: does not yet meet A+ command, momentum, or confirmation requirements."
+            missing = "Trend is developing; wait for a current pullback or breakout trigger"
+            reason = "Developing setup: confirmation is not ready."
         else:
             grade = Grade.REJECTED
             missing = None

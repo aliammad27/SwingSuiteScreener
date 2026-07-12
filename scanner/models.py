@@ -21,6 +21,16 @@ class Grade(StrEnum):
     TECHNICAL_WATCH = "Technical Watch"
     REJECTED = "Rejected"
 
+    @property
+    def label(self) -> str:
+        return {
+            Grade.S_TIER: "Ready",
+            Grade.A_PLUS: "Ready - Verify",
+            Grade.B_TIER: "Developing",
+            Grade.TECHNICAL_WATCH: "Verify Contract",
+            Grade.REJECTED: "Rejected",
+        }[self]
+
 
 @dataclass(frozen=True)
 class Candle:
@@ -81,6 +91,7 @@ class CommandResult:
     breakout_confirmed: bool
     breakout_watch: bool
     pullback_support: float
+    resistance_level: float
     pullback_setup: bool
     extended: bool
     close: float
@@ -116,8 +127,9 @@ class EntryPlan:
     trigger: float
     support: float
     invalidation: float
-    nearest_resistance: float
+    resistance_level: float
     target_price: float
+    target_basis: str
     target_gain_percent: float
     research_call_strike: float
     preferred_dte_minimum: int
