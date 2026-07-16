@@ -21,8 +21,6 @@ def test_parity_check_detects_drift(tmp_path) -> None:
         "AS_Weekly_Command_1D_v5.pine",
         "AS_Weekly_Timing_1H_v5.pine",
         "AS_Bullish_Pattern_Atlas_1D_v5.pine",
-        "AS_Weekly_Screener_v5.pine",
-        "AS_Weekly_Underlying_Research_v5.pine",
     ):
         source = ROOT / relative_path
         target = tmp_path / relative_path
@@ -38,17 +36,17 @@ def test_parity_check_detects_drift(tmp_path) -> None:
     assert any("PARITY_TREND_MINIMUM" in error for error in check_parity(tmp_path))
 
 
-def test_pine_suite_is_bullish_v5_and_non_repainting() -> None:
+def test_pine_indicator_suite_is_bullish_v5_and_non_repainting() -> None:
     paths = (
         "AS_Weekly_Command_1D_v5.pine",
         "AS_Weekly_Timing_1H_v5.pine",
         "AS_Bullish_Pattern_Atlas_1D_v5.pine",
-        "AS_Weekly_Screener_v5.pine",
-        "AS_Weekly_Underlying_Research_v5.pine",
     )
     files = {path: (ROOT / path).read_text(encoding="utf-8") for path in paths}
     suite = "\n".join(files.values())
     assert all(payload.startswith("//@version=6") for payload in files.values())
+    assert all("\nindicator(" in payload for payload in files.values())
+    assert "strategy(" not in suite
     assert not re.search(r"\bput\b", suite, re.IGNORECASE)
     assert not re.search(r"\bv[1-4]\b", suite, re.IGNORECASE)
     assert "lookahead = barmerge.lookahead_on" in suite
@@ -56,25 +54,19 @@ def test_pine_suite_is_bullish_v5_and_non_repainting() -> None:
     assert "barstate.isconfirmed" in suite
     assert "Ready - Verify" in files["AS_Weekly_Command_1D_v5.pine"]
     assert "Research default" in files["AS_Weekly_Command_1D_v5.pine"]
-    assert "NOT OPTION PERFORMANCE" in files["AS_Weekly_Underlying_Research_v5.pine"]
-    screener = files["AS_Weekly_Screener_v5.pine"]
-    assert screener.count("request.security(") <= 5
-    plot_titles = re.findall(r'plot\([^,\n]+,\s*"([^"]+)"', screener)
-    assert plot_titles[:10] == [
-        "State",
-        "Pattern Code",
-        "Trend",
-        "Setup",
-        "Timing",
-        "Market",
-        "Distance ATR",
-        "Daily Relative Volume",
-        "Extension ATR",
-        "Lane",
+    assert 'timeframe.period == "1D"' in files["AS_Weekly_Command_1D_v5.pine"]
+    assert 'timeframe.period == "60"' in files["AS_Weekly_Timing_1H_v5.pine"]
+    assert 'timeframe.period == "1D"' in files["AS_Bullish_Pattern_Atlas_1D_v5.pine"]
+    assert 'timeframe.period == "D"' not in suite
+    assert "[close, ta.sma(close, 50), ta.sma(close, 200)]" in files[
+        "AS_Weekly_Command_1D_v5.pine"
     ]
-    assert screener.count("display.pine_screener") == 10
-    assert "input.symbol(" not in screener
-    assert "overlay = true" in screener
+    assert "[close, ta.ema(close, 9), ta.ema(close, 21)]" in files[
+        "AS_Weekly_Timing_1H_v5.pine"
+    ]
+    assert "and intradayMarketAligned and timingScore" in files[
+        "AS_Weekly_Timing_1H_v5.pine"
+    ]
     for pattern in (
         "controlled_pullback",
         "confirmed_breakout",
@@ -90,15 +82,15 @@ def test_pine_suite_is_bullish_v5_and_non_repainting() -> None:
         "rounding_base",
     ):
         assert pattern in files["AS_Bullish_Pattern_Atlas_1D_v5.pine"]
+    assert not (ROOT / "AS_Weekly_Screener_v5.pine").exists()
+    assert not (ROOT / "AS_Weekly_Underlying_Research_v5.pine").exists()
 
 
-def test_pine_suite_has_no_custom_chart_labels_or_tables() -> None:
+def test_pine_indicator_suite_has_no_custom_chart_labels_tables_or_warnings() -> None:
     paths = (
         "AS_Weekly_Command_1D_v5.pine",
         "AS_Weekly_Timing_1H_v5.pine",
         "AS_Bullish_Pattern_Atlas_1D_v5.pine",
-        "AS_Weekly_Screener_v5.pine",
-        "AS_Weekly_Underlying_Research_v5.pine",
     )
     forbidden = ("plotshape(", "plotchar(", "label.", "table.")
     for relative_path in paths:
@@ -117,22 +109,22 @@ def test_pine_suite_has_no_custom_chart_labels_or_tables() -> None:
     atlas = (ROOT / "AS_Bullish_Pattern_Atlas_1D_v5.pine").read_text(
         encoding="utf-8"
     )
-    tester = (ROOT / "AS_Weekly_Underlying_Research_v5.pine").read_text(
-        encoding="utf-8"
-    )
     assert "showPlanningLevels = input.bool(false" in command
     assert "Show current tactical levels" in timing
+    assert "float priorLowestLowRaw = ta.lowest(low[1], 4)" in timing
+    assert "float tacticalFailure = priorLowestLow" in timing
     assert 'includeContextPatterns = input.bool(false' in atlas
-    assert "Show current structural invalidation" in tester
-    for line in atlas.splitlines():
-        if "ta." in line:
-            assert "?" not in line, (
-                "Pattern Atlas history functions must be calculated before "
-                "completed-bar selection"
-            )
-            assert not line.lstrip().startswith(("if ", "else if ", "bool ")), (
-                "Pattern Atlas history functions must run unconditionally"
-            )
+    for relative_path in paths:
+        payload = (ROOT / relative_path).read_text(encoding="utf-8")
+        for line in payload.splitlines():
+            if "ta." in line:
+                assert "?" not in line, (
+                    f"{relative_path} history functions must be calculated before "
+                    "completed-bar selection"
+                )
+                assert not line.lstrip().startswith(("if ", "else if ", "bool ")), (
+                    f"{relative_path} history functions must run unconditionally"
+                )
 
 
 def test_production_command_excludes_context_only_patterns() -> None:

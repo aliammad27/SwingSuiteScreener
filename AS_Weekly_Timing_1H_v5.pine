@@ -47,16 +47,22 @@ float ema21Raw = ta.ema(close, 21)
 float vwapRaw = ta.vwap(hlc3)
 float rsiRaw = ta.rsi(close, rsiLength)
 [_, _, macdHistogramRaw] = ta.macd(close, 12, 26, 9)
-float relativeVolumeRaw = volume / math.max(ta.sma(volume, relativeVolumeLength), 1)
+float relativeVolumeAverageRaw = ta.sma(volume, relativeVolumeLength)
+float relativeVolumeRaw = volume / math.max(relativeVolumeAverageRaw, 1)
+float priorLowestLowRaw = ta.lowest(low[1], 4)
 float sourceClose = completedBar ? close : close[1]
+float sourcePriorClose = completedBar ? close[1] : close[2]
 float sourceLow = completedBar ? low : low[1]
+int sourceCloseTime = completedBar ? time_close : time_close[1]
 float ema9 = completedBar ? ema9Raw : ema9Raw[1]
+float priorEma9 = completedBar ? ema9Raw[1] : ema9Raw[2]
 float ema21 = completedBar ? ema21Raw : ema21Raw[1]
 float sessionVwap = completedBar ? vwapRaw : vwapRaw[1]
 float rsiValue = completedBar ? rsiRaw : rsiRaw[1]
 float macdHistogram = completedBar ? macdHistogramRaw : macdHistogramRaw[1]
 float priorMacdHistogram = completedBar ? macdHistogramRaw[1] : macdHistogramRaw[2]
 float relativeVolume = completedBar ? relativeVolumeRaw : relativeVolumeRaw[1]
+float priorLowestLow = completedBar ? priorLowestLowRaw : priorLowestLowRaw[1]
 
 [dailyClose, dailyEma21, dailySma50, dailySma200] = request.security(
     syminfo.tickerid,
@@ -64,24 +70,30 @@ float relativeVolume = completedBar ? relativeVolumeRaw : relativeVolumeRaw[1]
     [close[1], ta.ema(close, 21)[1], ta.sma(close, 50)[1], ta.sma(close, 200)[1]],
     lookahead = barmerge.lookahead_on
 )
-[spyClose, spyEma9, spyEma21] = request.security(
+[spyCloseRaw, spyEma9Raw, spyEma21Raw] = request.security(
     "AMEX:SPY",
     "60",
-    [close[1], ta.ema(close, 9)[1], ta.ema(close, 21)[1]],
-    lookahead = barmerge.lookahead_on
+    [close, ta.ema(close, 9), ta.ema(close, 21)],
+    lookahead = barmerge.lookahead_off
 )
-[qqqClose, qqqEma9, qqqEma21] = request.security(
+[qqqCloseRaw, qqqEma9Raw, qqqEma21Raw] = request.security(
     "NASDAQ:QQQ",
     "60",
-    [close[1], ta.ema(close, 9)[1], ta.ema(close, 21)[1]],
-    lookahead = barmerge.lookahead_on
+    [close, ta.ema(close, 9), ta.ema(close, 21)],
+    lookahead = barmerge.lookahead_off
 )
+float spyClose = completedBar ? spyCloseRaw : spyCloseRaw[1]
+float spyEma9 = completedBar ? spyEma9Raw : spyEma9Raw[1]
+float spyEma21 = completedBar ? spyEma21Raw : spyEma21Raw[1]
+float qqqClose = completedBar ? qqqCloseRaw : qqqCloseRaw[1]
+float qqqEma9 = completedBar ? qqqEma9Raw : qqqEma9Raw[1]
+float qqqEma21 = completedBar ? qqqEma21Raw : qqqEma21Raw[1]
 
 bool dailyAligned = dailyClose > dailyEma21 and dailyEma21 > dailySma50 and dailyClose > dailySma200
 bool indexCore = syminfo.ticker == "SPY" or syminfo.ticker == "QQQ"
 bool intradayMarketAligned = indexCore or (spyClose > spyEma9 and spyEma9 > spyEma21) or (qqqClose > qqqEma9 and qqqEma9 > qqqEma21)
-bool higherLow = sourceLow > ta.lowest(low[1], 4)
-bool reclaim = sourceClose > ema9 and close[1] <= ema9[1]
+bool higherLow = sourceLow > priorLowestLow
+bool reclaim = sourceClose > ema9 and sourcePriorClose <= priorEma9
 bool aboveTrend = sourceClose > ema9 and ema9 > ema21
 bool aboveVwap = sourceClose > sessionVwap
 bool rsiPass = rsiValue >= 52 and rsiValue <= 72
@@ -98,19 +110,19 @@ timingScore += higherLow ? 10 : 0
 timingScore += reclaim ? 5 : 0
 timingScore += intradayMarketAligned ? 10 : 0
 
-int closeHourEt = hour(time_close, "America/New_York")
-int closeMinuteEt = minute(time_close, "America/New_York")
+int closeHourEt = hour(sourceCloseTime, "America/New_York")
+int closeMinuteEt = minute(sourceCloseTime, "America/New_York")
 int closeMinuteOfDay = closeHourEt * 60 + closeMinuteEt
 bool entryWindow = closeMinuteOfDay >= 10 * 60 + 30 and closeMinuteOfDay <= 14 * 60 + 45
 bool finalHourManagementOnly = closeMinuteOfDay > 14 * 60 + 45
 bool enoughHistory = bar_index + 1 >= PARITY_MINIMUM_COMPLETED_BARS
 bool recommendedTimeframe = timeframe.period == "60"
-bool timingReady = completedBar and enoughHistory and recommendedTimeframe and entryWindow and dailyAligned and timingScore >= PARITY_TIMING_MINIMUM
+bool timingReady = completedBar and enoughHistory and recommendedTimeframe and entryWindow and dailyAligned and intradayMarketAligned and timingScore >= PARITY_TIMING_MINIMUM
 bool developing = entryWindow and dailyAligned and timingScore >= 60
 int timingStateCode = timingReady ? 3 : finalHourManagementOnly ? 2 : developing ? 1 : 0
 
 float tacticalWarning = math.min(ema21, sessionVwap)
-float tacticalFailure = ta.lowest(low, 4)
+float tacticalFailure = priorLowestLow
 plot(showAverages ? ema9 : na, "1H EMA9", color = color.rgb(18, 122, 78), linewidth = 2, display = display.pane)
 plot(showAverages ? ema21 : na, "1H EMA21", color = color.rgb(31, 90, 148), linewidth = 2, display = display.pane)
 plot(showAverages ? sessionVwap : na, "Session VWAP", color = color.rgb(173, 101, 10), linewidth = 2, display = display.pane)
@@ -133,6 +145,6 @@ plot(tacticalWarning, "V5 Tactical Warning", display = display.data_window)
 plot(tacticalFailure, "V5 Tactical Failure", display = display.data_window)
 
 alertcondition(timingReady and not timingReady[1], "V5 completed-hour entry confirmation", "{{ticker}} has completed-hour v5 timing confirmation inside the entry window.")
-alertcondition(sourceClose < tacticalWarning and close[1] >= tacticalWarning[1] and completedBar, "V5 tactical warning", "{{ticker}} closed below its v5 tactical warning level.")
-alertcondition(sourceClose < tacticalFailure and close[1] >= tacticalFailure[1] and completedBar, "V5 tactical failure", "{{ticker}} closed below its v5 tactical failure level.")
+alertcondition(sourceClose < tacticalWarning and sourcePriorClose >= tacticalWarning[1] and completedBar, "V5 tactical warning", "{{ticker}} closed below its v5 tactical warning level.")
+alertcondition(sourceClose < tacticalFailure and sourcePriorClose >= tacticalFailure[1] and completedBar, "V5 tactical failure", "{{ticker}} closed below its v5 tactical failure level.")
 alertcondition(finalHourManagementOnly and not finalHourManagementOnly[1] and completedBar, "V5 management-only window", "{{ticker}} has entered the v5 management-only window.")

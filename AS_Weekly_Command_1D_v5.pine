@@ -58,6 +58,8 @@ f_sync_level(line currentLine, bool visible, float level, color levelColor, stri
 
 bool completedBar = barstate.isconfirmed
 float sourceClose = completedBar ? close : close[1]
+float sourcePriorClose = completedBar ? close[1] : close[2]
+float sourceClose64 = completedBar ? close[64] : close[65]
 float sourceOpen = completedBar ? open : open[1]
 float sourceLow = completedBar ? low : low[1]
 float sourceVolume = completedBar ? volume : volume[1]
@@ -75,8 +77,10 @@ float averageVolume = completedBar ? averageVolumeRaw : averageVolumeRaw[1]
 float relativeVolume = averageVolume > 0 ? sourceVolume / averageVolume : 0.0
 float pivotHighRaw = ta.pivothigh(high, 5, 3)
 float pivotLowRaw = ta.pivotlow(low, 5, 3)
-float latestPivotHigh = ta.valuewhen(not na(pivotHighRaw), pivotHighRaw, 0)
-float latestPivotLow = nz(ta.valuewhen(not na(pivotLowRaw), pivotLowRaw, 0), sma50)
+float latestPivotHighRaw = ta.valuewhen(not na(pivotHighRaw), pivotHighRaw, 0)
+float latestPivotLowRaw = ta.valuewhen(not na(pivotLowRaw), pivotLowRaw, 0)
+float latestPivotHigh = completedBar ? latestPivotHighRaw : latestPivotHighRaw[1]
+float latestPivotLow = nz(completedBar ? latestPivotLowRaw : latestPivotLowRaw[1], sma50)
 float nearestConfirmedPivot = latestPivotHigh > sourceClose ? latestPivotHigh : na
 float breakoutLevelRaw = ta.highest(high[1], 20)
 float breakoutLevel = completedBar ? breakoutLevelRaw : breakoutLevelRaw[1]
@@ -87,24 +91,32 @@ float breakoutLevel = completedBar ? breakoutLevelRaw : breakoutLevelRaw[1]
     [close[1], ta.ema(close, 21)[1]],
     lookahead = barmerge.lookahead_on
 )
-[spyClose, spySma50, spySma200] = request.security(
+[spyCloseRaw, spySma50Raw, spySma200Raw] = request.security(
     "AMEX:SPY",
     "1D",
-    [close[1], ta.sma(close, 50)[1], ta.sma(close, 200)[1]],
-    lookahead = barmerge.lookahead_on
+    [close, ta.sma(close, 50), ta.sma(close, 200)],
+    lookahead = barmerge.lookahead_off
 )
-[qqqClose, qqqSma50, qqqSma200] = request.security(
+[qqqCloseRaw, qqqSma50Raw, qqqSma200Raw] = request.security(
     "NASDAQ:QQQ",
     "1D",
-    [close[1], ta.sma(close, 50)[1], ta.sma(close, 200)[1]],
-    lookahead = barmerge.lookahead_on
+    [close, ta.sma(close, 50), ta.sma(close, 200)],
+    lookahead = barmerge.lookahead_off
 )
-[peerClose, peerClose63] = request.security(
+[peerCloseRaw, peerClose64Raw] = request.security(
     peerSymbol,
     "1D",
-    [close[1], close[64]],
-    lookahead = barmerge.lookahead_on
+    [close, close[64]],
+    lookahead = barmerge.lookahead_off
 )
+float spyClose = completedBar ? spyCloseRaw : spyCloseRaw[1]
+float spySma50 = completedBar ? spySma50Raw : spySma50Raw[1]
+float spySma200 = completedBar ? spySma200Raw : spySma200Raw[1]
+float qqqClose = completedBar ? qqqCloseRaw : qqqCloseRaw[1]
+float qqqSma50 = completedBar ? qqqSma50Raw : qqqSma50Raw[1]
+float qqqSma200 = completedBar ? qqqSma200Raw : qqqSma200Raw[1]
+float peerClose = completedBar ? peerCloseRaw : peerCloseRaw[1]
+float peerClose64 = completedBar ? peerClose64Raw : peerClose64Raw[1]
 
 bool weeklyAligned = weeklyClose > weeklyEma21
 int trendScore = 0
@@ -122,8 +134,8 @@ int marketScore = (spyPass ? 50 : 0) + (qqqPass ? 50 : 0)
 bool marketPass = not requireMarket or marketScore >= PARITY_MARKET_MINIMUM
 
 bool indexLane = syminfo.ticker == "SPY" or syminfo.ticker == "QQQ"
-float stockReturn64 = close[64] > 0 ? sourceClose / close[64] - 1.0 : 0.0
-float peerReturn64 = peerClose63 > 0 ? peerClose / peerClose63 - 1.0 : 0.0
+float stockReturn64 = sourceClose64 > 0 ? sourceClose / sourceClose64 - 1.0 : 0.0
+float peerReturn64 = peerClose64 > 0 ? peerClose / peerClose64 - 1.0 : 0.0
 float relativeEdge = stockReturn64 - peerReturn64
 int leadershipScore = relativeEdge >= 0.03 ? 100 : relativeEdge >= 0.0 ? 75 : relativeEdge >= -0.03 ? 50 : 20
 bool leadershipPass = indexLane or leadershipScore >= PARITY_LEADERSHIP_MINIMUM
@@ -131,47 +143,80 @@ bool leadershipPass = indexLane or leadershipScore >= PARITY_LEADERSHIP_MINIMUM
 bool trendPass = trendScore >= PARITY_TREND_MINIMUM and sourceClose > sma200
 float support = math.max(math.min(ema21, sourceClose), math.min(latestPivotLow, sourceClose))
 
-bool controlled_pullback = trendPass and sourceLow <= support + 0.30 * currentAtr and sourceClose > support and sourceClose >= sourceOpen
-float pullbackTrigger = ta.highest(high, 2)
+bool controlled_pullback = trendPass and sourceLow <= support + PARITY_READY_DISTANCE_ATR * currentAtr and sourceClose > support and sourceClose >= sourceOpen
+float pullbackTriggerRaw = ta.highest(high, 2)
+float pullbackTrigger = completedBar ? pullbackTriggerRaw : pullbackTriggerRaw[1]
 float pullbackInvalidation = support - 0.20 * currentAtr
 int pullbackQuality = controlled_pullback ? 90 : 0
 
-bool confirmed_breakout = trendPass and sourceClose > breakoutLevel and close[1] <= breakoutLevel and relativeVolume >= 1.20
+bool confirmed_breakout = trendPass and sourceClose > breakoutLevel and sourcePriorClose <= breakoutLevel and relativeVolume >= 1.20
 float breakoutInvalidation = math.max(ema21, breakoutLevel - 0.50 * currentAtr)
 int breakoutQuality = confirmed_breakout ? 92 : sourceClose >= breakoutLevel - PARITY_READY_DISTANCE_ATR * currentAtr ? 78 : 0
 
-float flagPole = close[5] - close[15]
-float flagLow = ta.lowest(low, 5)
-float flagRetracement = flagPole > 0 ? (close[5] - flagLow) / flagPole : 1.0
-bool bull_flag = trendPass and flagPole >= 2.0 * currentAtr and flagRetracement >= 0.10 and flagRetracement <= 0.50 and ta.sma(volume, 5) <= ta.sma(volume[5], 10)
-float flagTrigger = ta.highest(high, 5)
+float flagPoleRaw = close[5] - close[15]
+float flagReferenceCloseRaw = close[5]
+float flagLowRaw = ta.lowest(low, 5)
+float flagVolumeRaw = ta.sma(volume, 5)
+float flagPriorVolumeRaw = ta.sma(volume[5], 10)
+float flagTriggerRaw = ta.highest(high, 5)
+float flagPole = completedBar ? flagPoleRaw : flagPoleRaw[1]
+float flagReferenceClose = completedBar ? flagReferenceCloseRaw : flagReferenceCloseRaw[1]
+float flagLow = completedBar ? flagLowRaw : flagLowRaw[1]
+float flagVolume = completedBar ? flagVolumeRaw : flagVolumeRaw[1]
+float flagPriorVolume = completedBar ? flagPriorVolumeRaw : flagPriorVolumeRaw[1]
+float flagTrigger = completedBar ? flagTriggerRaw : flagTriggerRaw[1]
+float flagRetracement = flagPole > 0 ? (flagReferenceClose - flagLow) / flagPole : 1.0
+bool bull_flag = trendPass and flagPole >= 2.0 * currentAtr and flagRetracement >= 0.10 and flagRetracement <= 0.50 and flagVolume <= flagPriorVolume
 int flagQuality = bull_flag ? 88 : 0
 
-bool breakoutEvent = close > ta.highest(high[1], 30) and volume >= ta.sma(volume, 20) * 1.20
-float priorBreakout = ta.valuewhen(breakoutEvent, ta.highest(high[1], 30), 0)
-int barsSinceBreakout = nz(ta.barssince(breakoutEvent), 10000)
-bool breakout_retest = trendPass and barsSinceBreakout >= 1 and barsSinceBreakout <= 8 and sourceLow <= priorBreakout + 0.30 * currentAtr and sourceClose > priorBreakout
-float retestInvalidation = ta.lowest(low, 8)
+float breakoutLevel30Raw = ta.highest(high[1], 30)
+bool breakoutEventRaw = close > breakoutLevel30Raw and volume >= averageVolumeRaw * 1.20
+float priorBreakoutRaw = ta.valuewhen(breakoutEventRaw, breakoutLevel30Raw, 0)
+int barsSinceBreakoutRaw = nz(ta.barssince(breakoutEventRaw), 10000)
+float retestInvalidationRaw = ta.lowest(low, 8)
+float priorBreakout = completedBar ? priorBreakoutRaw : priorBreakoutRaw[1]
+int barsSinceBreakout = completedBar ? barsSinceBreakoutRaw : barsSinceBreakoutRaw[1]
+float retestInvalidation = completedBar ? retestInvalidationRaw : retestInvalidationRaw[1]
+bool breakout_retest = trendPass and barsSinceBreakout >= 1 and barsSinceBreakout <= 8 and sourceLow <= priorBreakout + PARITY_READY_DISTANCE_ATR * currentAtr and sourceClose > priorBreakout
 int retestQuality = breakout_retest ? 90 : 0
 
-float baseHigh = ta.highest(high, 25)
-float baseLow = ta.lowest(low, 25)
+float baseHighRaw = ta.highest(high, 25)
+float baseLowRaw = ta.lowest(low, 25)
+float baseVolumeRaw = ta.sma(volume, 10)
+float basePriorVolumeRaw = ta.sma(volume[10], 15)
+float flatTriggerRaw = ta.highest(high[1], 24)
+float baseHigh = completedBar ? baseHighRaw : baseHighRaw[1]
+float baseLow = completedBar ? baseLowRaw : baseLowRaw[1]
+float baseVolume = completedBar ? baseVolumeRaw : baseVolumeRaw[1]
+float basePriorVolume = completedBar ? basePriorVolumeRaw : basePriorVolumeRaw[1]
+float flatTrigger = completedBar ? flatTriggerRaw : flatTriggerRaw[1]
 float baseDepth = baseHigh > 0 ? (baseHigh - baseLow) / baseHigh : 1.0
-bool flat_base = trendPass and baseDepth <= 0.12 and ta.sma(volume, 10) <= ta.sma(volume[10], 15)
-float flatTrigger = ta.highest(high[1], 24)
+bool flat_base = trendPass and baseDepth <= 0.12 and baseVolume <= basePriorVolume
 int flatQuality = flat_base ? 84 : 0
 
-float vcpRange60 = ta.highest(high, 60) - ta.lowest(low, 60)
-float vcpRange40 = ta.highest(high, 40) - ta.lowest(low, 40)
-float vcpRange20 = ta.highest(high, 20) - ta.lowest(low, 20)
-bool vcp_tight_base = trendPass and vcpRange40 <= 0.85 * vcpRange60 and vcpRange20 <= 0.85 * vcpRange40 and ta.sma(volume, 20) <= 0.80 * ta.sma(volume[20], 20)
-float vcpTrigger = ta.highest(high[1], 19)
-float vcpLow = ta.lowest(low, 20)
+float vcpRange60Raw = ta.highest(high, 60) - ta.lowest(low, 60)
+float vcpRange40Raw = ta.highest(high, 40) - ta.lowest(low, 40)
+float vcpRange20Raw = ta.highest(high, 20) - ta.lowest(low, 20)
+float vcpVolumeRaw = ta.sma(volume, 20)
+float vcpPriorVolumeRaw = ta.sma(volume[20], 20)
+float vcpTriggerRaw = ta.highest(high[1], 19)
+float vcpLowRaw = ta.lowest(low, 20)
+float vcpRange60 = completedBar ? vcpRange60Raw : vcpRange60Raw[1]
+float vcpRange40 = completedBar ? vcpRange40Raw : vcpRange40Raw[1]
+float vcpRange20 = completedBar ? vcpRange20Raw : vcpRange20Raw[1]
+float vcpVolume = completedBar ? vcpVolumeRaw : vcpVolumeRaw[1]
+float vcpPriorVolume = completedBar ? vcpPriorVolumeRaw : vcpPriorVolumeRaw[1]
+float vcpTrigger = completedBar ? vcpTriggerRaw : vcpTriggerRaw[1]
+float vcpLow = completedBar ? vcpLowRaw : vcpLowRaw[1]
+bool vcp_tight_base = trendPass and vcpRange40 <= 0.85 * vcpRange60 and vcpRange20 <= 0.85 * vcpRange40 and vcpVolume <= 0.80 * vcpPriorVolume
 int vcpQuality = vcp_tight_base ? 86 : 0
 
-float triangleTop = ta.highest(high[1], 40)
-float triangleLowRecent = ta.lowest(low, 15)
-float triangleLowPrior = ta.lowest(low[15], 15)
+float triangleTopRaw = ta.highest(high[1], 40)
+float triangleLowRecentRaw = ta.lowest(low, 15)
+float triangleLowPriorRaw = ta.lowest(low[15], 15)
+float triangleTop = completedBar ? triangleTopRaw : triangleTopRaw[1]
+float triangleLowRecent = completedBar ? triangleLowRecentRaw : triangleLowRecentRaw[1]
+float triangleLowPrior = completedBar ? triangleLowPriorRaw : triangleLowPriorRaw[1]
 bool ascending_triangle = trendPass and triangleLowRecent > triangleLowPrior and sourceClose >= triangleTop - PARITY_READY_DISTANCE_ATR * currentAtr
 int triangleQuality = ascending_triangle ? 85 : 0
 
@@ -217,15 +262,16 @@ if ascending_triangle and triangleQuality > selectedQuality
     selectedInvalidation := triangleLowRecent
 
 float distanceAtr = (selectedTrigger - sourceClose) / math.max(currentAtr, syminfo.mintick)
-bool crossedTrigger = sourceClose > selectedTrigger and close[1] <= selectedTrigger[1]
+bool crossedTrigger = sourceClose > selectedTrigger and sourcePriorClose <= selectedTrigger[1]
 int confirmedAge = nz(ta.barssince(crossedTrigger), 10000)
 bool patternReady = distanceAtr >= 0 and distanceAtr <= PARITY_READY_DISTANCE_ATR
 bool patternConfirmed = confirmedAge <= PARITY_MAX_CONFIRMED_AGE and sourceClose <= selectedTrigger + PARITY_MAX_EXTENSION_ATR * currentAtr
 bool patternExtended = sourceClose > selectedTrigger + PARITY_MAX_EXTENSION_ATR * currentAtr
-bool setupPass = selectedQuality >= PARITY_SETUP_MINIMUM and (patternReady or patternConfirmed)
-bool technicalReady = completedBar and trendPass and leadershipPass and marketPass and setupPass and not patternExtended
-bool developing = trendScore >= 60 and selectedQuality > 0 and marketScore >= 50
 bool patternFailed = sourceClose < selectedInvalidation
+bool setupPass = selectedQuality >= PARITY_SETUP_MINIMUM and (patternReady or patternConfirmed)
+bool recommendedTimeframe = timeframe.period == "1D"
+bool technicalReady = completedBar and recommendedTimeframe and trendPass and leadershipPass and marketPass and setupPass and not patternExtended and not patternFailed
+bool developing = trendScore >= 60 and selectedQuality > 0 and marketScore >= 50
 int stateCode = technicalReady ? 2 : developing ? 1 : 0
 int lifecycleCode = patternFailed ? 5 : patternExtended ? 4 : patternConfirmed ? 3 : patternReady ? 2 : selectedQuality > 0 ? 1 : 0
 int laneCode = indexLane ? 1 : 2
@@ -255,6 +301,7 @@ plot(selectedPatternCode, "V5 Pattern Code", display = display.data_window)
 plot(stateCode, "V5 State Code", display = display.data_window)
 plot(laneCode, "V5 Lane Code", display = display.data_window)
 plot(lifecycleCode, "V5 Lifecycle Code", display = display.data_window)
+plot(recommendedTimeframe ? 1 : 0, "V5 Recommended Timeframe", display = display.data_window)
 plot(selectedTrigger, "V5 Trigger", display = display.data_window)
 plot(structuralInvalidation, "V5 Structural Invalidation", display = display.data_window)
 plot(nearestConfirmedPivot, "V5 Confirmed Pivot", display = display.data_window)
@@ -262,5 +309,5 @@ plot(planningObjective2R, "V5 2R Planning Objective", display = display.data_win
 
 alertcondition(technicalReady and not technicalReady[1], "V5 daily setup ready for verification", "{{ticker}} has a completed daily Bullish Weekly Participation v5 setup. Verify event, data, and contract evidence.")
 alertcondition(crossedTrigger and setupPass and completedBar, "V5 daily trigger confirmed", "{{ticker}} closed through its selected v5 daily trigger.")
-alertcondition(sourceClose < structuralInvalidation and close[1] >= structuralInvalidation[1] and completedBar, "V5 structural invalidation", "{{ticker}} closed below its v5 structural invalidation.")
+alertcondition(sourceClose < structuralInvalidation and sourcePriorClose >= structuralInvalidation[1] and completedBar, "V5 structural invalidation", "{{ticker}} closed below its v5 structural invalidation.")
 alertcondition(patternExtended and not patternExtended[1] and completedBar, "V5 extension warning", "{{ticker}} exceeded the v5 maximum confirmed extension.")

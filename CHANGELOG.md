@@ -2,17 +2,23 @@
 
 ## Unreleased
 
-- Reworked all five Pine scripts around a clean-chart contract: no custom labels,
-  pattern badges, shapes, or tables.
+- Reduced the TradingView package to three chart-analysis indicators: Daily Command,
+  Hourly Timing, and the optional Daily Pattern Atlas.
+- Removed the Pine Screener and underlying-proxy strategy tester from the active
+  repository.
+- Enforced an indicator-only Pine contract that rejects `strategy()`, custom labels,
+  pattern badges, shapes, and tables.
 - Replaced full-history decision levels with short current-state line objects and
   made pivot/2R planning levels optional and off by default.
 - Disabled context-only Pattern Atlas geometry by default and moved pattern,
   lifecycle, score, and state evidence into the Data Window.
-- Hid all ten Pine Screener outputs from the price chart while preserving them as
-  Pine Screener columns.
 - Added automated release checks that reject future custom Pine labels or tables.
-- Made every Pattern Atlas history function unconditional so TradingView compiles
-  it without calculation-consistency warnings.
+- Made every indicator history function unconditional so TradingView compiles the
+  suite without calculation-consistency warnings.
+- Corrected the Pine v6 one-day timeframe guard to `1D` and aligned same-timeframe
+  SPY, QQQ, and leadership data to the completed source bar.
+- Corrected the hourly tactical-failure level to the prior four completed hourly
+  lows so a close-below failure alert can occur.
 
 ## 5.0.0 - 2026-07-16
 
@@ -32,8 +38,8 @@
   confirmed pivot, and 2R planning-objective fields.
 - Rebuilt the HTML screener as a dense sortable, filterable, comparable operational
   workspace with contract alternatives and precise rejection diagnostics.
-- Added five Pine v6 scripts for daily command, hourly timing, pattern atlas, Pine
-  Screener columns, and explicitly labeled underlying-proxy research.
+- Added three Pine v6 chart indicators for daily command, hourly timing, and the
+  bullish pattern atlas.
 - Upgraded historical option research with trigger-aligned quotes, minute sequencing,
   pessimistic fills, commissions, purge/embargo folds, overlap metrics, frozen
   baseline comparison, stability checks, and shadow gates.

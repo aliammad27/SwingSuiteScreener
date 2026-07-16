@@ -28,14 +28,11 @@ REQUIRED_V5_FILES = (
     "AS_Weekly_Command_1D_v5.pine",
     "AS_Weekly_Timing_1H_v5.pine",
     "AS_Bullish_Pattern_Atlas_1D_v5.pine",
-    "AS_Weekly_Screener_v5.pine",
-    "AS_Weekly_Underlying_Research_v5.pine",
     "docs/Bullish_Weekly_Participation_v5_Build_Plan.md",
     "docs/Bullish_Weekly_Participation_v5_Training_Manual.md",
     "docs/Ali_Swing_Suite_Bullish_Weekly_Participation_v5_Training_Manual.docx",
     "docs/assets/v5_dashboard_desktop.png",
     "docs/assets/v5_pattern_atlas.png",
-    "docs/assets/v5_pine_suite.png",
     "docs/assets/v5_workflow.png",
     "reports/intraday/.gitkeep",
     "scanner/data_trust.py",
@@ -69,6 +66,15 @@ PINE_FILES = (
     "AS_Weekly_Command_1D_v5.pine",
     "AS_Weekly_Timing_1H_v5.pine",
     "AS_Bullish_Pattern_Atlas_1D_v5.pine",
+)
+
+PINE_TIMEFRAMES = {
+    "AS_Weekly_Command_1D_v5.pine": "1D",
+    "AS_Weekly_Timing_1H_v5.pine": "60",
+    "AS_Bullish_Pattern_Atlas_1D_v5.pine": "1D",
+}
+
+FORBIDDEN_PINE_ARTIFACTS = (
     "AS_Weekly_Screener_v5.pine",
     "AS_Weekly_Underlying_Research_v5.pine",
 )
@@ -234,6 +240,12 @@ def _check_package_version(root: Path, errors: list[str]) -> None:
 
 def _check_pine_contract(root: Path, errors: list[str]) -> None:
     forbidden_visual_tokens = ("plotshape(", "plotchar(", "label.", "table.")
+    for relative in FORBIDDEN_PINE_ARTIFACTS:
+        if (root / relative).exists():
+            errors.append(
+                f"{relative} is retired; the active Pine suite contains indicators only"
+            )
+
     for relative in PINE_FILES:
         path = root / relative
         if not path.is_file():
@@ -243,6 +255,13 @@ def _check_pine_contract(root: Path, errors: list[str]) -> None:
             errors.append(f"{relative} must use Pine v6")
         if "PARITY_SCHEMA_VERSION = 5" not in text:
             errors.append(f"{relative} must expose PARITY_SCHEMA_VERSION = 5")
+        if "\nindicator(" not in text or "strategy(" in text:
+            errors.append(f"{relative} must remain an indicator, never a strategy")
+        expected_timeframe = PINE_TIMEFRAMES[relative]
+        if f'timeframe.period == "{expected_timeframe}"' not in text:
+            errors.append(
+                f"{relative} must enforce the Pine v6 {expected_timeframe} timeframe"
+            )
         for token in forbidden_visual_tokens:
             if token in text:
                 errors.append(
@@ -254,49 +273,12 @@ def _check_pine_contract(root: Path, errors: list[str]) -> None:
                     f"{relative}:{line_number} must set an explicit plot display mode"
                 )
 
-    screener = root / "AS_Weekly_Screener_v5.pine"
-    if screener.is_file():
-        text = screener.read_text(encoding="utf-8")
-        request_count = len(re.findall(r"\brequest\.[A-Za-z_]+\s*\(", text))
-        plot_count = len(re.findall(r"(?m)^\s*plot\s*\(", text))
-        if request_count > 5:
-            errors.append(
-                f"AS_Weekly_Screener_v5.pine uses {request_count} request calls; maximum is 5"
-            )
-        if plot_count < 10:
-            errors.append(
-                f"AS_Weekly_Screener_v5.pine exposes {plot_count} plots; at least 10 required"
-            )
-        if text.count("display.pine_screener") != 10:
-            errors.append(
-                "AS_Weekly_Screener_v5.pine must expose exactly ten data-only "
-                "Pine Screener plots"
-            )
-        if "input.symbol(" in text:
-            errors.append(
-                "AS_Weekly_Screener_v5.pine cannot use input.symbol because "
-                "Pine Screener ignores symbol inputs"
-            )
-
-    tester = root / "AS_Weekly_Underlying_Research_v5.pine"
-    if tester.is_file():
-        text = tester.read_text(encoding="utf-8")
-        if "NOT OPTION PERFORMANCE" not in text:
-            errors.append(
-                "AS_Weekly_Underlying_Research_v5.pine must retain its proxy warning"
-            )
-
-    atlas = root / "AS_Bullish_Pattern_Atlas_1D_v5.pine"
-    if atlas.is_file():
-        for line_number, line in enumerate(
-            atlas.read_text(encoding="utf-8").splitlines(),
-            start=1,
-        ):
+        for line_number, line in enumerate(text.splitlines(), start=1):
             if "ta." not in line:
                 continue
             if "?" in line or line.lstrip().startswith(("if ", "else if ", "bool ")):
                 errors.append(
-                    "AS_Bullish_Pattern_Atlas_1D_v5.pine:"
+                    f"{relative}:"
                     f"{line_number} must calculate history functions unconditionally"
                 )
 

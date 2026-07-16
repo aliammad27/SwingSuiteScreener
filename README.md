@@ -137,7 +137,7 @@ No server is required:
 open reports/intraday/latest.html
 ```
 
-## Pine v6 Suite
+## Pine v6 Indicators
 
 - `AS_Weekly_Command_1D_v5.pine`: clean daily overlay with trend averages, current
   trigger/invalidation, optional planning levels, and alerts.
@@ -145,17 +145,14 @@ open reports/intraday/latest.html
   VWAP, current tactical levels, and management alerts.
 - `AS_Bullish_Pattern_Atlas_1D_v5.pine`: current trigger/invalidation geometry for
   all twelve bullish patterns, with context-only patterns disabled by default.
-- `AS_Weekly_Screener_v5.pine`: Pine Screener-compatible state, pattern, trend,
-  setup, timing, market, distance, volume, extension, and lane columns that remain
-  hidden on the chart.
-- `AS_Weekly_Underlying_Research_v5.pine`: underlying-proxy tester with no custom
-  chart annotations; it is not option performance.
 
-The suite intentionally uses no custom labels, shapes, or tables. Only current
-decision levels are drawn, and optional pivot/2R planning lines are off by default.
-Scores, pattern codes, and lifecycle codes remain available in the Data Window.
-TradingView's built-in strategy trade markers can be hidden from the tester through
-`Settings > Style > Trades on chart`.
+The TradingView package contains indicators only. It has no Pine Screener script
+and no `strategy()` backtest. The separate Python/HTML research screener described
+above is independent of these chart indicators.
+
+The indicators use no custom labels, shapes, or tables. Only current decision levels
+are drawn, and optional pivot/2R planning lines are off by default. Scores, pattern
+codes, lifecycle codes, and timeframe checks remain available in the Data Window.
 
 Shared constants are checked by:
 
@@ -163,7 +160,7 @@ Shared constants are checked by:
 python scripts/check_pine_parity.py
 ```
 
-TradingView must compile each script in Pine Editor before live use. The repository
+TradingView must compile each indicator in Pine Editor before live use. The repository
 can verify structure and parity, but alert creation and chart-specific visual review
 remain TradingView actions.
 

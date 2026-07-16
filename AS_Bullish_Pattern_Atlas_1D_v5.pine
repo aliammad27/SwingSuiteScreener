@@ -272,6 +272,7 @@ bool extended = not na(selectedTrigger) and sourceClose > selectedTrigger + PARI
 bool ready = distanceAtr >= 0 and distanceAtr <= PARITY_READY_DISTANCE_ATR
 bool confirmed = confirmedAge <= PARITY_MAX_CONFIRMED_AGE
 int lifecycleCode = failed ? 5 : extended ? 4 : confirmed ? 3 : ready ? 2 : selectedPatternCode > 0 ? 1 : 0
+bool recommendedTimeframe = timeframe.period == "1D"
 
 var line triggerLine = na
 var line invalidationLine = na
@@ -286,9 +287,10 @@ invalidationLine := f_sync_level(invalidationLine, showCurrentGeometry, selected
 plot(selectedPatternCode, "V5 Pattern Code", display = display.data_window)
 plot(selectedClassCode, "V5 Pattern Class", display = display.data_window)
 plot(lifecycleCode, "V5 Lifecycle Code", display = display.data_window)
+plot(recommendedTimeframe ? 1 : 0, "V5 Recommended Timeframe", display = display.data_window)
 plot(distanceAtr, "V5 Distance ATR", display = display.data_window)
 plot(selectedTrigger, "V5 Pattern Trigger", display = display.data_window)
 plot(selectedInvalidation, "V5 Pattern Invalidation", display = display.data_window)
 
-alertcondition(selectedClassCode == 1 and lifecycleCode == 2 and completedBar, "V5 production pattern ready", "{{ticker}} has a completed-bar production pattern inside the v5 ready distance.")
-alertcondition(selectedClassCode == 2 and lifecycleCode == 2 and completedBar, "V5 context pattern observed", "{{ticker}} has a context-only bullish pattern. It is not a v5 production entry pattern.")
+alertcondition(selectedClassCode == 1 and lifecycleCode == 2 and completedBar and recommendedTimeframe, "V5 production pattern ready", "{{ticker}} has a completed-bar production pattern inside the v5 ready distance.")
+alertcondition(selectedClassCode == 2 and lifecycleCode == 2 and completedBar and recommendedTimeframe, "V5 context pattern observed", "{{ticker}} has a context-only bullish pattern. It is not a v5 production entry pattern.")

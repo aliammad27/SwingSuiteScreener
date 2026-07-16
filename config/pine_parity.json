@@ -8,51 +8,42 @@
       "pine_files": [
         "AS_Weekly_Command_1D_v5.pine",
         "AS_Weekly_Timing_1H_v5.pine",
-        "AS_Bullish_Pattern_Atlas_1D_v5.pine",
-        "AS_Weekly_Screener_v5.pine",
-        "AS_Weekly_Underlying_Research_v5.pine"
+        "AS_Bullish_Pattern_Atlas_1D_v5.pine"
       ]
     },
     {
       "config_path": "review_thresholds.trend",
       "constant": "PARITY_TREND_MINIMUM",
       "pine_files": [
-        "AS_Weekly_Command_1D_v5.pine",
-        "AS_Weekly_Screener_v5.pine",
-        "AS_Weekly_Underlying_Research_v5.pine"
+        "AS_Weekly_Command_1D_v5.pine"
       ]
     },
     {
       "config_path": "review_thresholds.leadership",
       "constant": "PARITY_LEADERSHIP_MINIMUM",
       "pine_files": [
-        "AS_Weekly_Command_1D_v5.pine",
-        "AS_Weekly_Screener_v5.pine"
+        "AS_Weekly_Command_1D_v5.pine"
       ]
     },
     {
       "config_path": "review_thresholds.setup",
       "constant": "PARITY_SETUP_MINIMUM",
       "pine_files": [
-        "AS_Weekly_Command_1D_v5.pine",
-        "AS_Weekly_Screener_v5.pine"
+        "AS_Weekly_Command_1D_v5.pine"
       ]
     },
     {
       "config_path": "review_thresholds.timing",
       "constant": "PARITY_TIMING_MINIMUM",
       "pine_files": [
-        "AS_Weekly_Timing_1H_v5.pine",
-        "AS_Weekly_Screener_v5.pine"
+        "AS_Weekly_Timing_1H_v5.pine"
       ]
     },
     {
       "config_path": "review_thresholds.market",
       "constant": "PARITY_MARKET_MINIMUM",
       "pine_files": [
-        "AS_Weekly_Command_1D_v5.pine",
-        "AS_Weekly_Screener_v5.pine",
-        "AS_Weekly_Underlying_Research_v5.pine"
+        "AS_Weekly_Command_1D_v5.pine"
       ]
     },
     {
@@ -60,9 +51,7 @@
       "constant": "PARITY_READY_DISTANCE_ATR",
       "pine_files": [
         "AS_Weekly_Command_1D_v5.pine",
-        "AS_Bullish_Pattern_Atlas_1D_v5.pine",
-        "AS_Weekly_Screener_v5.pine",
-        "AS_Weekly_Underlying_Research_v5.pine"
+        "AS_Bullish_Pattern_Atlas_1D_v5.pine"
       ]
     },
     {
@@ -70,9 +59,7 @@
       "constant": "PARITY_MAX_EXTENSION_ATR",
       "pine_files": [
         "AS_Weekly_Command_1D_v5.pine",
-        "AS_Bullish_Pattern_Atlas_1D_v5.pine",
-        "AS_Weekly_Screener_v5.pine",
-        "AS_Weekly_Underlying_Research_v5.pine"
+        "AS_Bullish_Pattern_Atlas_1D_v5.pine"
       ]
     },
     {
@@ -80,9 +67,7 @@
       "constant": "PARITY_MAX_CONFIRMED_AGE",
       "pine_files": [
         "AS_Weekly_Command_1D_v5.pine",
-        "AS_Bullish_Pattern_Atlas_1D_v5.pine",
-        "AS_Weekly_Screener_v5.pine",
-        "AS_Weekly_Underlying_Research_v5.pine"
+        "AS_Bullish_Pattern_Atlas_1D_v5.pine"
       ]
     },
     {

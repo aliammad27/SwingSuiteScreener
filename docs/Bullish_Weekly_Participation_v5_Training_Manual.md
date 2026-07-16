@@ -1352,10 +1352,8 @@ just to increase candidate count.
 
 ## 15. Pine v6 Installation
 
-![V5 Pine suite](assets/v5_pine_suite.png)
-
-TradingView documents Pine Screener behavior and limits in
-[Pine Screener requirements](https://www.tradingview.com/support/solutions/43000742436-tradingview-pine-screener-key-features-and-requirements/).
+The TradingView package contains three chart-analysis indicators only. It does not
+include a Pine Screener script or a `strategy()` backtest.
 
 ## 15.1 Daily Command
 
@@ -1424,81 +1422,17 @@ Use:
 
 The atlas does not promote context patterns.
 
-## 15.4 Pine Screener
+## 15.4 Indicator-Only Boundary
 
-File:
+The active TradingView files are:
 
-```text
-AS_Weekly_Screener_v5.pine
-```
+1. Daily Command on the one-day chart.
+2. Hourly Timing on the 60-minute chart.
+3. Pattern Atlas on the one-day chart when deeper pattern study is useful.
 
-First ten columns:
-
-1. State
-2. Pattern Code
-3. Trend
-4. Setup
-5. Timing
-6. Market
-7. Distance ATR
-8. Daily Relative Volume
-9. Extension ATR
-10. Lane
-
-Pattern codes:
-
-| Code | Pattern |
-|---:|---|
-| 0 | no production setup |
-| 1 | controlled pullback |
-| 2 | confirmed breakout |
-| 3 | bull flag |
-| 4 | breakout retest |
-| 5 | flat base |
-| 6 | VCP / tight base |
-| 7 | ascending triangle |
-
-Lane codes:
-
-| Code | Lane |
-|---:|---|
-| 1 | Index Weekly |
-| 2 | Leader Weekly |
-
-TradingView uses the first ten plots as Screener columns and permits no more than five
-`request.*` calls in the scanned script. The v5 script is designed around those
-limits. All ten outputs use Pine Screener/Data Window display modes, so adding the
-script does not draw a pane, labels, or values over price. The hourly benchmark is
-fixed to SPY because Pine Screener ignores symbol-input changes.
-
-## 15.5 Underlying Research Tester
-
-File:
-
-```text
-AS_Weekly_Underlying_Research_v5.pine
-```
-
-The tester is labeled:
-
-```text
-NOT OPTION PERFORMANCE
-```
-
-The script creates no custom labels or warning table. TradingView's own strategy
-trade markers are controlled through `Settings > Style > Trades on chart`; turn that
-setting off for a completely bare research chart.
-
-It does not model:
-
-- option bid/ask
-- theta
-- gamma
-- implied volatility
-- contract selection
-- assignment or exercise
-
-Use it only to inspect underlying signal behavior.
+Every file uses `indicator()`. None uses `strategy()`, Pine Screener output, custom
+labels, shapes, or tables. The separate Python/HTML research screener is not part of
+the TradingView package.
 
 ---
 
@@ -1539,15 +1473,7 @@ Available:
 
 The context alert is educational and not a production entry alert.
 
-## 16.4 Screener Alert
-
-Available:
-
-- technical finalist
-
-The alert message explicitly requires live event, feed, and contract verification.
-
-## 16.5 Alert QA
+## 16.4 Alert QA
 
 Before relying on an alert:
 
@@ -1942,7 +1868,7 @@ Expected causes:
 - post-close or premarket command
 - final 3:35 PM scan
 
-## 20.7 Pattern Shows In Atlas But Not Screener
+## 20.7 Pattern Shows In Atlas But Not Daily Command
 
 The pattern may be context-only:
 
@@ -1954,22 +1880,28 @@ The pattern may be context-only:
 
 This is intentional.
 
-## 20.8 Pine Screener Missing Columns
+## 20.8 Indicator Shows No Ready State
 
 Check:
 
-- correct script favorited
-- correct v5 Screener script selected
-- first ten plots unchanged
-- script compiled
-- supported timeframe
+- the Daily Command or Pattern Atlas is on a one-day chart
+- Hourly Timing is on a 60-minute chart
+- the latest candle is completed
+- the symbol has enough history
+- the Data Window timeframe check equals one
+- the setup is not extended or structurally failed
 
-TradingView exposes only plots from the selected indicator.
+Ready states intentionally wait for completed candles.
 
-## 20.9 Pine Screener Request Error
+## 20.9 Chart Still Looks Busy
 
-The scanned script must use no more than five `request.*` calls. The v5 Screener uses
-five.
+Check:
+
+- remove any older copies of the indicators from the chart
+- keep optional Daily Command pivot/2R levels off
+- keep Pattern Atlas context-only patterns off
+- use either Daily Command or Pattern Atlas for routine review, not both at once
+- keep the Hourly Timing indicator on a separate 60-minute layout
 
 ## 20.10 Dashboard Layout Problem
 
@@ -2100,7 +2032,7 @@ Events:
 
 Pine:
 
-- [TradingView Pine Screener Requirements](https://www.tradingview.com/support/solutions/43000742436-tradingview-pine-screener-key-features-and-requirements/)
+- [TradingView Pine Script User Manual](https://www.tradingview.com/pine-script-docs/)
 
 ---
 

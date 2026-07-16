@@ -10,7 +10,7 @@ continuation setups expressed through short-duration long calls. It combines:
 - lane-specific weekly contract research
 - strict event and data-trust controls
 - a dense operational screener
-- a five-script Pine v6 confirmation suite
+- a three-indicator Pine v6 chart-analysis suite
 - point-in-time historical and forward-shadow validation
 
 V5 begins in `research_default`. No score, fixture, replay, Pine backtest, or
@@ -39,6 +39,8 @@ historical sample can automatically change that state.
 - same-day or zero-DTE trading
 - treating underlying proxy results as option results
 - automatically modifying strategy configuration from research output
+- Pine strategy/backtesting scripts
+- Pine Screener integration
 
 ## 4. System Architecture
 
@@ -392,7 +394,7 @@ Acceptance viewports:
 
 No control, label, table, or detail pane may overlap or clip.
 
-## 16. Pine v6 Suite
+## 16. Pine v6 Indicators
 
 ### AS_Weekly_Command_1D_v5.pine
 
@@ -427,34 +429,14 @@ No control, label, table, or detail pane may overlap or clip.
 - shared lifecycle
 - numeric evidence in the Data Window, without historical badges
 
-### AS_Weekly_Screener_v5.pine
+### Indicator-Only Boundary
 
-First ten plots:
-
-1. state
-2. pattern code
-3. trend
-4. setup
-5. timing
-6. market
-7. distance ATR
-8. daily relative volume
-9. extension ATR
-10. lane
-
-The script uses no more than five `request.*` calls. TradingView documents both the
-five-request limit and first-ten-plot behavior in
-[Pine Screener requirements](https://www.tradingview.com/support/solutions/43000742436-tradingview-pine-screener-key-features-and-requirements/).
-The ten outputs are hidden from the chart and exposed only to Pine Screener and the
-Data Window.
-
-### AS_Weekly_Underlying_Research_v5.pine
-
-- underlying proxy only
-- completed daily bars
-- no option-performance claim
-- no automatic parameter promotion
-- no custom labels, shapes, or warning table
+- every TradingView file uses `indicator()`
+- no TradingView file uses `strategy()`
+- no Pine Screener-specific output exists
+- no custom labels, shapes, or tables exist
+- every signal and alert uses completed-bar evidence
+- the separate Python/HTML research screener remains outside the Pine package
 
 ## 17. Research Ledger
 
@@ -649,9 +631,11 @@ No decision function edits `config/strategy.yaml`.
 - completed bars
 - confirmed higher-timeframe requests
 - seven production / twelve atlas patterns
-- first ten Screener plots
-- maximum five Screener requests
-- explicit proxy label
+- exactly three `indicator()` scripts
+- no `strategy()` scripts
+- no custom labels, shapes, or tables
+- unconditional history-function calculations
+- exact one-day and 60-minute timeframe guards
 
 ## 21. Release Sequence
 
@@ -689,7 +673,7 @@ V5 is complete when:
 
 - only v5 active artifacts remain
 - all required checks pass
-- all five Pine scripts pass local structural/parity checks
+- all three Pine indicators pass local structural/parity checks
 - TradingView compilation and chart review are recorded
 - the HTML workspace passes viewport and print review
 - the DOCX passes full-page visual review
