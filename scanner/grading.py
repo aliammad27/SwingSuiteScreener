@@ -1,161 +1,125 @@
 from __future__ import annotations
 
-from scanner.catalyst_research import catalyst_allows_primary_grade
-from scanner.models import Candidate, Catalyst, CommandResult, EntryPlan, Grade, MomentumResult
+from datetime import datetime
+
+from scanner.models import (
+    ContractSelection,
+    EntryPlan,
+    EventRisk,
+    EventRiskStatus,
+    EvidenceScores,
+    MarketContext,
+    MomentumResult,
+    PatternSignal,
+    PatternStatus,
+    ReviewState,
+    StrategyLane,
+    TrendAnalysis,
+)
+from scanner.strategy_profile import StrategyProfile
 
 
-def automatic_rejections(
-    command: CommandResult,
-    daily_momentum: MomentumResult,
+def event_is_inside_blackout(
+    event: EventRisk, as_of: datetime, blackout_calendar_days: int
+) -> bool:
+    if event.earnings_date is None:
+        return False
+    days = (event.earnings_date - as_of.date()).days
+    return 0 <= days <= blackout_calendar_days
+
+
+def calculate_risk_score(
+    trend: TrendAnalysis,
+    pattern: PatternSignal,
+    entry: EntryPlan,
+    event: EventRisk,
+) -> int:
+    reward_to_risk = entry.reward_to_risk or 0.0
+    geometry = 30 if reward_to_risk >= 2 else 22 if reward_to_risk >= 1.5 else 10 if reward_to_risk >= 1 else 0
+    extension = 25 if not trend.extended and pattern.status != PatternStatus.STALE else 0
+    recency = 15 if pattern.status in {PatternStatus.FORMING, PatternStatus.READY} or pattern.age_bars <= 3 else 0
+    event_score = {
+        EventRiskStatus.CLEAR: 20,
+        EventRiskStatus.UNKNOWN: 10,
+        EventRiskStatus.BLOCKED: 0,
+    }[event.status]
+    data_quality = 10
+    return min(geometry + extension + recency + event_score + data_quality, 100)
+
+
+def classify_candidate(
+    *,
+    lane: StrategyLane,
+    scores: EvidenceScores,
+    trend: TrendAnalysis,
+    pattern: PatternSignal,
     four_hour: MomentumResult,
-    option_liquidity: str,
-    catalyst: Catalyst,
-    market_regime: str,
-    entry_plan: EntryPlan | None = None,
-) -> list[str]:
-    reasons = list(command.rejection_reasons)
-    if command.score < 60:
-        reasons.append("daily_command_score_below_60")
-    if option_liquidity == "Poor":
-        reasons.append("options_illiquid")
-    if market_regime == "Hostile":
-        reasons.append("hostile_market_regime")
-    if not catalyst.verified and catalyst.summary != "Technical continuation only":
-        reasons.append("unverified_catalyst")
-    if catalyst.major_event_risk:
-        reasons.append("major_event_risk")
-    if not four_hour.daily_filter_passed and four_hour.score >= 70:
-        reasons.append("daily_filter_blocked_four_hour_only")
-    if daily_momentum.state == "Warning active":
-        reasons.append("daily_momentum_warning")
-    return sorted(set(reasons))
+    market: MarketContext,
+    event: EventRisk,
+    contracts: ContractSelection,
+    profile: StrategyProfile,
+    as_of: datetime,
+) -> tuple[ReviewState, tuple[str, ...]]:
+    hard_failures = list(trend.hard_failures)
+    if market.regime == "Hostile":
+        hard_failures.append("hostile_market_regime")
+    if event.status == EventRiskStatus.BLOCKED:
+        hard_failures.append("event_risk_blocked")
+    if event_is_inside_blackout(event, as_of, profile.earnings_blackout_calendar_days):
+        hard_failures.append("earnings_inside_blackout")
+    if pattern.status == PatternStatus.FAILED:
+        hard_failures.append("pattern_failed")
+    if pattern.status == PatternStatus.STALE:
+        hard_failures.append("pattern_stale")
+    if hard_failures:
+        return ReviewState.REJECTED, tuple(sorted(set(hard_failures)))
 
+    thresholds = profile.thresholds
+    chart_requirements = {
+        "trend_below_ready_threshold": scores.trend >= thresholds.trend,
+        "setup_below_ready_threshold": scores.setup >= thresholds.setup,
+        "pattern_not_ready": pattern.status in {PatternStatus.READY, PatternStatus.CONFIRMED},
+        "momentum_below_ready_threshold": scores.momentum >= thresholds.momentum,
+        "four_hour_not_confirmed": four_hour.bullish_confirmation,
+        "market_below_ready_threshold": scores.market >= thresholds.market,
+        "risk_below_ready_threshold": scores.risk >= thresholds.risk,
+    }
+    if lane == StrategyLane.LEADER_SWING:
+        chart_requirements["leadership_below_ready_threshold"] = (
+            scores.leadership is not None and scores.leadership >= thresholds.leadership
+        )
+    chart_failures = [reason for reason, passed in chart_requirements.items() if not passed]
+    if not chart_failures:
+        if not contracts.trustworthy:
+            return ReviewState.VERIFY_CONTRACT, ("option_feed_not_opra",)
+        if contracts.primary is None:
+            return ReviewState.REJECTED, contracts.rejection_reasons or (
+                "no_eligible_call_contract",
+            )
+        if (
+            scores.contract >= thresholds.contract
+            and event.status == EventRiskStatus.CLEAR
+        ):
+            return ReviewState.READY, ()
+        if (
+            scores.contract >= thresholds.ready_verify_contract_minimum
+            and event.status in {EventRiskStatus.CLEAR, EventRiskStatus.UNKNOWN}
+        ):
+            reasons: list[str] = []
+            if scores.contract < thresholds.contract:
+                reasons.append("contract_score_requires_verification")
+            if event.status == EventRiskStatus.UNKNOWN:
+                reasons.append("event_calendar_requires_verification")
+            return ReviewState.READY_VERIFY, tuple(reasons)
+        return ReviewState.REJECTED, contracts.rejection_reasons or (
+            "contract_score_below_minimum",
+        )
 
-def grade_candidate(
-    symbol: str,
-    company: str,
-    sector: str,
-    benchmark: str,
-    command: CommandResult,
-    daily_momentum: MomentumResult,
-    four_hour: MomentumResult,
-    option_liquidity: str,
-    catalyst: Catalyst,
-    market_regime: str,
-    entry_plan: EntryPlan,
-    allow_technical_watch: bool = True,
-) -> Candidate:
-    base_rejection_reasons = automatic_rejections(
-        command, daily_momentum, four_hour, option_liquidity, catalyst, market_regime
+    bullish_development = (
+        scores.trend >= 60
+        and market.regime != "Hostile"
+        and pattern.status in {PatternStatus.FORMING, PatternStatus.READY, PatternStatus.CONFIRMED}
     )
-    rejection_reasons = automatic_rejections(
-        command,
-        daily_momentum,
-        four_hour,
-        option_liquidity,
-        catalyst,
-        market_regime,
-        entry_plan=entry_plan,
-    )
-    s_requirements = [
-        command.score >= 85,
-        command.call_bias in {"Pullback setup", "Breakout confirmed"},
-        daily_momentum.score >= 80,
-        daily_momentum.state in {"Bullish", "Strong bullish"},
-        four_hour.score >= 85,
-        four_hour.bullish_confirmation,
-        four_hour.daily_filter_passed,
-        command.relative_strength == "Leading",
-        command.above_vwap,
-        not command.extended,
-        command.weekly_alignment,
-        option_liquidity == "Good",
-        catalyst_allows_primary_grade(catalyst)
-        or catalyst.summary == "Technical continuation only",
-        market_regime != "Hostile",
-        entry_plan.status in {"valid now", "approaching"},
-        not rejection_reasons,
-    ]
-    if all(s_requirements):
-        grade = Grade.S_TIER
-        missing = None
-        reason = None
-    else:
-        minor_missing = 0
-        missing_labels: list[str] = []
-        if not four_hour.bullish_confirmation:
-            minor_missing += 1
-            missing_labels.append("Waiting for four hour breakout close")
-        if daily_momentum.state == "Improving":
-            minor_missing += 1
-            missing_labels.append("Daily MACD improving but not fully bullish")
-        a_requirements = [
-            command.score >= 75,
-            daily_momentum.score >= 70,
-            four_hour.score >= 75,
-            not command.extended,
-            command.relative_strength in {"Leading", "Improving"},
-            option_liquidity in {"Good", "Acceptable"},
-            market_regime != "Hostile",
-            not catalyst.major_event_risk,
-            minor_missing <= 1,
-            not rejection_reasons,
-        ]
-        if all(a_requirements):
-            grade = Grade.A_PLUS
-            missing = "; ".join(missing_labels) if missing_labels else "None"
-            reason = "Ready after the remaining confirmation is verified."
-        elif allow_technical_watch and all(
-            [
-                command.score >= 75,
-                daily_momentum.score >= 70,
-                four_hour.score >= 75,
-                not command.extended,
-                command.relative_strength in {"Leading", "Improving"},
-                option_liquidity in {"Unknown", "Indicative"},
-                market_regime != "Hostile",
-                not catalyst.major_event_risk,
-                not base_rejection_reasons,
-            ]
-        ):
-            grade = Grade.TECHNICAL_WATCH
-            missing = "Current tradable option liquidity is unavailable on the free data plan"
-            reason = "Live option-chain quality must be verified in the broker."
-        elif all(
-            [
-                command.score >= 65,
-                daily_momentum.score >= 55,
-                four_hour.score >= 60,
-                not command.extended,
-                command.close > command.sma200,
-                command.relative_strength != "Lagging",
-                market_regime != "Hostile",
-                option_liquidity not in {"Poor"},
-                not catalyst.major_event_risk,
-                not base_rejection_reasons,
-            ]
-        ):
-            grade = Grade.B_TIER
-            missing = "Trend is developing; wait for a current pullback or breakout trigger"
-            reason = "Developing setup: confirmation is not ready."
-        else:
-            grade = Grade.REJECTED
-            missing = None
-            reason = "Rejected by deterministic requirements."
-    return Candidate(
-        symbol=symbol,
-        company=company,
-        sector=sector,
-        benchmark=benchmark,
-        command=command,
-        daily_momentum=daily_momentum,
-        four_hour_momentum=four_hour,
-        option_liquidity=option_liquidity,
-        catalyst=catalyst,
-        market_regime=market_regime,
-        entry_plan=entry_plan,
-        grade=grade,
-        missing_confirmation=missing,
-        not_s_tier_reason=reason,
-        rejection_reasons=rejection_reasons,
-    )
+    if bullish_development:
+        return ReviewState.DEVELOPING, tuple(chart_failures)
+    return ReviewState.REJECTED, tuple(chart_failures or ["bullish_structure_not_qualified"])

@@ -8,6 +8,8 @@ def test_holiday_and_half_day_rules() -> None:
     assert is_trading_day(date(2026, 6, 22)) is True
     assert is_half_day(date(2026, 11, 27)) is True
     assert market_close_for(date(2026, 11, 27)).hour == 13
+    assert is_trading_day(date(2027, 7, 5)) is False
+    assert is_trading_day(date(2027, 7, 6)) is True
 
 
 def test_next_trading_day_skips_closed_days() -> None:

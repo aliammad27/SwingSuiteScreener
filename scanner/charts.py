@@ -128,12 +128,76 @@ def render_daily_chart(
         candidate.symbol,
         candles,
         (
-            f"{candidate.symbol} daily | {candidate.grade.label} | "
-            f"C{candidate.command.score} D{candidate.daily_momentum.score} "
-            f"4H{candidate.four_hour_momentum.score}"
+            f"{candidate.symbol} daily | {candidate.state.label} | "
+            f"T{candidate.scores.trend} S{candidate.scores.setup} "
+            f"M{candidate.scores.momentum}"
         ),
         candidate.entry_plan.trigger,
         candidate.entry_plan.support,
         candidate.entry_plan.target_price,
         output_dir,
     )
+
+
+def render_candidate_summary(candidate: Candidate, output_dir: Path | None = None) -> Path:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    output = output_dir or ROOT / "reports" / "charts"
+    output.mkdir(parents=True, exist_ok=True)
+    path = output / f"{candidate.symbol}_v4_summary.png"
+    score_names = ["Trend", "Lead", "Setup", "Mom", "Market", "Contract", "Risk"]
+    score_values = [
+        candidate.scores.trend,
+        candidate.scores.leadership or 0,
+        candidate.scores.setup,
+        candidate.scores.momentum,
+        candidate.scores.market,
+        candidate.scores.contract,
+        candidate.scores.risk,
+    ]
+    colors = ["#15803d" if value >= 75 else "#d97706" if value >= 60 else "#b91c1c" for value in score_values]
+    fig, (level_axis, score_axis) = plt.subplots(
+        2, 1, figsize=(10, 6.4), gridspec_kw={"height_ratios": [1, 1.5]}
+    )
+    fig.patch.set_facecolor("#f8fafc")
+    level_axis.set_facecolor("#ffffff")
+    score_axis.set_facecolor("#ffffff")
+    levels = [
+        candidate.entry_plan.invalidation,
+        candidate.trend.close,
+        candidate.entry_plan.trigger,
+        candidate.entry_plan.target_price,
+    ]
+    labels = ["Invalidation", "Price", "Trigger", "Objective"]
+    level_colors = ["#b91c1c", "#111827", "#15803d", "#2563eb"]
+    for index, (value, label, color) in enumerate(zip(levels, labels, level_colors, strict=True)):
+        level_axis.scatter(value, 0, s=140, color=color, zorder=3)
+        level_axis.text(value, 0.12 + (index % 2) * 0.12, f"{label}\n${value:.2f}", ha="center", fontsize=9)
+    level_axis.hlines(0, min(levels), max(levels), color="#94a3b8", linewidth=2)
+    level_axis.set_yticks([])
+    level_axis.set_xlim(min(levels) * 0.995, max(levels) * 1.005)
+    level_axis.set_title(
+        f"{candidate.symbol} | {candidate.lane.label} | {candidate.state.label} | "
+        f"{candidate.pattern.pattern_type.replace('_', ' ')} ({candidate.pattern.status.value})",
+        fontsize=12,
+    )
+    score_axis.barh(score_names, score_values, color=colors)
+    score_axis.set_xlim(0, 100)
+    score_axis.axvline(75, color="#64748b", linestyle="--", linewidth=1)
+    score_axis.grid(axis="x", alpha=0.2)
+    for index, value in enumerate(score_values):
+        score_axis.text(min(value + 2, 96), index, str(value), va="center", fontsize=9)
+    contract = candidate.contracts.primary
+    contract_text = (
+        f"{contract.expiration_date.isoformat()} ${contract.strike:g} call | D{contract.delta:.2f} | {contract.dte}DTE"
+        if contract is not None
+        else f"Contract verification required ({candidate.contracts.feed})"
+    )
+    fig.text(0.5, 0.02, contract_text, ha="center", fontsize=9, color="#334155")
+    fig.tight_layout(rect=(0, 0.05, 1, 1))
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    return path

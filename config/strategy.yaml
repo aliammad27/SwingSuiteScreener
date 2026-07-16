@@ -1,22 +1,63 @@
-profile_name: Bullish Participation v3
+schema_version: 4
+profile_name: Bullish Participation v4
 direction: bullish_only
-preferred_dte_target_minimum: 30
-preferred_dte_target_maximum: 60
-preferred_dte_hard_minimum: 21
-preferred_dte_maximum: 75
-preferred_delta_minimum: 0.45
-preferred_delta_maximum: 0.65
-delta_hard_floor: 0.35
-intended_hold_days_minimum: 5
-intended_hold_days_maximum: 15
-exit_or_roll_dte: 21
-maximum_bid_ask_spread_percent_of_mid: 8
-minimum_open_interest: 500
-minimum_contract_daily_volume: 100
-maximum_iv_rank: 70
-earnings_blackout_calendar_days: 7
-allow_earnings_event_trades: false
-maximum_report_candidates: 5
-allow_technical_watch_without_opra: true
-free_mode_option_liquidity_label: Indicative
-enable_put_scans: false
+
+review_thresholds:
+  trend: 80
+  leadership: 70
+  setup: 75
+  momentum: 75
+  market: 70
+  contract: 80
+  risk: 70
+  ready_verify_contract_minimum: 65
+
+market:
+  supportive_minimum: 70
+  mixed_minimum: 45
+
+patterns:
+  enabled:
+    - controlled_pullback
+    - confirmed_breakout
+    - bull_flag
+    - flat_base
+    - ascending_triangle
+    - vcp_tight_base
+    - cup_with_handle
+    - breakout_retest
+    - double_bottom
+    - inverse_head_and_shoulders
+    - falling_wedge
+    - rounding_base
+  ready_distance_atr: 0.5
+  maximum_confirmed_extension_atr: 1.0
+  maximum_confirmed_age_bars: 3
+
+event_risk:
+  earnings_blackout_calendar_days: 7
+
+lanes:
+  index_core:
+    symbols: [SPY, QQQ]
+    preferred_dte: [45, 90]
+    hard_dte: [30, 120]
+    preferred_delta: [0.60, 0.75]
+    hard_delta: [0.50, 0.85]
+    intended_hold_sessions: [10, 30]
+    requalify_dte: 30
+    maximum_spread_percent: 5.0
+    minimum_open_interest: 1000
+    minimum_volume: 500
+    maximum_quote_age_minutes: 30
+  leader_swing:
+    preferred_dte: [30, 60]
+    hard_dte: [21, 75]
+    preferred_delta: [0.45, 0.65]
+    hard_delta: [0.35, 0.75]
+    intended_hold_sessions: [5, 15]
+    requalify_dte: 21
+    maximum_spread_percent: 8.0
+    minimum_open_interest: 500
+    minimum_volume: 100
+    maximum_quote_age_minutes: 30

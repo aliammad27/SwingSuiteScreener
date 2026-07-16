@@ -1,10 +1,13 @@
-market_data: fixture
-options: fixture
-catalysts: fixture
+market_data: alpaca
+options: alpaca
+events: configured_calendar
 notifications: telegram
 persistence: local_json
 alpaca:
   data_base_url: https://data.alpaca.markets
   feed: iex
   option_feed: indicative
-  free_mode: true
+research:
+  historical_options: massive
+  require_point_in_time_quotes: true
+  conservative_fill_model: true

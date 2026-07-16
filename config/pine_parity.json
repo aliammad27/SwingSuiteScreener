@@ -1,0 +1,54 @@
+{
+  "manifest_version": 4,
+  "strategy_config": "config/strategy.yaml",
+  "checks": [
+    {
+      "config_path": "schema_version",
+      "constant": "PARITY_SCHEMA_VERSION",
+      "pine_files": [
+        "AS_Command_1D_v4.pine",
+        "AS_Momentum_4H_v4.pine"
+      ]
+    },
+    {
+      "config_path": "review_thresholds.trend",
+      "constant": "PARITY_TREND_MINIMUM",
+      "pine_files": ["AS_Command_1D_v4.pine"]
+    },
+    {
+      "config_path": "review_thresholds.leadership",
+      "constant": "PARITY_LEADERSHIP_MINIMUM",
+      "pine_files": ["AS_Command_1D_v4.pine"]
+    },
+    {
+      "config_path": "review_thresholds.setup",
+      "constant": "PARITY_SETUP_MINIMUM",
+      "pine_files": ["AS_Command_1D_v4.pine"]
+    },
+    {
+      "config_path": "review_thresholds.momentum",
+      "constant": "PARITY_MOMENTUM_MINIMUM",
+      "pine_files": ["AS_Momentum_4H_v4.pine"]
+    },
+    {
+      "config_path": "review_thresholds.market",
+      "constant": "PARITY_MARKET_MINIMUM",
+      "pine_files": ["AS_Command_1D_v4.pine"]
+    },
+    {
+      "config_path": "patterns.ready_distance_atr",
+      "constant": "PARITY_READY_DISTANCE_ATR",
+      "pine_files": ["AS_Command_1D_v4.pine"]
+    },
+    {
+      "config_path": "patterns.maximum_confirmed_extension_atr",
+      "constant": "PARITY_MAX_EXTENSION_ATR",
+      "pine_files": ["AS_Command_1D_v4.pine"]
+    },
+    {
+      "config_path": "patterns.maximum_confirmed_age_bars",
+      "constant": "PARITY_MAX_CONFIRMED_AGE",
+      "pine_files": ["AS_Command_1D_v4.pine"]
+    }
+  ]
+}

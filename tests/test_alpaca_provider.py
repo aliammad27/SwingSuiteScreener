@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 import pytest
 import requests
 
 import scanner.providers.alpaca as alpaca_module
-from scanner.providers.alpaca import AlpacaDataProvider
+from scanner.providers.alpaca import AlpacaDataProvider, parse_occ_call_symbol
 
 
 class FakeResponse:
@@ -75,3 +76,65 @@ def test_alpaca_get_raises_runtime_error_after_retries(
         provider._get("/test", {})
 
     assert calls == 3
+
+
+def test_occ_call_symbol_parser_retains_expiry_and_strike() -> None:
+    underlying, expiry, strike = parse_occ_call_symbol("AAPL260821C00225000")
+    assert underlying == "AAPL"
+    assert expiry == date(2026, 8, 21)
+    assert strike == 225.0
+
+
+def test_call_chain_follows_pagination_and_filters_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = _provider(monkeypatch)
+    pages = [
+        {
+            "snapshots": {
+                "AAPL260821C00225000": {
+                    "latestQuote": {
+                        "bp": 5.0,
+                        "ap": 5.2,
+                        "bs": 10,
+                        "as": 12,
+                        "t": "2026-07-15T19:59:00Z",
+                    },
+                    "greeks": {"delta": 0.55, "gamma": 0.02, "theta": -0.08, "vega": 0.12},
+                    "impliedVolatility": 0.32,
+                    "openInterest": 900,
+                    "dailyBar": {"v": 250},
+                }
+            },
+            "next_page_token": "next",
+        },
+        {
+            "snapshots": {
+                "AAPL260918C00230000": {
+                    "latestQuote": {
+                        "bp": 4.0,
+                        "ap": 4.2,
+                        "bs": 8,
+                        "as": 9,
+                        "t": "2026-07-15T19:58:00Z",
+                    },
+                    "greeks": {"delta": 0.50},
+                    "openInterest": 800,
+                    "dailyBar": {"v": 180},
+                }
+            }
+        },
+    ]
+    expected_page_token = str(pages[0]["next_page_token"])
+    seen_params: list[dict[str, str]] = []
+
+    def fake_get(path: str, params: dict[str, str]) -> dict[str, Any]:
+        seen_params.append(params.copy())
+        return pages.pop(0)
+
+    monkeypatch.setattr(provider, "_get", fake_get)
+    chain = provider.call_chain("AAPL", date(2026, 8, 1), date(2026, 10, 1))
+    assert len(chain) == 2
+    assert seen_params[0]["type"] == "call"
+    assert seen_params[0]["limit"] == "1000"
+    assert seen_params[1]["page_token"] == expected_page_token

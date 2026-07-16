@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 
 
@@ -9,27 +9,62 @@ class ScanType(StrEnum):
     POST_CLOSE = "post_close"
     PREMARKET = "premarket"
     FOUR_HOUR = "four_hour"
-    PUT_POST_CLOSE = "put_post_close"
-    PUT_PREMARKET = "put_premarket"
-    PUT_FOUR_HOUR = "put_four_hour"
 
 
-class Grade(StrEnum):
-    S_TIER = "S"
-    A_PLUS = "A+"
-    B_TIER = "B"
-    TECHNICAL_WATCH = "Technical Watch"
-    REJECTED = "Rejected"
+class StrategyLane(StrEnum):
+    INDEX_CORE = "index_core"
+    LEADER_SWING = "leader_swing"
 
     @property
     def label(self) -> str:
         return {
-            Grade.S_TIER: "Ready",
-            Grade.A_PLUS: "Ready - Verify",
-            Grade.B_TIER: "Developing",
-            Grade.TECHNICAL_WATCH: "Verify Contract",
-            Grade.REJECTED: "Rejected",
+            StrategyLane.INDEX_CORE: "Index Core",
+            StrategyLane.LEADER_SWING: "Leader Swing",
         }[self]
+
+
+class ReviewState(StrEnum):
+    READY = "ready"
+    READY_VERIFY = "ready_verify"
+    DEVELOPING = "developing"
+    VERIFY_CONTRACT = "verify_contract"
+    REJECTED = "rejected"
+
+    @property
+    def label(self) -> str:
+        return {
+            ReviewState.READY: "Ready",
+            ReviewState.READY_VERIFY: "Ready - Verify",
+            ReviewState.DEVELOPING: "Developing",
+            ReviewState.VERIFY_CONTRACT: "Verify Contract",
+            ReviewState.REJECTED: "Rejected",
+        }[self]
+
+
+class PatternStatus(StrEnum):
+    FORMING = "forming"
+    READY = "ready"
+    CONFIRMED = "confirmed"
+    FAILED = "failed"
+    STALE = "stale"
+
+
+class EventRiskStatus(StrEnum):
+    CLEAR = "clear"
+    BLOCKED = "blocked"
+    UNKNOWN = "unknown"
+
+
+class EvidenceMaturity(StrEnum):
+    EXPLORATORY = "exploratory"
+    PROVISIONAL = "provisional"
+    VALIDATED = "validated"
+
+
+class OutcomeState(StrEnum):
+    CONFIRMED = "confirmed"
+    INVALIDATED = "invalidated"
+    UNRESOLVED = "unresolved"
 
 
 @dataclass(frozen=True)
@@ -47,59 +82,114 @@ class Candle:
 
 
 @dataclass(frozen=True)
-class OptionQuote:
+class AssetMetadata:
     symbol: str
+    company: str
+    sector: str
+    peer_etf: str
+    lane: StrategyLane
+
+
+@dataclass(frozen=True)
+class OptionContractSnapshot:
+    contract_symbol: str
+    underlying_symbol: str
+    expiration_date: date
+    strike: float
     dte: int
     delta: float
+    gamma: float | None
+    theta: float | None
+    vega: float | None
+    implied_volatility: float | None
     bid: float
     ask: float
+    bid_size: int
+    ask_size: int
     open_interest: int
     volume: int
-    implied_volatility_rank: float | None
-    timestamp: datetime
+    feed: str
+    quote_timestamp: datetime
+
+    @property
+    def mid(self) -> float:
+        return (self.bid + self.ask) / 2
+
+    @property
+    def spread_percent(self) -> float:
+        return ((self.ask - self.bid) / self.mid) * 100 if self.mid > 0 else float("inf")
+
+    @property
+    def maximum_loss_per_contract(self) -> float:
+        return self.ask * 100
 
 
 @dataclass(frozen=True)
-class Catalyst:
+class EventRisk:
     symbol: str
+    status: EventRiskStatus
+    earnings_date: date | None
     summary: str
-    verified: bool
-    source_title: str
-    publisher: str
-    source_url: str
-    publication_timestamp: datetime | None
-    retrieval_timestamp: datetime
-    earnings_date: str | None = None
-    major_event_risk: bool = False
+    source: str
+    checked_at: datetime
 
 
 @dataclass(frozen=True)
-class CommandResult:
-    symbol: str
+class MarketContext:
     score: int
-    call_bias: str
-    trend: str
-    relative_strength: str
-    relative_volume: float
-    volume_state: str
-    volatility_state: str
-    structure: str
-    above_vwap: bool
-    anchored_vwap: float
+    regime: str
+    spy_daily_pass: bool
+    qqq_daily_pass: bool
     weekly_alignment: bool
-    breakout_level: float
-    breakout_confirmed: bool
-    breakout_watch: bool
-    pullback_support: float
-    resistance_level: float
-    pullback_setup: bool
-    extended: bool
+    breadth_above_sma50: float
+    breadth_above_ema21: float
+    breadth_symbol_count: int
+    components: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class EvidenceScores:
+    trend: int
+    leadership: int | None
+    setup: int
+    momentum: int
+    market: int
+    contract: int
+    risk: int
+
+
+@dataclass(frozen=True)
+class TrendAnalysis:
+    score: int
     close: float
     ema21: float
     sma50: float
     sma200: float
-    atr_percent: float = 0.0
-    rejection_reasons: list[str] = field(default_factory=list)
+    anchored_vwap: float
+    atr: float
+    atr_percent: float
+    weekly_aligned: bool
+    structure: str
+    relative_volume: float
+    breakout_level: float
+    breakout_confirmed: bool
+    pullback_support: float
+    pullback_setup: bool
+    resistance_level: float
+    extended: bool
+    hard_failures: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PatternSignal:
+    pattern_type: str
+    status: PatternStatus
+    quality: int
+    trigger: float
+    invalidation: float
+    target: float
+    age_bars: int
+    geometry_notes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -131,15 +221,27 @@ class EntryPlan:
     target_price: float
     target_basis: str
     target_gain_percent: float
-    research_call_strike: float
-    preferred_dte_minimum: int
-    preferred_dte_maximum: int
-    intended_hold_days_minimum: int
-    intended_hold_days_maximum: int
     distance_to_trigger: float
     distance_to_support: float
     reward_to_risk: float | None
     status: str
+    intended_hold_sessions: tuple[int, int]
+    requalify_dte: int
+
+
+@dataclass(frozen=True)
+class ContractSelection:
+    score: int
+    primary: OptionContractSnapshot | None
+    alternatives: tuple[OptionContractSnapshot, ...]
+    feed: str
+    realized_volatility: float | None
+    iv_to_realized_volatility: float | None
+    rejection_reasons: tuple[str, ...] = ()
+
+    @property
+    def trustworthy(self) -> bool:
+        return self.feed.lower() == "opra"
 
 
 @dataclass(frozen=True)
@@ -147,109 +249,27 @@ class Candidate:
     symbol: str
     company: str
     sector: str
-    benchmark: str
-    command: CommandResult
+    peer_etf: str
+    lane: StrategyLane
+    trend: TrendAnalysis
+    leadership_score: int | None
+    pattern: PatternSignal
     daily_momentum: MomentumResult
     four_hour_momentum: MomentumResult
-    option_liquidity: str
-    catalyst: Catalyst
-    market_regime: str
+    market: MarketContext
+    event_risk: EventRisk
+    contracts: ContractSelection
     entry_plan: EntryPlan
-    grade: Grade
-    missing_confirmation: str | None = None
-    not_s_tier_reason: str | None = None
-    rejection_reasons: list[str] = field(default_factory=list)
-
-
-@dataclass(frozen=True)
-class PutCommandResult:
-    symbol: str
-    score: int
-    put_bias: str
-    trend: str
-    relative_weakness: str
-    relative_volume: float
-    volume_state: str
-    volatility_state: str
-    structure: str
-    below_vwap: bool
-    anchored_vwap: float
-    weekly_alignment: bool
-    breakdown_level: float
-    breakdown_confirmed: bool
-    breakdown_watch: bool
-    rejection_resistance: float
-    rejection_setup: bool
-    extended_downside: bool
-    close: float
-    ema21: float
-    sma50: float
-    sma200: float
-    atr_percent: float = 0.0
-    rejection_reasons: list[str] = field(default_factory=list)
-
-
-@dataclass(frozen=True)
-class PutEntryPlan:
-    entry_mode: str
-    trigger: float
-    resistance: float
-    invalidation: float
-    nearest_support: float
-    target_price: float
-    target_gain_percent: float
-    research_put_strike: float
-    preferred_dte_minimum: int
-    preferred_dte_maximum: int
-    intended_hold_days_minimum: int
-    intended_hold_days_maximum: int
-    distance_to_trigger: float
-    distance_to_resistance: float
-    reward_to_risk: float | None
-    status: str
-
-
-@dataclass(frozen=True)
-class PutCandidate:
-    symbol: str
-    company: str
-    sector: str
-    benchmark: str
-    command: PutCommandResult
-    daily_momentum: MomentumResult
-    four_hour_momentum: MomentumResult
-    option_liquidity: str
-    catalyst: Catalyst
-    market_regime: str
-    entry_plan: PutEntryPlan
-    grade: Grade
-    missing_confirmation: str | None = None
-    not_s_tier_reason: str | None = None
-    rejection_reasons: list[str] = field(default_factory=list)
-
-
-@dataclass(frozen=True)
-class PutScanResult:
-    scan_type: ScanType
-    generated_at: datetime
-    market_data_timestamp: datetime
-    market_regime: str
-    universe_count: int
-    deterministic_pass_count: int
-    research_count: int
-    s_tier: list[PutCandidate]
-    a_plus: list[PutCandidate]
-    b_tier: list[PutCandidate]
-    technical_watch: list[PutCandidate]
-    rejected: list[RejectedRecord]
-    fixture: bool = False
+    scores: EvidenceScores
+    state: ReviewState
+    reasons: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class RejectedRecord:
     symbol: str
     stage: str
-    reason_codes: list[str]
+    reason_codes: tuple[str, ...]
     details: dict[str, object] = field(default_factory=dict)
 
 
@@ -258,13 +278,32 @@ class ScanResult:
     scan_type: ScanType
     generated_at: datetime
     market_data_timestamp: datetime
-    market_regime: str
+    market: MarketContext
     universe_count: int
-    deterministic_pass_count: int
-    research_count: int
-    s_tier: list[Candidate]
-    a_plus: list[Candidate]
-    b_tier: list[Candidate]
-    technical_watch: list[Candidate]
-    rejected: list[RejectedRecord]
+    evaluated_count: int
+    ready: tuple[Candidate, ...]
+    ready_verify: tuple[Candidate, ...]
+    developing: tuple[Candidate, ...]
+    verify_contract: tuple[Candidate, ...]
+    rejected: tuple[RejectedRecord, ...]
     fixture: bool = False
+
+    @property
+    def candidates(self) -> tuple[Candidate, ...]:
+        return self.ready + self.ready_verify + self.developing + self.verify_contract
+
+
+@dataclass(frozen=True)
+class SignalObservation:
+    signal_id: str
+    observed_at: datetime
+    horizon_sessions: int
+    underlying_close: float
+    forward_return: float
+    maximum_favorable_excursion: float
+    maximum_adverse_excursion: float
+    outcome: OutcomeState
+    triggered_at: datetime | None
+    invalidated_at: datetime | None
+    trigger_invalidation_order: str
+    contract_bid_exit: float | None = None

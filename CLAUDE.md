@@ -1,18 +1,12 @@
-# SwingSuiteScreener Engineering Contract
+# Bullish Participation v4
 
-Follow `AGENTS.md` as the single authoritative engineering and strategy contract.
-This file exists because configuration validation and some development environments
-expect a root `CLAUDE.md` file.
+Follow `AGENTS.md` as the engineering contract.
 
-The active profile is Bullish Participation v3: bullish only, pullback first,
-30-60 DTE, 0.45-0.65 call delta, 5-15 trading-day planning window, no earnings
-holds, no minimum ATR requirement, and no performance claims.
+The active system is a deterministic, read-only bullish stock and long-call research
+screener. `config/strategy.yaml` and `scanner/strategy_profile.py` are authoritative.
+The daily chart selects the setup, the four-hour chart confirms timing, and only
+completed candles count.
 
-Before changing behavior, read:
-
-- `AGENTS.md`
-- `config/strategy.yaml`
-- `scanner/strategy_profile.py`
-- `README.md`
-
-Keep the code, tests, reports, notifications, and manual aligned.
+Never add brokerage execution or account access. Never describe a score as a
+probability. Keep the Python scanner, HTML dashboard, Telegram output, Pine scripts,
+fixtures, tests, build plan, and training manual in parity.

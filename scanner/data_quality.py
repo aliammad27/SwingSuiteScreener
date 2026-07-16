@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from scanner.clocks import utc_now
-from scanner.models import Candle, OptionQuote
+from scanner.models import Candle, OptionContractSnapshot
 
 
 class DataQualityError(RuntimeError):
@@ -19,9 +19,11 @@ def require_completed_candles(candles: list[Candle], *, minimum: int, label: str
         raise DataQualityError(f"{label}: missing volume")
 
 
-def require_fresh_options(quotes: list[OptionQuote], max_age_minutes: int = 90) -> None:
-    if not quotes:
+def require_fresh_options(
+    contracts: list[OptionContractSnapshot], max_age_minutes: int = 90
+) -> None:
+    if not contracts:
         raise DataQualityError("Option chain is missing")
-    newest = max(q.timestamp for q in quotes)
-    if utc_now() - newest > timedelta(minutes=max_age_minutes) and quotes[0].symbol != "FIXTURE":
+    newest = max(contract.quote_timestamp for contract in contracts)
+    if utc_now() - newest > timedelta(minutes=max_age_minutes) and contracts[0].feed != "fixture":
         raise DataQualityError("Option chain is stale")

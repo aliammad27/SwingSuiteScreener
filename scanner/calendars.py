@@ -1,31 +1,33 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
+from functools import lru_cache
+from typing import Any
 
 from scanner.clocks import NY
 
-FULL_HOLIDAYS_2026 = {
-    date(2026, 1, 1),
-    date(2026, 1, 19),
-    date(2026, 2, 16),
-    date(2026, 4, 3),
-    date(2026, 5, 25),
-    date(2026, 6, 19),
-    date(2026, 7, 3),
-    date(2026, 9, 7),
-    date(2026, 11, 26),
-    date(2026, 12, 25),
-}
 
-HALF_DAYS_2026 = {date(2026, 11, 27), date(2026, 12, 24)}
+@lru_cache(maxsize=1)
+def _nyse_calendar() -> Any:
+    import exchange_calendars as exchange  # type: ignore[import-untyped]
+
+    return exchange.get_calendar("XNYS")
+
+
+def _session_label(day: date) -> Any:
+    import pandas as pd  # type: ignore[import-untyped]
+
+    return pd.Timestamp(day.isoformat())
 
 
 def is_trading_day(day: date) -> bool:
-    return day.weekday() < 5 and day not in FULL_HOLIDAYS_2026
+    return bool(_nyse_calendar().is_session(_session_label(day)))
 
 
 def is_half_day(day: date) -> bool:
-    return day in HALF_DAYS_2026
+    if not is_trading_day(day):
+        return False
+    return market_close_for(day).hour < 16
 
 
 def next_trading_day(after_day: date) -> date:
@@ -36,13 +38,18 @@ def next_trading_day(after_day: date) -> date:
 
 
 def market_close_for(day: date) -> datetime:
-    close = time(13, 0) if is_half_day(day) else time(16, 0)
-    return datetime.combine(day, close, tzinfo=NY)
+    if not is_trading_day(day):
+        raise ValueError(f"{day.isoformat()} is not an NYSE trading session.")
+    close = _nyse_calendar().session_close(_session_label(day))
+    converted = close.to_pydatetime()
+    if not isinstance(converted, datetime):
+        raise TypeError("NYSE calendar returned an invalid close timestamp.")
+    return converted.astimezone(NY)
 
 
 def assert_completed_daily(candle_timestamp: datetime, as_of: datetime) -> None:
-    local = as_of.astimezone(NY)
-    if not is_trading_day(candle_timestamp.astimezone(NY).date()):
+    candle_day = candle_timestamp.astimezone(NY).date()
+    if not is_trading_day(candle_day):
         raise ValueError("Daily candle timestamp is not a trading day.")
-    if local <= market_close_for(local.date()):
+    if as_of.astimezone(NY) <= market_close_for(candle_day):
         raise ValueError("Daily candle is not completed.")

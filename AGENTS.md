@@ -2,105 +2,143 @@
 
 ## Mission
 
-Maintain a deterministic, read-only research screener for the Bullish Participation
-v3 strategy. The application identifies bullish stock and call-option candidates;
-it never places orders, connects to an account, or presents a score as a probability.
+Maintain a deterministic, read-only research screener for Bullish Participation v4.
+The application identifies bullish stock and long-call candidates. It never places
+orders, reads brokerage accounts, manages positions, or presents a score as a
+probability.
 
-## Active Strategy
+## Source Of Truth
 
-The source of truth is `config/strategy.yaml` and its typed adapter in
-`scanner/strategy_profile.py`.
+Strategy behavior is owned by:
 
-- bullish only
-- controlled pullbacks preferred over breakouts
-- 30-60 DTE preferred, 21-75 hard bounds
-- 0.45-0.65 call delta preferred, 0.35 hard floor
-- 5-15 trading-day planning window
-- no earnings-event trades
-- no minimum ATR or OTM movement-capability gate
-- live option quality required before a setup is called ready
+1. `config/strategy.yaml`
+2. `scanner/strategy_profile.py`
+3. deterministic calculations in `scanner/`
+4. report, dashboard, Telegram, Pine, fixture, test, and manual parity
 
-Put modules are retained only for compatibility. Do not expose put commands while
-`direction: bullish_only` and `enable_put_scans: false` are active.
+No strategy threshold may be hidden in a workflow, report template, or chart script.
 
-## Setup States
+## Strategy Doctrine
 
-Internal enum codes remain stable for stored-state compatibility. User-facing
-labels are provided by `Grade.label`:
+- bullish calls only
+- daily chart owns trend and setup selection
+- four-hour chart owns timing
+- completed candles only
+- controlled pullbacks receive preference when geometry is otherwise comparable
+- price must remain above a rising long-term trend boundary
+- market regime, leadership, event risk, data freshness, and contract quality are
+  independent evidence gates
+- index and single-stock candidates use separate DTE, delta, liquidity, hold, and
+  requalification lanes
+- live option-chain data is authoritative
+- unknown earnings data prevents a fully ready state
 
-- S -> Ready
-- A+ -> Ready - Verify
-- B -> Developing
-- Technical Watch -> Verify Contract
-- Rejected -> Rejected
+## Review States
 
-Do not add performance claims to a state. Scores rank evidence; they do not estimate
-win probability, expected return, or certainty.
+- `Ready`: chart, market, event, risk, and trustworthy live contract evidence pass.
+- `Ready - Verify`: chart evidence passes, but a contract or event item needs manual
+  confirmation.
+- `Verify Contract`: chart evidence passes while the option feed is not trustworthy
+  enough for a contract decision.
+- `Developing`: bullish geometry exists but one or more chart gates are incomplete.
+- `Rejected`: a hard protection failed or the setup does not qualify.
 
-## Selection Ownership
+Scores rank evidence. They do not estimate win probability, certainty, or expected
+return.
 
-The daily chart owns trend and setup selection. The four-hour chart owns timing.
-Only completed candles count.
+## Pattern Library
 
-Hard protections include:
+The enabled pattern registry in `config/strategy.yaml` is authoritative. Every enabled
+pattern must have:
 
-- price above SMA 200
-- non-hostile market regime
-- no unresolved major event risk
-- no extension
-- daily/four-hour trend agreement
-- acceptable option liquidity or an explicit Verify Contract state
+- deterministic geometry
+- a trigger
+- an underlying invalidation
+- a planning objective
+- forming, ready, confirmed, failed, and stale behavior
+- positive, negative, and incomplete-candle tests
+- matching Pine and manual coverage
 
-Pullback setups receive a ranking advantage because their invalidation is usually
-clearer and their option volatility is less likely to be inflated by a breakout.
+Adding a visual pattern does not automatically make it production evidence. Research
+promotion follows the held-out validation process in
+`docs/Bullish_Participation_v4_Build_Plan.md`.
 
 ## Contract Research
 
-The screener proposes a near-the-money research strike. Live chain data remains
-authoritative. Verify DTE, delta, spread, volume, open interest, IV, and earnings
-before any decision.
+The screener selects actual call contracts from the available chain. Hard filters
+include lane DTE, delta, bid/ask validity, spread, open interest, volume, and quote
+freshness.
 
-Never label a synthetic objective as resistance. Always show the nearest confirmed
-daily pivot. Use it as the target when it offers sufficient room; otherwise label the
-target as a 2R planning objective and require review of the path through that pivot.
+Historical option research must:
 
-## Management Language
+- use contracts and quotes that existed at the signal timestamp
+- enter conservatively near the ask and exit conservatively near the bid
+- include commissions and explicit slippage assumptions
+- treat same-bar trigger and invalidation as invalidation-first
+- reject stale, missing, crossed, or zero-ask quotes
+- record the possibility of full premium loss
+- use chronological walk-forward folds with no future leakage
 
-Reports may describe the following educational process rules:
+Underlying returns are not option returns. A parameter remains unvalidated until
+point-in-time contract outcomes clear the documented promotion gates.
+
+## Entry And Management Language
+
+Reports and manuals may describe this educational process:
 
 - use the underlying invalidation
 - reassess after five sessions without meaningful progress
-- do not hold through earnings
-- exit or fully re-qualify by 21 DTE
+- do not carry event exposure through an earnings announcement
+- fully requalify at the lane DTE boundary
 - size for the possibility of full premium loss
 
-Do not prescribe universal premium-return stops, profit targets, account allocations,
-or expected win/loss distributions.
+Do not prescribe universal premium stops, universal profit targets, account
+allocations, or expected win/loss distributions.
+
+## Pine Contract
+
+The active Pine suite is:
+
+- `AS_Command_1D_v4.pine`
+- `AS_Momentum_4H_v4.pine`
+
+Both scripts must use Pine v6, completed-bar alerts, confirmed higher-timeframe
+requests, and constants checked by `config/pine_parity.json`. Higher-timeframe
+requests must use an offset expression with `barmerge.lookahead_on`. Pine is a chart
+confirmation and alert surface; Python remains the authoritative multi-symbol
+screener.
 
 ## Data And Safety
 
-- Alpaca access is read-only market data.
-- Never add brokerage execution or account endpoints.
+- Alpaca access is market-data only.
+- Never add brokerage account, position, order, exercise, or execution endpoints.
 - Never print secrets.
-- Fixture output must be labeled as simulated and not current market data.
-- Indicative option data can only produce Verify Contract.
-- Preserve stale-data, completed-candle, schedule, and notification-deduplication gates.
+- Fixture output must be labeled simulated and not current market data.
+- Indicative option data can only produce a contract-verification state.
+- Preserve stale-data, completed-candle, event-risk, schedule, and notification
+  deduplication gates.
+- Exchange sessions must come from a maintained exchange calendar, not a single-year
+  hardcoded list.
 
 ## Repository Standards
 
 - Python 3.12
-- deterministic pure calculations where practical
 - typed dataclasses for domain records
-- configuration values must flow through `StrategyProfile`
-- tests scale with behavior changes
-- generated reports, charts, logs, secrets, and state remain untracked
+- deterministic pure calculations where practical
+- structured parsing for configuration and provider payloads
+- configuration values flow through `StrategyProfile`
+- generated reports, charts, logs, research databases, secrets, and local document
+  staging stay untracked
+- active repository artifacts are v4 only
 
 Required checks:
 
 ```bash
 python -m pytest
-python -m ruff check scanner tests
+python -m ruff check scanner tests scripts
 python -m mypy scanner
+python scripts/check_pine_parity.py
+python scripts/release_audit.py
 python -m scanner.run_scan validate_configuration --fixture
 python -m scanner.run_scan post_close --fixture
 ```
@@ -109,10 +147,11 @@ python -m scanner.run_scan post_close --fixture
 
 When strategy behavior changes, update together:
 
-1. `config/strategy.yaml` and `StrategyProfile`
-2. calculations and grading
-3. reports and Telegram text
-4. fixtures and tests
-5. README, changelog, and training manual
+1. configuration and typed profile
+2. calculations, grading, and research assumptions
+3. Markdown, JSON, HTML, and Telegram output
+4. Pine constants and chart logic
+5. fixtures and tests
+6. README, changelog, build plan, and training manual
 
-The code, report, and manual must describe the same system.
+Do not push a strategy change while these surfaces disagree.

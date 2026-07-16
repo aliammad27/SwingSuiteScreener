@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from scanner.models import Candle, OptionQuote
+from datetime import date
+
+from scanner.models import Candle, OptionContractSnapshot
 from scanner.providers.base import MarketDataProvider, OptionDataProvider
 
 
@@ -10,8 +12,6 @@ class CachedMarketDataProvider(MarketDataProvider):
         self._daily: dict[str, list[Candle]] = {}
         self._four_hour: dict[str, list[Candle]] = {}
         self._weekly: dict[str, list[Candle]] = {}
-        self._company: dict[str, str] = {}
-        self._sector: dict[str, str] = {}
 
     def daily(self, symbol: str) -> list[Candle]:
         if symbol not in self._daily:
@@ -28,24 +28,22 @@ class CachedMarketDataProvider(MarketDataProvider):
             self._weekly[symbol] = self.delegate.weekly(symbol)
         return self._weekly[symbol]
 
-    def company_name(self, symbol: str) -> str:
-        if symbol not in self._company:
-            self._company[symbol] = self.delegate.company_name(symbol)
-        return self._company[symbol]
-
-    def sector(self, symbol: str) -> str:
-        if symbol not in self._sector:
-            self._sector[symbol] = self.delegate.sector(symbol)
-        return self._sector[symbol]
-
 
 class CachedOptionDataProvider(OptionDataProvider):
     def __init__(self, delegate: OptionDataProvider) -> None:
         self.delegate = delegate
-        self._quotes: dict[str, list[OptionQuote]] = {}
-        self.option_feed = getattr(delegate, "option_feed", "")
+        self._chains: dict[tuple[str, date, date], list[OptionContractSnapshot]] = {}
+        self.option_feed = getattr(delegate, "option_feed", "unknown")
 
-    def option_quotes(self, symbol: str) -> list[OptionQuote]:
-        if symbol not in self._quotes:
-            self._quotes[symbol] = self.delegate.option_quotes(symbol)
-        return self._quotes[symbol]
+    def call_chain(
+        self,
+        symbol: str,
+        expiration_date_gte: date,
+        expiration_date_lte: date,
+    ) -> list[OptionContractSnapshot]:
+        key = (symbol, expiration_date_gte, expiration_date_lte)
+        if key not in self._chains:
+            self._chains[key] = self.delegate.call_chain(
+                symbol, expiration_date_gte, expiration_date_lte
+            )
+        return self._chains[key]

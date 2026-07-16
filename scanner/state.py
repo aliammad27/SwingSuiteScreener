@@ -15,7 +15,9 @@ def notification_identifier(
             scan_date,
             run_type,
             candidate.symbol,
-            candidate.grade.value,
+            candidate.state.value,
+            candidate.pattern.pattern_type,
+            candidate.pattern.status.value,
             event_type,
             f"{candidate.entry_plan.trigger:.2f}",
             f"{candidate.entry_plan.support:.2f}",
@@ -32,19 +34,25 @@ def completion_snapshot(result: ScanResult) -> dict[str, Any]:
     second premarket or four-hour completion message would be pure noise.
     """
     setups: dict[str, Any] = {}
-    for candidate in (
-        result.s_tier + result.a_plus + result.b_tier + result.technical_watch
-    ):
+    for candidate in result.candidates:
         setups[candidate.symbol] = {
-            "grade": candidate.grade.value,
+            "state": candidate.state.value,
+            "lane": candidate.lane.value,
+            "pattern": candidate.pattern.pattern_type,
+            "pattern_status": candidate.pattern.status.value,
             "entry_status": candidate.entry_plan.status,
             "trigger": round(candidate.entry_plan.trigger, 2),
             "support": round(candidate.entry_plan.support, 2),
             "invalidation": round(candidate.entry_plan.invalidation, 2),
-            "option_liquidity": candidate.option_liquidity,
+            "contract": (
+                candidate.contracts.primary.contract_symbol
+                if candidate.contracts.primary is not None
+                else None
+            ),
+            "contract_feed": candidate.contracts.feed,
             "daily_filter": candidate.four_hour_momentum.daily_filter_passed,
         }
-    return {"market_regime": result.market_regime, "setups": setups}
+    return {"market_regime": result.market.regime, "market_score": result.market.score, "setups": setups}
 
 
 def should_send_completion(

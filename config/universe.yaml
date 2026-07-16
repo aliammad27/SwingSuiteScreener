@@ -1,176 +1,49 @@
 country: US
-security_types:
-  - common_stock
-options_required: true
 minimum_price: 10
 minimum_market_cap_usd: 1000000000
 minimum_average_daily_dollar_volume_usd: 50000000
-average_volume_lookback_days: 30
-exclude_otc: true
-exclude_penny_stocks: true
-exclude_leveraged_etfs: true
-exclude_inverse_etfs: true
-exclude_shell_companies: true
-exclude_missing_data: true
-symbols:
-  - MSFT
-  - AAPL
-  - NVDA
-  - AMD
-  - META
-  - AMZN
-  - GOOGL
-  - TSLA
-  - AVGO
-  - NFLX
-  - CRM
-  - ORCL
-  - ADBE
-  - NOW
-  - INTU
-  - QCOM
-  - AMAT
-  - LRCX
-  - MU
-  - TXN
-  - PANW
-  - CRWD
-  - PLTR
-  - DELL
-  - IBM
-  - CSCO
-  - UBER
-  - COIN
-  - JPM
-  - BAC
-  - GS
-  - MS
-  - C
-  - WFC
-  - V
-  - MA
-  - AXP
-  - PYPL
-  - COST
-  - WMT
-  - HD
-  - LOW
-  - TGT
-  - NKE
-  - SBUX
-  - MCD
-  - CMG
-  - DIS
-  - LLY
-  - UNH
-  - ABBV
-  - MRK
-  - AMGN
-  - GILD
-  - ISRG
-  - TMO
-  - CAT
-  - DE
-  - GE
-  - HON
-  - BA
-  - LMT
-  - RTX
-  - XOM
-  - CVX
-  - COP
-  - SLB
-  - SNOW
-  - NET
-  - DDOG
-  - ZS
-  - MDB
-  - OKTA
-  - SQ
-  - ROKU
-  - SMCI
-  - ANET
-  - WDAY
-  - ADSK
-  - SNPS
-  - CDNS
-  - KLAC
-  - MCHP
-  - ON
-  - MRVL
-  - T
-  - VZ
-  - CMCSA
-  - TMUS
-  - SNAP
-  - PINS
-  - RBLX
-  - BKNG
-  - ABNB
-  - DASH
-  - MAR
-  - HLT
-  - GM
-  - F
-  - ROST
-  - TJX
-  - ULTA
-  - BLK
-  - SCHW
-  - COF
-  - DFS
-  - USB
-  - PNC
-  - TFC
-  - CME
-  - ICE
-  - CB
-  - JNJ
-  - PFE
-  - BMY
-  - REGN
-  - VRTX
-  - MRNA
-  - CVS
-  - CI
-  - ELV
-  - HCA
-  - BSX
-  - SYK
-  - ZTS
-  - UPS
-  - FDX
-  - UNP
-  - CSX
-  - NSC
-  - EMR
-  - ITW
-  - MMM
-  - NOC
-  - GD
-  - EOG
-  - OXY
-  - VLO
-  - MPC
-  - HAL
-  - LNG
-  - FANG
-  - PSX
-  - NEM
-  - FCX
-  - APD
-  - SHW
-  - NUE
-  - EQIX
-  - PLD
-  - NEE
-  - DUK
-  - SO
-  - PEP
-  - KO
-  - PG
-  - CL
-  - MDLZ
-  - PM
-  - MO
-  - KMB
+options_required: true
+
+index_core:
+  symbols: [SPY, QQQ]
+
+sectors:
+  Technology:
+    benchmark: XLK
+    symbols: [MSFT, AAPL, CRM, ORCL, ADBE, NOW, INTU, DELL, IBM, CSCO, PLTR, SNOW, NET, DDOG, MDB, WDAY, ADSK]
+  Semiconductors:
+    benchmark: SMH
+    symbols: [NVDA, AMD, AVGO, QCOM, AMAT, LRCX, MU, TXN, SMCI, ANET, SNPS, CDNS, KLAC, MCHP, ON, MRVL]
+  Cybersecurity:
+    benchmark: XLK
+    symbols: [PANW, CRWD, ZS, OKTA]
+  Communication Services:
+    benchmark: XLC
+    symbols: [META, GOOGL, NFLX, DIS, ROKU, T, VZ, CMCSA, TMUS, SNAP, PINS, RBLX]
+  Consumer Discretionary:
+    benchmark: XLY
+    symbols: [AMZN, TSLA, UBER, HD, LOW, TGT, NKE, SBUX, MCD, CMG, BKNG, ABNB, DASH, MAR, HLT, GM, F, ROST, TJX, ULTA]
+  Consumer Staples:
+    benchmark: XLP
+    symbols: [COST, WMT, PEP, KO, PG, CL, MDLZ, PM, MO, KMB]
+  Financials:
+    benchmark: XLF
+    symbols: [COIN, JPM, BAC, GS, MS, C, WFC, V, MA, AXP, PYPL, SQ, BLK, SCHW, COF, DFS, USB, PNC, TFC, CME, ICE, CB]
+  Health Care:
+    benchmark: XLV
+    symbols: [LLY, UNH, ABBV, MRK, AMGN, GILD, ISRG, TMO, JNJ, PFE, BMY, REGN, VRTX, MRNA, CVS, CI, ELV, HCA, BSX, SYK, ZTS]
+  Industrials:
+    benchmark: XLI
+    symbols: [CAT, DE, GE, HON, BA, LMT, RTX, UPS, FDX, UNP, CSX, NSC, EMR, ITW, MMM, NOC, GD]
+  Energy:
+    benchmark: XLE
+    symbols: [XOM, CVX, COP, SLB, EOG, OXY, VLO, MPC, HAL, LNG, FANG, PSX]
+  Materials:
+    benchmark: XLB
+    symbols: [NEM, FCX, APD, SHW, NUE]
+  Real Estate:
+    benchmark: XLRE
+    symbols: [EQIX, PLD]
+  Utilities:
+    benchmark: XLU
+    symbols: [NEE, DUK, SO]

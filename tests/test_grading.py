@@ -1,184 +1,66 @@
 from dataclasses import replace
 
-from scanner.grading import grade_candidate
-from scanner.market_regime import classify_market_regime
-from scanner.models import Grade
-from scanner.providers.fixtures import FixtureDataProvider
-from scanner.run_scan import _scan_symbol
+from scanner.grading import classify_candidate
+from scanner.market_context import calculate_market_context
+from scanner.models import EventRiskStatus, PatternStatus, ReviewState
+from scanner.providers.fixtures import FIXTURE_TIMESTAMP
+from scanner.run_scan import _providers, _scan_symbol
+from scanner.strategy_profile import PROFILE
 
 
-def _a_plus_candidate():
-    provider = FixtureDataProvider()
-    regime = classify_market_regime(
-        provider.daily("SPY"), provider.daily("QQQ"), provider.weekly("SPY")
-    )
-    return _scan_symbol("APLUS", provider, provider, provider, regime)
+def _ready_candidate():
+    market, options, events = _providers(True, "ready")
+    context = calculate_market_context(market, ["SSTR", "APLUS", "BTIER", "ZERO"], PROFILE)
+    return _scan_symbol("SSTR", market, options, events, context, FIXTURE_TIMESTAMP)
 
 
-def test_hostile_market_blocks_primary_grade() -> None:
-    provider = FixtureDataProvider()
-    regime = classify_market_regime(
-        provider.daily("SPY"), provider.daily("QQQ"), provider.weekly("SPY")
-    )
-    candidate = _scan_symbol("SSTR", provider, provider, provider, regime)
-    hostile = grade_candidate(
-        candidate.symbol,
-        candidate.company,
-        candidate.sector,
-        candidate.benchmark,
-        candidate.command,
-        candidate.daily_momentum,
-        candidate.four_hour_momentum,
-        candidate.option_liquidity,
-        candidate.catalyst,
-        "Hostile",
-        candidate.entry_plan,
-    )
-    assert hostile.grade == Grade.REJECTED
-    assert "hostile_market_regime" in hostile.rejection_reasons
+def _classify(candidate, **changes):
+    values = {
+        "lane": candidate.lane,
+        "scores": candidate.scores,
+        "trend": candidate.trend,
+        "pattern": candidate.pattern,
+        "four_hour": candidate.four_hour_momentum,
+        "market": candidate.market,
+        "event": candidate.event_risk,
+        "contracts": candidate.contracts,
+        "profile": PROFILE,
+        "as_of": FIXTURE_TIMESTAMP,
+    }
+    values.update(changes)
+    return classify_candidate(**values)
 
 
-def test_b_tier_developing_setup() -> None:
-    candidate = _a_plus_candidate()
-    lower_command = replace(candidate.command, score=68)
-    lower_daily = replace(candidate.daily_momentum, score=60)
-    lower_4h = replace(candidate.four_hour_momentum, score=65)
-    result = grade_candidate(
-        candidate.symbol,
-        candidate.company,
-        candidate.sector,
-        candidate.benchmark,
-        lower_command,
-        lower_daily,
-        lower_4h,
-        candidate.option_liquidity,
-        candidate.catalyst,
-        candidate.market_regime,
-        candidate.entry_plan,
-    )
-    assert result.grade == Grade.B_TIER
-    assert result.missing_confirmation is not None
+def test_ready_threshold_is_inclusive() -> None:
+    candidate = _ready_candidate()
+    at_boundary = replace(candidate.scores, trend=80, setup=75, momentum=75, risk=70)
+    state, _ = _classify(candidate, scores=at_boundary)
+    assert state == ReviewState.READY
+    below = replace(at_boundary, trend=79)
+    state, reasons = _classify(candidate, scores=below)
+    assert state == ReviewState.DEVELOPING
+    assert "trend_below_ready_threshold" in reasons
 
 
-def test_b_tier_blocked_by_poor_liquidity() -> None:
-    candidate = _a_plus_candidate()
-    lower_command = replace(candidate.command, score=68)
-    lower_daily = replace(candidate.daily_momentum, score=60)
-    lower_4h = replace(candidate.four_hour_momentum, score=65)
-    result = grade_candidate(
-        candidate.symbol,
-        candidate.company,
-        candidate.sector,
-        candidate.benchmark,
-        lower_command,
-        lower_daily,
-        lower_4h,
-        "Poor",
-        candidate.catalyst,
-        candidate.market_regime,
-        candidate.entry_plan,
-    )
-    assert result.grade == Grade.REJECTED
-    assert "options_illiquid" in result.rejection_reasons
+def test_unknown_event_caps_opra_candidate_at_ready_verify() -> None:
+    candidate = _ready_candidate()
+    event = replace(candidate.event_risk, status=EventRiskStatus.UNKNOWN, earnings_date=None)
+    state, reasons = _classify(candidate, event=event)
+    assert state == ReviewState.READY_VERIFY
+    assert "event_calendar_requires_verification" in reasons
 
 
-def test_b_tier_blocked_by_hostile_regime() -> None:
-    candidate = _a_plus_candidate()
-    lower_command = replace(candidate.command, score=68)
-    lower_daily = replace(candidate.daily_momentum, score=60)
-    lower_4h = replace(candidate.four_hour_momentum, score=65)
-    result = grade_candidate(
-        candidate.symbol,
-        candidate.company,
-        candidate.sector,
-        candidate.benchmark,
-        lower_command,
-        lower_daily,
-        lower_4h,
-        candidate.option_liquidity,
-        candidate.catalyst,
-        "Hostile",
-        candidate.entry_plan,
-    )
-    assert result.grade == Grade.REJECTED
-    assert "hostile_market_regime" in result.rejection_reasons
+def test_forming_pattern_stays_developing() -> None:
+    candidate = _ready_candidate()
+    pattern = replace(candidate.pattern, status=PatternStatus.FORMING)
+    state, reasons = _classify(candidate, pattern=pattern)
+    assert state == ReviewState.DEVELOPING
+    assert "pattern_not_ready" in reasons
 
 
-def test_major_event_risk_rejects() -> None:
-    provider = FixtureDataProvider()
-    regime = classify_market_regime(
-        provider.daily("SPY"), provider.daily("QQQ"), provider.weekly("SPY")
-    )
-    candidate = _scan_symbol("SSTR", provider, provider, provider, regime)
-    risky = replace(candidate.catalyst, major_event_risk=True)
-    result = grade_candidate(
-        candidate.symbol,
-        candidate.company,
-        candidate.sector,
-        candidate.benchmark,
-        candidate.command,
-        candidate.daily_momentum,
-        candidate.four_hour_momentum,
-        candidate.option_liquidity,
-        risky,
-        candidate.market_regime,
-        candidate.entry_plan,
-    )
-    assert result.grade == Grade.REJECTED
-
-
-def _s_tier_candidate():
-    provider = FixtureDataProvider("s_tier")
-    regime = classify_market_regime(
-        provider.daily("SPY"), provider.daily("QQQ"), provider.weekly("SPY")
-    )
-    return _scan_symbol("SSTR", provider, provider, provider, regime)
-
-
-def _regrade(candidate, command=None):
-    return grade_candidate(
-        candidate.symbol,
-        candidate.company,
-        candidate.sector,
-        candidate.benchmark,
-        command if command is not None else candidate.command,
-        candidate.daily_momentum,
-        candidate.four_hour_momentum,
-        candidate.option_liquidity,
-        candidate.catalyst,
-        candidate.market_regime,
-        candidate.entry_plan,
-    )
-
-
-def test_low_atr_does_not_block_participation_profile() -> None:
-    candidate = _s_tier_candidate()
-    assert candidate.grade == Grade.S_TIER
-    slow = replace(candidate.command, atr_percent=1.5)
-    result = _regrade(candidate, command=slow)
-    assert result.grade == Grade.S_TIER
-    assert "atr_percent_below_floor" not in result.rejection_reasons
-
-
-def test_low_atr_is_not_added_as_a_rejection_reason() -> None:
-    candidate = _s_tier_candidate()
-    weak = replace(candidate.command, score=62, atr_percent=1.0)
-    result = _regrade(candidate, command=weak)
-    assert result.grade == Grade.REJECTED
-    assert "atr_percent_below_floor" not in result.rejection_reasons
-
-
-def test_tier_threshold_lists_unchanged() -> None:
-    candidate = _s_tier_candidate()
-    # S tier requires command score >= 85
-    assert _regrade(candidate, command=replace(candidate.command, score=84)).grade != Grade.S_TIER
-    assert _regrade(candidate, command=replace(candidate.command, score=85)).grade == Grade.S_TIER
-    # A Plus requires command score >= 75 (84 fails S but passes A+)
-    a_plus = _regrade(candidate, command=replace(candidate.command, score=84))
-    assert a_plus.grade == Grade.A_PLUS
-    below_a = _regrade(candidate, command=replace(candidate.command, score=74))
-    assert below_a.grade not in {Grade.S_TIER, Grade.A_PLUS}
-    # B tier requires command score >= 65
-    assert below_a.grade == Grade.B_TIER
-    rejected = _regrade(candidate, command=replace(candidate.command, score=64))
-    assert rejected.grade == Grade.REJECTED
+def test_stale_pattern_is_rejected() -> None:
+    candidate = _ready_candidate()
+    pattern = replace(candidate.pattern, status=PatternStatus.STALE, age_bars=4)
+    state, reasons = _classify(candidate, pattern=pattern)
+    assert state == ReviewState.REJECTED
+    assert "pattern_stale" in reasons

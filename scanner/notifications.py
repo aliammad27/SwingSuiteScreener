@@ -4,30 +4,29 @@ import argparse
 import json
 import os
 import ssl
-import subprocess
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib import parse, request
 
+from scanner.charts import render_candidate_summary
 from scanner.clocks import NY
-from scanner.config import ROOT, load_local_env
-from scanner.models import Candidate, Grade, PutCandidate, PutScanResult, ScanResult
-from scanner.strategy_profile import PROFILE
+from scanner.config import ROOT, load_config, load_local_env
+from scanner.models import Candidate, ScanResult, ScanType
+from scanner.state import NotificationState, completion_snapshot, should_send_completion
+from scanner.storage.local_json import LocalJsonStorage
 
 TELEGRAM_TEST_MESSAGE = (
     "ALI'S SCREENER BOT TEST\n\n"
-    "Telegram notifications are connected successfully.\n"
-    "This was a test only. No market scan was performed."
+    "Bullish Participation v4 notifications are connected.\n"
+    "This is a delivery test only; no market scan was performed."
 )
 
 
 def redact_secret(value: str) -> str:
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    if token:
-        value = value.replace(token, "[REDACTED_TELEGRAM_TOKEN]")
-    return value
+    return value.replace(token, "[REDACTED_TELEGRAM_TOKEN]") if token else value
 
 
 @dataclass(frozen=True)
@@ -60,10 +59,16 @@ class TelegramNotifier:
         except Exception:
             return None
 
-    def send(self, message: str) -> DeliveryResult:
+    def send(self, message: str, *, silent: bool = False) -> DeliveryResult:
         if not self.available():
             return DeliveryResult(False, "not_configured", "Telegram token or chat id is missing.")
-        payload = parse.urlencode({"chat_id": self.chat_id, "text": message}).encode()
+        payload = parse.urlencode(
+            {
+                "chat_id": self.chat_id,
+                "text": message[:4096],
+                "disable_notification": "true" if silent else "false",
+            }
+        ).encode()
         for attempt in range(3):
             try:
                 req = request.Request(self._api("sendMessage"), data=payload, method="POST")
@@ -71,16 +76,11 @@ class TelegramNotifier:
                     body = json.loads(response.read().decode("utf-8"))
                 if body.get("ok") is True:
                     return DeliveryResult(True, "delivered")
-                description = redact_secret(
-                    str(body.get("description", "Telegram rejected message"))
-                )
-                if "Unauthorized" in description:
-                    return DeliveryResult(False, "invalid_credentials", description)
+                description = redact_secret(str(body.get("description", "Telegram rejected message")))
                 return DeliveryResult(False, "rejected", description)
             except Exception as exc:
-                safe = redact_secret(str(exc))
                 if attempt == 2:
-                    return DeliveryResult(False, "temporary_failure", safe)
+                    return DeliveryResult(False, "temporary_failure", redact_secret(str(exc)))
                 time.sleep(0.5 * (2**attempt))
         return DeliveryResult(False, "temporary_failure", "unknown failure")
 
@@ -96,34 +96,27 @@ class TelegramNotifier:
                 with photo_path.open("rb") as handle:
                     response = requests.post(
                         self._api("sendPhoto"),
-                        data={"chat_id": self.chat_id or "", "caption": caption},
+                        data={"chat_id": self.chat_id or "", "caption": caption[:1024]},
                         files={"photo": (photo_path.name, handle, "image/png")},
                         timeout=20,
                     )
                 body = response.json()
                 if body.get("ok") is True:
                     return DeliveryResult(True, "delivered")
-                description = redact_secret(str(body.get("description", "Telegram rejected photo")))
-                if "Unauthorized" in description:
-                    return DeliveryResult(False, "invalid_credentials", description)
-                return DeliveryResult(False, "rejected", description)
+                return DeliveryResult(
+                    False,
+                    "rejected",
+                    redact_secret(str(body.get("description", "Telegram rejected photo"))),
+                )
             except Exception as exc:
-                safe = redact_secret(str(exc))
                 if attempt == 2:
-                    return DeliveryResult(False, "temporary_failure", safe)
+                    return DeliveryResult(False, "temporary_failure", redact_secret(str(exc)))
                 time.sleep(0.5 * (2**attempt))
         return DeliveryResult(False, "temporary_failure", "unknown failure")
 
     def discover_chat_id(self) -> int:
         if not self.token:
             raise RuntimeError("Telegram token is not configured.")
-        with request.urlopen(
-            self._api("getMe"), timeout=12, context=self._ssl_context()
-        ) as response:
-            identity = json.loads(response.read().decode("utf-8"))
-        username = identity.get("result", {}).get("username")
-        if username != self.username:
-            raise RuntimeError("Configured Telegram bot username does not match Bot API identity.")
         with request.urlopen(
             self._api("getUpdates"), timeout=12, context=self._ssl_context()
         ) as response:
@@ -132,286 +125,74 @@ class TelegramNotifier:
             chat = item.get("message", {}).get("chat", {})
             if chat.get("type") == "private" and "id" in chat:
                 return int(chat["id"])
-        raise RuntimeError("No private chat found. Send a message to @AlisScreenerBot first.")
+        raise RuntimeError("No private chat found. Send the bot a message first.")
 
 
-def local_macos_fallback(summary: str) -> bool:
-    try:
-        subprocess.run(
-            [
-                "osascript",
-                "-e",
-                f'display notification "{summary}" with title "SwingSuiteScreener"',
-            ],
-            check=False,
-            timeout=5,
-            capture_output=True,
-        )
-        return True
-    except Exception:
-        return False
-
-
-def _dist_to_trigger(candidate: Candidate) -> str:
-    price = candidate.command.close
-    trigger = candidate.entry_plan.trigger
-    if price <= 0:
-        return ""
-    pct = (trigger - price) / price * 100
-    sign = "+" if pct >= 0 else ""
-    return f"{sign}{pct:.1f}%"
-
-
-def _compact_plan_line(candidate: Candidate) -> str:
-    entry = candidate.entry_plan
-    price = candidate.command.close
-    bucket = candidate.grade.label
-    dist = _dist_to_trigger(candidate)
-    dist_str = f" ({dist})" if dist else ""
+def _score_line(candidate: Candidate) -> str:
+    scores = candidate.scores
+    leadership = "-" if scores.leadership is None else str(scores.leadership)
     return (
-        f"{candidate.symbol} {bucket} | "
-        f"${price:.2f} → ${entry.trigger:.2f}{dist_str} | "
-        f"Sup ${entry.support:.2f} | "
-        f"Tgt ${entry.target_price:.2f} | "
-        f"{entry.preferred_dte_minimum}-{entry.preferred_dte_maximum}DTE | "
-        f"{entry.intended_hold_days_minimum}-{entry.intended_hold_days_maximum}d hold"
+        f"T{scores.trend} L{leadership} S{scores.setup} M{scores.momentum} "
+        f"Mk{scores.market} C{scores.contract} R{scores.risk}"
     )
 
 
-def _levels_line(candidate: Candidate) -> str:
-    entry = candidate.entry_plan
-    price = candidate.command.close
-    dist = _dist_to_trigger(candidate)
-    dist_str = f" ({dist})" if dist else ""
+def _contract_line(candidate: Candidate) -> str:
+    contract = candidate.contracts.primary
+    if contract is None:
+        return f"Contract: verify live chain ({candidate.contracts.feed})"
     return (
-        f"${price:.2f} → ${entry.trigger:.2f}{dist_str} | "
-        f"Sup ${entry.support:.2f} | "
-        f"Res ${entry.resistance_level:.2f} | "
-        f"Tgt ${entry.target_price:.2f}"
+        f"Call: {contract.expiration_date.strftime('%b %d')} ${contract.strike:g} "
+        f"D{contract.delta:.2f} | {contract.dte}DTE | {contract.spread_percent:.1f}% spread"
     )
 
 
-def _scores_line(candidate: Candidate) -> str:
-    cmd = candidate.command
-    daily = candidate.daily_momentum
-    four = candidate.four_hour_momentum
-    return (
-        f"C{cmd.score} | D{daily.score} | 4H{four.score} | "
-        f"RS {cmd.relative_strength} | Liquidity {candidate.option_liquidity}"
-    )
-
-
-MANAGEMENT_FOOTER = (
-    "Management: underlying invalidation | reassess after 5 sessions without progress | "
-    f"no earnings holds | exit or re-qualify by {PROFILE.exit_or_roll_dte} DTE | size for full premium risk"
-)
-
-
-def _option_line(candidate: Candidate) -> str:
+def candidate_caption(candidate: Candidate) -> str:
     entry = candidate.entry_plan
     return (
-        f"Strike ${entry.research_call_strike:.2f} | "
-        f"{entry.preferred_dte_minimum}-{entry.preferred_dte_maximum}DTE | "
-        f"{entry.intended_hold_days_minimum}-{entry.intended_hold_days_maximum}d hold"
-    )
-
-
-def candidate_message(candidate: Candidate, report_path: Path) -> str:
-    if candidate.grade == Grade.S_TIER:
-        return (
-            f"READY FOR REVIEW - {candidate.symbol}\n\n"
-            f"{_levels_line(candidate)}\n"
-            f"{_scores_line(candidate)}\n"
-            f"{_option_line(candidate)}\n"
-            f"Earnings: {candidate.catalyst.earnings_date or 'Unknown'} | "
-            f"Catalyst: {candidate.catalyst.summary[:60]}\n"
-            f"{MANAGEMENT_FOOTER}\n\n"
-            f"Report: {report_path}"
-        )
-    if candidate.grade == Grade.A_PLUS:
-        return (
-            f"READY - VERIFY - {candidate.symbol}\n\n"
-            f"{_levels_line(candidate)}\n"
-            f"{_scores_line(candidate)}\n"
-            f"{_option_line(candidate)}\n"
-            f"Missing: {candidate.missing_confirmation or 'None'}\n"
-            f"{MANAGEMENT_FOOTER}\n\n"
-            f"Report: {report_path}"
-        )
-    if candidate.grade == Grade.B_TIER:
-        return (
-            f"DEVELOPING - {candidate.symbol}\n\n"
-            f"{_levels_line(candidate)}\n"
-            f"{_scores_line(candidate)}\n"
-            f"{_option_line(candidate)}\n"
-            "Status: Developing — verify levels before entry\n\n"
-            f"Report: {report_path}"
-        )
-    return (
-        f"VERIFY CONTRACT - {candidate.symbol}\n\n"
-        f"{_levels_line(candidate)}\n"
-        f"{_scores_line(candidate)}\n"
-        f"{_option_line(candidate)}\n"
-        f"Option Liquidity: {candidate.option_liquidity} — verify live chain before entry\n\n"
-        f"Report: {report_path}"
+        f"{candidate.symbol} | {candidate.lane.label} | {candidate.state.label}\n"
+        f"{candidate.pattern.pattern_type.replace('_', ' ')} / {candidate.pattern.status.value} / age {candidate.pattern.age_bars}\n"
+        f"${candidate.trend.close:.2f} -> ${entry.trigger:.2f} | Inv ${entry.invalidation:.2f} | Obj ${entry.target_price:.2f}\n"
+        f"{_score_line(candidate)}\n{_contract_line(candidate)}\n"
+        "Manual review only. A long call can lose the full premium."
     )
 
 
 def completion_message(result: ScanResult, report_path: Path) -> str:
     now_et = datetime.now(NY).strftime("%-I:%M %p ET")
-    title = result.scan_type.value.replace("_", " ").upper()
-    all_setups = result.s_tier + result.a_plus + result.b_tier + result.technical_watch
-    if all_setups:
-        count_line = (
-            f"Ready: {len(result.s_tier)} | Ready-check: {len(result.a_plus)} | "
-            f"Developing: {len(result.b_tier)} | Verify: {len(result.technical_watch)}"
+    candidates = result.candidates
+    header = (
+        f"{result.scan_type.value.replace('_', ' ').upper()} - BULLISH V4\n"
+        f"Market {result.market.regime} {result.market.score}/100 | "
+        f"Breadth {result.market.breadth_above_sma50:.0f}% >50D / "
+        f"{result.market.breadth_above_ema21:.0f}% >21D | {now_et}\n\n"
+        f"Ready {len(result.ready)} | Ready-check {len(result.ready_verify)} | "
+        f"Verify {len(result.verify_contract)} | Developing {len(result.developing)}"
+    )
+    if not candidates:
+        return header + "\n\nNo bullish setup is ready for review. Cash is a valid state."
+    lines: list[str] = [header, ""]
+    for candidate in candidates[:8]:
+        lines.extend(
+            [
+                f"{candidate.symbol} | {candidate.lane.label} | {candidate.state.label}",
+                f"{candidate.pattern.pattern_type.replace('_', ' ')} {candidate.pattern.status.value} age {candidate.pattern.age_bars}",
+                f"${candidate.trend.close:.2f} -> ${candidate.entry_plan.trigger:.2f} | Inv ${candidate.entry_plan.invalidation:.2f} | Obj ${candidate.entry_plan.target_price:.2f}",
+                _score_line(candidate),
+                _contract_line(candidate),
+                "",
+            ]
         )
-        setup_lines = [_compact_plan_line(c) for c in all_setups]
-        return (
-            f"{title} SCAN COMPLETE\n"
-            f"Market: {result.market_regime} | Scanned: {result.universe_count} | {now_et}\n\n"
-            f"{count_line}\n\n"
-            f"{chr(10).join(setup_lines)}\n\n"
-            f"Full report: {report_path}"
-        )
-    return (
-        f"{title} SCAN COMPLETE\n"
-        f"Market: {result.market_regime} | Scanned: {result.universe_count} | {now_et}\n\n"
-        "No setups are ready for review. Wait for alignment."
-    )
-
-
-def _put_dist_to_trigger(candidate: PutCandidate) -> str:
-    price = candidate.command.close
-    trigger = candidate.entry_plan.trigger
-    if price <= 0:
-        return ""
-    pct = (price - trigger) / price * 100
-    sign = "+" if pct >= 0 else ""
-    return f"{sign}{pct:.1f}%"
-
-
-def _put_compact_plan_line(candidate: PutCandidate) -> str:
-    entry = candidate.entry_plan
-    price = candidate.command.close
-    bucket = "TW" if candidate.grade.value == "Technical Watch" else candidate.grade.value
-    dist = _put_dist_to_trigger(candidate)
-    dist_str = f" ({dist} to breakdown)" if dist else ""
-    return (
-        f"{candidate.symbol} {bucket}P | "
-        f"${price:.2f} ↓ ${entry.trigger:.2f}{dist_str} | "
-        f"Inv ${entry.invalidation:.2f} | "
-        f"Tgt ${entry.target_price:.2f} | "
-        f"{entry.preferred_dte_minimum}-{entry.preferred_dte_maximum}DTE | "
-        f"{entry.intended_hold_days_minimum}-{entry.intended_hold_days_maximum}d hold"
-    )
-
-
-def _put_levels_line(candidate: PutCandidate) -> str:
-    entry = candidate.entry_plan
-    price = candidate.command.close
-    dist = _put_dist_to_trigger(candidate)
-    dist_str = f" ({dist})" if dist else ""
-    return (
-        f"${price:.2f} ↓ ${entry.trigger:.2f}{dist_str} | "
-        f"Res ${entry.resistance:.2f} | "
-        f"Inv ${entry.invalidation:.2f} | "
-        f"Tgt ${entry.target_price:.2f}"
-    )
-
-
-def _put_scores_line(candidate: PutCandidate) -> str:
-    cmd = candidate.command
-    daily = candidate.daily_momentum
-    four = candidate.four_hour_momentum
-    return (
-        f"PC{cmd.score} | D{daily.score} | 4H{four.score} | "
-        f"RW {cmd.relative_weakness} | Liquidity {candidate.option_liquidity}"
-    )
-
-
-def _put_option_line(candidate: PutCandidate) -> str:
-    entry = candidate.entry_plan
-    return (
-        f"Strike ${entry.research_put_strike:.2f} | "
-        f"{entry.preferred_dte_minimum}-{entry.preferred_dte_maximum}DTE | "
-        f"{entry.intended_hold_days_minimum}-{entry.intended_hold_days_maximum}d hold"
-    )
-
-
-def put_candidate_message(candidate: PutCandidate, report_path: Path) -> str:
-    grade = candidate.grade.value
-    if grade == "S":
-        return (
-            f"S-PUT TIER SETUP — {candidate.symbol}\n\n"
-            f"{_put_levels_line(candidate)}\n"
-            f"{_put_scores_line(candidate)}\n"
-            f"{_put_option_line(candidate)}\n"
-            f"Earnings: {candidate.catalyst.earnings_date or 'Unknown'} | "
-            f"Catalyst: {candidate.catalyst.summary[:60]}\n"
-            f"{MANAGEMENT_FOOTER}\n\n"
-            f"Report: {report_path}"
-        )
-    if grade == "A+":
-        return (
-            f"A-PLUS PUT SETUP — {candidate.symbol}\n\n"
-            f"{_put_levels_line(candidate)}\n"
-            f"{_put_scores_line(candidate)}\n"
-            f"{_put_option_line(candidate)}\n"
-            f"Missing: {candidate.missing_confirmation or 'None'}\n"
-            f"{MANAGEMENT_FOOTER}\n\n"
-            f"Report: {report_path}"
-        )
-    if grade == "B":
-        return (
-            f"B-PUT TIER SETUP — {candidate.symbol}\n\n"
-            f"{_put_levels_line(candidate)}\n"
-            f"{_put_scores_line(candidate)}\n"
-            f"{_put_option_line(candidate)}\n"
-            "Status: Developing put — verify levels before entry\n\n"
-            f"Report: {report_path}"
-        )
-    return (
-        f"PUT TECHNICAL WATCH — {candidate.symbol}\n\n"
-        f"{_put_levels_line(candidate)}\n"
-        f"{_put_scores_line(candidate)}\n"
-        f"{_put_option_line(candidate)}\n"
-        f"Option Liquidity: {candidate.option_liquidity} — verify live chain before entry\n\n"
-        f"Report: {report_path}"
-    )
-
-
-def put_completion_message(result: PutScanResult, report_path: Path) -> str:
-    now_et = datetime.now(NY).strftime("%-I:%M %p ET")
-    title = result.scan_type.value.replace("_", " ").upper()
-    all_setups = result.s_tier + result.a_plus + result.b_tier + result.technical_watch
-    regime_note = (
-        "Hostile (put-supportive)"
-        if result.market_regime == "Hostile"
-        else result.market_regime
-    )
-    if all_setups:
-        count_line = (
-            f"S: {len(result.s_tier)} | A+: {len(result.a_plus)} | "
-            f"B: {len(result.b_tier)} | TW: {len(result.technical_watch)}"
-        )
-        setup_lines = [_put_compact_plan_line(c) for c in all_setups]
-        return (
-            f"{title} SCAN COMPLETE\n"
-            f"Market: {regime_note} | Scanned: {result.universe_count} | {now_et}\n\n"
-            f"{count_line}\n\n"
-            f"{chr(10).join(setup_lines)}\n\n"
-            f"Full report: {report_path}"
-        )
-    return (
-        f"{title} SCAN COMPLETE\n"
-        f"Market: {regime_note} | Scanned: {result.universe_count} | {now_et}\n\n"
-        "No put setups qualified. Standards not lowered."
-    )
+    lines.append(f"Audit report: {report_path}")
+    return "\n".join(lines)[:4096]
 
 
 def log_delivery(
-    identifier: str, status: str, ticker: str = "", event_type: str = "", error: str = ""
+    identifier: str,
+    status: str,
+    ticker: str = "",
+    event_type: str = "",
+    error: str = "",
 ) -> None:
     log_path = ROOT / "logs" / "notifications.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -430,6 +211,45 @@ def log_delivery(
         handle.write(line + "\n")
 
 
+def notify_scan(result: ScanResult, report_path: Path, *, fixture: bool) -> None:
+    message = completion_message(result, report_path)
+    if fixture:
+        print(message)
+        return
+    state = NotificationState(LocalJsonStorage())
+    snapshot = completion_snapshot(result)
+    only_on_change = result.scan_type in {ScanType.PREMARKET, ScanType.FOUR_HOUR}
+    configured = load_config("notifications")
+    if only_on_change:
+        setting = configured.get(
+            "send_premarket_only_on_change"
+            if result.scan_type == ScanType.PREMARKET
+            else "send_four_hour_only_on_change",
+            True,
+        )
+        only_on_change = bool(setting)
+    previous = state.last_completion_snapshot(result.scan_type.value)
+    state.record_completion_snapshot(result.scan_type.value, snapshot)
+    if not should_send_completion(previous, snapshot, only_on_change):
+        log_delivery("digest", "suppressed_unchanged", event_type="digest")
+        return
+    notifier = TelegramNotifier()
+    delivery = notifier.send(message, silent=result.scan_type != ScanType.POST_CLOSE)
+    log_delivery("digest", delivery.status, event_type="digest", error=delivery.safe_error or "")
+    if not delivery.delivered:
+        return
+    for candidate in result.candidates[:3]:
+        chart_path = render_candidate_summary(candidate)
+        photo = notifier.send_photo(chart_path, candidate_caption(candidate))
+        log_delivery(
+            f"chart_{candidate.symbol}",
+            photo.status,
+            ticker=candidate.symbol,
+            event_type="candidate_chart",
+            error=photo.safe_error or "",
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=["discover_chat_id"])
@@ -437,11 +257,9 @@ def main() -> int:
     if args.command == "discover_chat_id":
         notifier = TelegramNotifier()
         try:
-            chat_id = notifier.discover_chat_id()
+            print(f"Detected private chat id: {notifier.discover_chat_id()}")
         except Exception as exc:
             print(f"Unable to discover Telegram chat id safely: {redact_secret(str(exc))}")
-            return 0
-        print(f"Detected private chat id for @{notifier.username}: {chat_id}")
     return 0
 
 

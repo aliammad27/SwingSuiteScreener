@@ -1,29 +1,45 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from dataclasses import replace
+from datetime import UTC, date, datetime, timedelta
 from math import sin
 
-from scanner.models import Candle, Catalyst, OptionQuote
-from scanner.providers.base import CatalystProvider, MarketDataProvider, OptionDataProvider
+from scanner.models import (
+    Candle,
+    EventRisk,
+    EventRiskStatus,
+    OptionContractSnapshot,
+)
+from scanner.providers.base import EventRiskProvider, MarketDataProvider, OptionDataProvider
 
 FIXTURE_TIMESTAMP = datetime(2026, 6, 18, 20, 0, tzinfo=UTC)
 
 
 def _series(
-    symbol: str, timeframe: str, count: int, base: float, drift: float, amp: float
+    symbol: str,
+    timeframe: str,
+    count: int,
+    base: float,
+    drift: float,
+    amplitude: float,
 ) -> list[Candle]:
     candles: list[Candle] = []
     close = base
-    step = timedelta(days=1) if timeframe == "1D" else timedelta(hours=4)
+    if timeframe == "1D":
+        step = timedelta(days=1)
+    elif timeframe == "1W":
+        step = timedelta(days=7)
+    else:
+        step = timedelta(hours=4)
     start = FIXTURE_TIMESTAMP - (step * count)
     for idx in range(count):
-        wave = sin(idx / 4) * amp
+        wave = sin(idx / 4) * amplitude
         close = max(5, close + drift + wave * 0.12)
-        if idx > count - 6 and drift != 0:
-            close += drift * 0.55
+        if idx > count - 9 and drift > 0:
+            close += drift * (idx - (count - 9)) * 0.20
         open_price = close - (drift * 0.35) - (wave * 0.02)
-        high = max(open_price, close) + max(0.45, amp * 0.55)
-        low = min(open_price, close) - max(0.45, amp * 0.55)
+        high = max(open_price, close) + max(0.45, amplitude * 0.55)
+        low = min(open_price, close) - max(0.45, amplitude * 0.55)
         volume = 1_200_000 + idx * 1200
         if idx == count - 1 and drift > 0:
             volume = int(volume * 1.45)
@@ -44,144 +60,137 @@ def _series(
     return candles
 
 
-class FixtureDataProvider(MarketDataProvider, OptionDataProvider, CatalystProvider):
+class FixtureDataProvider(MarketDataProvider, OptionDataProvider, EventRiskProvider):
     def __init__(self, scenario: str = "default") -> None:
         self.scenario = scenario
+        self.option_feed = "indicative" if scenario == "technical_watch" else "opra"
 
     def _profile(self, symbol: str) -> tuple[float, float, float]:
         if self.scenario == "zero" or symbol == "ZERO":
             return 80, -0.08, 1.6
         if symbol == "APLUS":
-            return 55, 0.12, 2.2
-        if self.scenario == "b_tier" or symbol == "BTIER":
+            return 55, 0.14, 1.9
+        if symbol == "BTIER":
             return 38, 0.014, 2.6
-        # Put scenarios: bearish profiles.  Amplitude must be large enough for real RSI
-        # oscillation (amp * 0.12 > |drift| ensures some up bars exist), but counts
-        # are chosen so the LAST bars fall in the negative sin phase (keeping MACD bearish).
-        # Bases are low enough that ATR percent clears the 2.0 movement-filter floor.
-        if symbol in {"SPUT", "APUT", "BPUT"}:
-            if symbol == "APUT":
-                return 90, -0.055, 1.5
-            if symbol == "BPUT":
-                return 80, -0.018, 0.6
-            return 115, -0.05, 2.0  # SPUT: moderate drift so RSI stays 30-40, not pinned at 0
-        # SPY/QQQ in put scenarios: falling market for put-supportive regime
-        if self.scenario in {"put_s_tier", "put_a_plus", "put_b_tier"}:
-            if symbol in {"SPY", "QQQ"}:
-                return 450, -0.030, 0.8
-        if symbol in {"SPY", "QQQ"}:
-            return 100, 0.04, 1.5
-        return 70, 0.045, 3.8
+        if symbol in {"SPY", "QQQ", "XLK"}:
+            return 100, 0.06, 1.2
+        return 70, 0.17, 1.8
 
     def daily(self, symbol: str) -> list[Candle]:
-        base, drift, amp = self._profile(symbol)
-        # SPUT/APUT use count=272 (negative sin phase) — MACD stays below signal.
-        # BPUT uses count=280 (positive sin phase, MACD still below signal but recovering):
-        # rsi_falling=False and histogram_falling=False keep the score at 65, which
-        # passes B-tier (daily ≥55) but fails A+ (daily ≥70).
-        if symbol == "SPUT" or symbol == "APUT":
-            count = 272
-        elif symbol == "BPUT":
-            count = 280
-        else:
-            count = 260
-        return _series(symbol, "1D", count, base, drift, amp)
+        base, drift, amplitude = self._profile(symbol)
+        return _series(symbol, "1D", 320, base, drift, amplitude)
 
     def four_hour(self, symbol: str) -> list[Candle]:
-        base, drift, amp = self._profile(symbol)
+        base, drift, amplitude = self._profile(symbol)
         if symbol == "APLUS":
-            drift = 0.10
-        # SPUT/APUT use count=170 (negative sin phase — MACD reliably below signal).
-        # BPUT uses count=180 (positive sin phase, score=65): passes B-tier (4H ≥60)
-        # but fails A+ (4H ≥75).
-        if symbol == "SPUT" or symbol == "APUT":
-            count = 170
-        elif symbol == "BPUT":
-            count = 180
-        else:
-            count = 160
-        return _series(symbol, "4H", count, base, drift, amp)
+            drift = 0.08
+        candles = _series(symbol, "4H", 200, base, drift, amplitude)
+        if symbol not in {"BTIER", "ZERO"}:
+            anchor = candles[-9].close
+            for offset, index in enumerate(range(len(candles) - 8, len(candles)), 1):
+                close = anchor + offset * 0.70
+                candles[index] = replace(
+                    candles[index],
+                    open=round(close - 0.35, 2),
+                    high=round(close + 0.55, 2),
+                    low=round(close - 0.55, 2),
+                    close=round(close, 2),
+                    volume=int(candles[index].volume * 1.15),
+                )
+        return candles
 
     def weekly(self, symbol: str) -> list[Candle]:
-        base, drift, amp = self._profile(symbol)
-        return _series(symbol, "1W", 80, base, drift * 4.2, amp * 2)
+        base, drift, amplitude = self._profile(symbol)
+        return _series(symbol, "1W", 100, base, drift * 4.2, amplitude * 2)
 
-    def company_name(self, symbol: str) -> str:
-        return {
-            "SSTR": "Swing Suite Strong Fixture Corp.",
-            "APLUS": "A Plus Watch Fixture Corp.",
-            "BTIER": "B Tier Developing Fixture Corp.",
-            "ZERO": "Zero Candidate Fixture Corp.",
-            "SPY": "SPDR S&P 500 ETF Trust",
-            "QQQ": "Invesco QQQ Trust",
-            "SPUT": "S-Put Tier Fixture Corp.",
-            "APUT": "A-Plus Put Fixture Corp.",
-            "BPUT": "B-Put Tier Fixture Corp.",
-        }.get(symbol, symbol)
-
-    def sector(self, symbol: str) -> str:
-        if symbol == "ZERO":
-            return "Industrials"
-        if symbol in {"SPUT", "APUT", "BPUT"}:
-            return "Financials"
-        return "Technology"
-
-    def option_quotes(self, symbol: str) -> list[OptionQuote]:
-        if self.scenario == "technical_watch":
+    def call_chain(
+        self,
+        symbol: str,
+        expiration_date_gte: date,
+        expiration_date_lte: date,
+    ) -> list[OptionContractSnapshot]:
+        if self.scenario == "missing_contracts":
+            return []
+        lane_is_index = symbol in {"SPY", "QQQ"}
+        target_dte = 60 if lane_is_index else 45
+        expiry = FIXTURE_TIMESTAMP.date() + timedelta(days=target_dte)
+        if not expiration_date_gte <= expiry <= expiration_date_lte:
             return []
         if symbol == "ZERO":
-            return [OptionQuote("FIXTURE", 21, 0.35, 1.0, 1.4, 50, 10, 85, FIXTURE_TIMESTAMP)]
+            return [
+                self._contract(symbol, expiry, 0.30, 1.0, 1.5, 50, 10, strike=100.0)
+            ]
         if symbol == "APLUS":
-            return [OptionQuote("FIXTURE", 45, 0.55, 3.00, 3.30, 650, 180, 58, FIXTURE_TIMESTAMP)]
-        if symbol == "BTIER":
-            return [OptionQuote("FIXTURE", 45, 0.55, 3.00, 3.30, 650, 180, 58, FIXTURE_TIMESTAMP)]
-        # Put fixture symbols: use absolute delta ~0.30 (call-side from free feed).
-        # SPUT uses tighter spread so classify_put_option_liquidity returns "Good" (S-tier requires it).
-        if symbol == "SPUT":
-            return [OptionQuote("FIXTURE", 17, 0.30, 3.80, 4.18, 1200, 450, 38, FIXTURE_TIMESTAMP)]
-        if symbol == "APUT":
-            return [OptionQuote("FIXTURE", 18, 0.30, 2.00, 2.22, 800, 220, 38, FIXTURE_TIMESTAMP)]
-        if symbol == "BPUT":
-            return [OptionQuote("FIXTURE", 18, 0.30, 2.00, 2.22, 650, 180, 38, FIXTURE_TIMESTAMP)]
-        return [OptionQuote("FIXTURE", 45, 0.55, 4.10, 4.38, 1200, 350, 42, FIXTURE_TIMESTAMP)]
+            return [
+                self._contract(symbol, expiry, 0.55, 3.00, 3.18, 500, 100, strike=75.0)
+            ]
+        base_delta = 0.67 if lane_is_index else 0.55
+        minimum_oi = 2500 if lane_is_index else 1200
+        minimum_volume = 1200 if lane_is_index else 350
+        return [
+            self._contract(
+                symbol,
+                expiry,
+                base_delta + offset,
+                4.10 + index * 0.35,
+                (4.18 if lane_is_index else 4.28) + index * 0.35,
+                minimum_oi - index * 100,
+                minimum_volume - index * 20,
+                strike=100.0 + index * 2.5,
+            )
+            for index, offset in enumerate((0.0, -0.04, 0.05))
+        ]
 
-    def catalyst(self, symbol: str) -> Catalyst:
-        now = FIXTURE_TIMESTAMP
+    def _contract(
+        self,
+        symbol: str,
+        expiry: date,
+        delta: float,
+        bid: float,
+        ask: float,
+        open_interest: int,
+        volume: int,
+        *,
+        strike: float,
+    ) -> OptionContractSnapshot:
+        encoded_strike = int(strike * 1000)
+        contract_symbol = f"{symbol}{expiry.strftime('%y%m%d')}C{encoded_strike:08d}"
+        return OptionContractSnapshot(
+            contract_symbol=contract_symbol,
+            underlying_symbol=symbol,
+            expiration_date=expiry,
+            strike=strike,
+            dte=(expiry - FIXTURE_TIMESTAMP.date()).days,
+            delta=delta,
+            gamma=0.025,
+            theta=-0.08,
+            vega=0.14,
+            implied_volatility=0.34,
+            bid=bid,
+            ask=ask,
+            bid_size=40,
+            ask_size=45,
+            open_interest=open_interest,
+            volume=volume,
+            feed=self.option_feed,
+            quote_timestamp=FIXTURE_TIMESTAMP,
+        )
+
+    def event_risk(self, symbol: str) -> EventRisk:
         if symbol == "ZERO":
-            return Catalyst(
+            return EventRisk(
                 symbol=symbol,
-                summary="No verified catalyst; simulated weak setup.",
-                verified=False,
-                source_title="Fixture weak candidate",
-                publisher="SwingSuiteScreener fixtures",
-                source_url="fixture:zero",
-                publication_timestamp=now,
-                retrieval_timestamp=now,
-                earnings_date="2026-06-23",
-                major_event_risk=True,
+                status=EventRiskStatus.BLOCKED,
+                earnings_date=FIXTURE_TIMESTAMP.date() + timedelta(days=5),
+                summary="Fixture earnings fall inside the blackout window.",
+                source="fixture",
+                checked_at=FIXTURE_TIMESTAMP,
             )
-        if symbol in {"SPUT", "APUT", "BPUT"}:
-            return Catalyst(
-                symbol=symbol,
-                summary="Technical continuation only",
-                verified=True,
-                source_title="Fixture bearish catalyst record",
-                publisher="SwingSuiteScreener fixtures",
-                source_url=f"fixture:{symbol.lower()}",
-                publication_timestamp=now,
-                retrieval_timestamp=now,
-                earnings_date="2026-09-15",
-                major_event_risk=False,
-            )
-        return Catalyst(
+        return EventRisk(
             symbol=symbol,
-            summary="Verified simulated technical continuation with sector support.",
-            verified=True,
-            source_title="Fixture catalyst record",
-            publisher="SwingSuiteScreener fixtures",
-            source_url=f"fixture:{symbol.lower()}",
-            publication_timestamp=now,
-            retrieval_timestamp=now,
-            earnings_date="2026-08-15",
-            major_event_risk=False,
+            status=EventRiskStatus.CLEAR,
+            earnings_date=FIXTURE_TIMESTAMP.date() + timedelta(days=60),
+            summary="Fixture event calendar is clear.",
+            source="fixture",
+            checked_at=FIXTURE_TIMESTAMP,
         )

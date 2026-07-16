@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -23,47 +25,13 @@ def load_local_env() -> None:
         os.environ.setdefault(key.strip(), value.strip())
 
 
-def _parse_scalar(value: str) -> Any:
-    clean = value.strip().strip('"').strip("'")
-    if clean.lower() in {"true", "false"}:
-        return clean.lower() == "true"
-    if clean == "":
-        return ""
-    try:
-        return int(clean)
-    except ValueError:
-        try:
-            return float(clean)
-        except ValueError:
-            return clean
-
-
 def load_simple_yaml(path: Path) -> dict[str, Any]:
-    data: dict[str, Any] = {}
-    current_key: str | None = None
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.split("#", 1)[0].rstrip()
-        if not line.strip():
-            continue
-        if line.startswith("  - ") and current_key:
-            data.setdefault(current_key, []).append(_parse_scalar(line[4:]))
-            continue
-        if line.startswith("  ") and current_key and isinstance(data.get(current_key), dict):
-            key, value = line.strip().split(":", 1)
-            data[current_key][key.strip()] = _parse_scalar(value)
-            continue
-        if ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        key = key.strip()
-        value = value.strip()
-        current_key = key
-        if value == "":
-            next_is_map = key in {"notify_on", "alpaca"}
-            data[key] = {} if next_is_map else []
-        else:
-            data[key] = _parse_scalar(value)
-    return data
+    loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if loaded is None:
+        return {}
+    if not isinstance(loaded, dict):
+        raise ConfigurationError(f"Configuration root must be a mapping: {path}")
+    return {str(key): value for key, value in loaded.items()}
 
 
 def load_config(name: str) -> dict[str, Any]:
@@ -79,28 +47,43 @@ def get_env(name: str, default: str | None = None) -> str | None:
 
 def validate_configuration(fixture: bool = False) -> list[str]:
     load_local_env()
-    required = [
-        "strategy",
-        "universe",
-        "schedule",
-        "notifications",
-        "providers",
-        "storage",
-    ]
+    required = ["strategy", "universe", "events", "schedule", "notifications", "providers", "storage"]
     warnings: list[str] = []
     for name in required:
         load_config(name)
     strategy = load_config("strategy")
+    if strategy.get("schema_version") != 4:
+        raise ConfigurationError("Strategy schema_version must be 4.")
     if strategy.get("direction") != "bullish_only":
-        raise ConfigurationError("Bullish Participation v3 requires direction: bullish_only.")
-    if int(strategy["preferred_dte_target_minimum"]) < int(
-        strategy["preferred_dte_hard_minimum"]
-    ):
-        raise ConfigurationError("Preferred DTE minimum cannot be below the hard DTE minimum.")
-    if float(strategy["preferred_delta_minimum"]) < float(strategy["delta_hard_floor"]):
-        raise ConfigurationError("Preferred delta minimum cannot be below the delta hard floor.")
-    if bool(strategy.get("enable_put_scans")):
-        raise ConfigurationError("Put scans must remain disabled for the bullish-only profile.")
+        raise ConfigurationError("Bullish Participation v4 requires direction: bullish_only.")
+    lanes = strategy.get("lanes")
+    if not isinstance(lanes, dict) or set(lanes) != {"index_core", "leader_swing"}:
+        raise ConfigurationError("Strategy must define index_core and leader_swing lanes.")
+    for lane_name, raw_lane in lanes.items():
+        if not isinstance(raw_lane, dict):
+            raise ConfigurationError(f"Lane {lane_name} must be a mapping.")
+        preferred_dte = raw_lane.get("preferred_dte")
+        hard_dte = raw_lane.get("hard_dte")
+        preferred_delta = raw_lane.get("preferred_delta")
+        hard_delta = raw_lane.get("hard_delta")
+        if not all(isinstance(value, list) and len(value) == 2 for value in (preferred_dte, hard_dte, preferred_delta, hard_delta)):
+            raise ConfigurationError(f"Lane {lane_name} ranges must contain two values.")
+        assert isinstance(preferred_dte, list)
+        assert isinstance(hard_dte, list)
+        assert isinstance(preferred_delta, list)
+        assert isinstance(hard_delta, list)
+        if int(preferred_dte[0]) < int(hard_dte[0]) or int(preferred_dte[1]) > int(hard_dte[1]):
+            raise ConfigurationError(f"Lane {lane_name} preferred DTE must fit inside hard DTE.")
+        if float(preferred_delta[0]) < float(hard_delta[0]) or float(preferred_delta[1]) > float(hard_delta[1]):
+            raise ConfigurationError(f"Lane {lane_name} preferred delta must fit inside hard delta.")
+    patterns = strategy.get("patterns")
+    if not isinstance(patterns, dict) or not isinstance(patterns.get("enabled"), list):
+        raise ConfigurationError("Strategy patterns.enabled must be a list.")
+    enabled_patterns = [str(value) for value in patterns["enabled"]]
+    if len(enabled_patterns) != len(set(enabled_patterns)):
+        raise ConfigurationError("Strategy patterns.enabled must not contain duplicates.")
+    if len(enabled_patterns) < 12:
+        raise ConfigurationError("Bullish Participation v4 requires the full pattern library.")
     if not (ROOT / "CLAUDE.md").exists():
         raise ConfigurationError("Root CLAUDE.md is required.")
     if fixture:
@@ -112,5 +95,13 @@ def validate_configuration(fixture: bool = False) -> list[str]:
     if not os.environ.get("TELEGRAM_BOT_TOKEN") or not os.environ.get("TELEGRAM_CHAT_ID"):
         warnings.append(
             "Telegram token or chat id is not configured; live notifications are disabled."
+        )
+    if os.environ.get("ALPACA_OPTION_FEED", "indicative").lower() != "opra":
+        warnings.append(
+            "The configured option feed is not OPRA; candidates will require contract verification."
+        )
+    if not os.environ.get("MASSIVE_API_KEY"):
+        warnings.append(
+            "Historical option data is not configured; long-call optimization remains unvalidated."
         )
     return warnings

@@ -1,165 +1,188 @@
 # SwingSuiteScreener
 
-SwingSuiteScreener is a deterministic, bullish-only research screener for liquid
-U.S. stocks and call options. The active strategy is **Bullish Participation v3**:
-find leading stocks in healthy markets, wait for a controlled pullback or current
-breakout confirmation, and use options with enough time and delta to participate
-without requiring an immediate explosive move.
+SwingSuiteScreener is the read-only research implementation of **Bullish
+Participation v4**. It scans liquid U.S. stocks and index ETFs for bullish daily
+setups, confirms timing on completed four-hour candles, and evaluates actual call
+contracts without connecting to a brokerage account or placing orders.
 
-This project is decision support only. It does not connect to a brokerage account,
-size positions, place orders, or manage live trades.
+The system is designed for research prioritization. A review state is not a
+recommendation, probability, or performance forecast.
 
-## Active Profile
+## What V4 Produces
 
-- Direction: bullish only
-- Preferred setup: controlled pullback in an established uptrend
-- Secondary setup: current confirmed breakout that is not extended
-- Preferred expiration: 30-60 DTE
-- Hard expiration bounds: 21-75 DTE
-- Preferred call delta: 0.45-0.65
-- Hard call-delta floor: 0.35
-- Planning window: 5-15 trading days
-- Re-qualification point: 21 DTE
-- Maximum spread: 8% of option mid
-- Minimum open interest: 500
-- Minimum daily contract volume: 100
-- Earnings-event trades: disabled
+Every scan creates:
 
-The profile intentionally has no minimum ATR requirement. It seeks sustained
-participation, not only high-volatility names capable of reaching distant OTM
-strikes quickly.
+- `latest.md`: human-readable audit report
+- `latest.json`: structured evidence and contract payload
+- `latest.html`: self-contained responsive screener dashboard
+- Telegram digest and candidate summaries when configured
+- research-ledger records for later outcome evaluation
 
-## Setup States
+Output folders follow the scan type under `reports/`.
 
-- `Ready`: all technical, timing, market, event-risk, and option-quality gates pass.
-- `Ready - Verify`: the setup is close, with one minor confirmation requiring review.
-- `Developing`: the trend is constructive but the current entry is not ready.
-- `Verify Contract`: the chart passes, but live option quality is unavailable or indicative.
-- `Rejected`: one or more hard gates fail.
+## Strategy Lanes
 
-The stored JSON grade codes remain `S`, `A+`, `B`, and `Technical Watch` for
-backward compatibility. Reports and notifications use the plain-language states.
+| Lane | Symbols | Preferred DTE | Hard DTE | Preferred Delta | Intended Hold | Requalify |
+|---|---|---:|---:|---:|---:|---:|
+| Index Core | SPY, QQQ | 45-90 | 30-120 | 0.60-0.75 | 10-30 sessions | 30 DTE |
+| Leader Swing | Curated liquid leaders | 30-60 | 21-75 | 0.45-0.65 | 5-15 sessions | 21 DTE |
 
-## Selection Logic
+All other thresholds are defined in `config/strategy.yaml` and loaded through
+`scanner/strategy_profile.py`.
 
-The daily chart owns selection. Important inputs include:
+## Review States
 
-- price, EMA 21, SMA 50, and SMA 200 trend alignment
-- rising SMA 200
-- relative strength against QQQ
-- monthly anchored VWAP
-- weekly EMA 21 alignment
-- market structure and volume
-- pullback support or breakout confirmation
-- extension and market-regime gates
+- **Ready**: chart, market, event, risk, and trustworthy contract evidence pass.
+- **Ready - Verify**: chart evidence passes, but an event or contract item still
+  needs confirmation.
+- **Verify Contract**: chart evidence passes while the option feed is indicative or
+  otherwise insufficient for a contract decision.
+- **Developing**: bullish geometry exists but one or more chart gates are incomplete.
+- **Rejected**: a hard protection failed or the setup does not qualify.
 
-The four-hour chart owns timing. It must agree with the daily trend and use only
-completed candles. Pullbacks receive a ranking advantage because they generally
-offer clearer invalidation and avoid paying for post-breakout volatility expansion.
+Scores rank evidence. They do not estimate win probability.
 
-## Contract Research
+## Bullish Pattern Library
 
-The screener produces a near-the-money research strike. It is only a starting
-point for opening the live chain. The usable contract must be verified against:
+The daily engine evaluates:
 
-- 30-60 DTE preference
-- 0.45-0.65 delta preference
-- bid/ask spread
-- open interest and daily volume
-- implied volatility
-- earnings and other event risk
+1. controlled pullback
+2. confirmed breakout
+3. bull flag
+4. flat base
+5. ascending triangle
+6. volatility contraction / tight base
+7. cup with handle
+8. breakout retest
+9. double bottom
+10. inverse head and shoulders
+11. falling wedge
+12. rounding base
 
-The former OTM midpoint-strike formula and movement-capability filter are inactive.
+Every pattern uses the same forming, ready, confirmed, failed, and stale lifecycle.
+Only completed candles can change a pattern state.
 
-## Target And Invalidation
+## Local Setup
 
-The report always shows the nearest confirmed daily pivot resistance. If that pivot
-offers sufficient room, it becomes the target. If it is too close, the report labels
-the target as a `2R planning objective` and explicitly requires review of the path
-through nearby resistance. A synthetic objective is never described as resistance.
+Python 3.12 is required.
 
-Management output is based on the underlying thesis:
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+cp .env.example .env
+```
 
-- exit when the underlying invalidation is confirmed
-- reassess after five sessions without meaningful progress
-- never hold through earnings
-- exit or fully re-qualify the idea by 21 DTE
-- size with the possibility of a full premium loss in mind
+For live scans, add read-only Alpaca market-data credentials and Telegram credentials
+to `.env`. OPRA is required for a fully trustworthy contract state. The free
+indicative option feed remains useful for chart research but always requires live
+broker verification.
 
-The screener does not claim a win rate, average return, or expected value.
+`MASSIVE_API_KEY` is optional and reserved for historical option research. Without
+point-in-time historical option quotes, the project can evaluate underlying behavior
+and forward paper evidence, but it cannot claim that long-call parameters are
+validated after bid/ask costs.
 
 ## Commands
 
-Run deterministic fixture scans without credentials:
-
 ```bash
-python -m scanner.run_scan validate_configuration --fixture
 python -m scanner.run_scan post_close --fixture
 python -m scanner.run_scan premarket --fixture
 python -m scanner.run_scan four_hour --fixture
-python -m scanner.run_scan daily_prep --fixture
-python -m scanner.run_scan weekly_radar --fixture
+python -m scanner.run_scan replay --fixture --symbol SPY --horizon 10
+python -m scanner.run_scan evaluate-signals --fixture
+python -m scanner.run_scan research-report
+python -m scanner.run_scan validate_configuration --fixture
+python -m scanner.run_scan readiness_check
+python -m scanner.run_scan release-audit
 ```
 
-Useful fixture scenarios:
+Fixture output is simulated and explicitly labeled as not current market data.
+
+## Dashboard
+
+Open the HTML produced by a fixture scan:
 
 ```bash
-python -m scanner.run_scan post_close --fixture --scenario s_tier
-python -m scanner.run_scan post_close --fixture --scenario a_plus
-python -m scanner.run_scan post_close --fixture --scenario technical_watch
-python -m scanner.run_scan post_close --fixture --scenario zero
+open reports/post_close/latest.html
 ```
 
-Legacy put modules remain in the repository for compatibility and historical
-tests, but put commands are not exposed by the active CLI and `enable_put_scans`
-must remain `false` for this profile.
+The dashboard is self-contained and supports:
 
-## Live Data
+- review-state segmented filters
+- symbol, sector, lane, and pattern search
+- lane filtering
+- market regime and breadth summary
+- dense candidate comparison
+- per-candidate evidence bars
+- trigger, support, invalidation, and planning-objective levels
+- selected contract and liquidity detail
+- event status and pending checks
+- rejected diagnostics
+- mobile and print layouts
 
-Live scans use read-only Alpaca market-data endpoints. Configure these values in
-an untracked `.env` file:
+No server is required.
 
-```text
-ALPACA_API_KEY_ID=
-ALPACA_API_SECRET_KEY=
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHAT_ID=
+## Pine V6 Suite
+
+- `AS_Command_1D_v4.pine`: daily trend, leadership, market proxy, the complete
+  bullish pattern library, levels, review state, screener plots, and alerts.
+- `AS_Momentum_4H_v4.pine`: four-hour RSI/MACD timing, confirmed daily filter,
+  divergence warnings, reaction levels, screener plots, and alerts.
+
+Both scripts use confirmed higher-timeframe values. Pine constants shared with the
+Python strategy are checked by:
+
+```bash
+python scripts/check_pine_parity.py
 ```
 
-The free Alpaca option feed may be indicative. An indicative result becomes
-`Verify Contract`, never `Ready`. Contract selection must be confirmed in the
-broker using current option-chain data.
+TradingView must compile the scripts in Pine Editor before use. Script code exposes
+alert conditions; the user still creates and activates alerts in TradingView.
 
-## Automation
+## Research Standard
 
-GitHub Actions run the following Eastern Time research routines:
+The current research stack has three levels:
 
-- Nightly preparation: 9:00 PM
-- Weekly radar: Sunday 8:00 PM
-- Premarket validation: 8:45 AM
-- Four-hour refresh: 1:35 PM
-- Post-close scan: 4:20 PM
+1. **Sequential underlying replay**: proves signal generation uses only data
+   available at each historical cutoff.
+2. **Forward research ledger**: records signal, contract, config hash, and future
+   observations without silently changing thresholds.
+3. **Point-in-time long-call simulation**: uses historical bid/ask quotes,
+   conservative fills, commissions, stale-quote rejection, same-bar pessimism,
+   event exits, DTE requalification, and chronological walk-forward folds.
 
-Reports are written to `reports/<scan_type>/latest.md` and `.json`. Runtime
-reports, charts, logs, environment files, and local state are ignored by Git.
+Research can make a parameter eligible for forward shadow validation. It never
+automatically changes production configuration.
 
-## Validation
+The complete optimization and release protocol is in
+`docs/Bullish_Participation_v4_Build_Plan.md`.
+
+## Safety Boundaries
+
+- market data only
+- no account, position, order, exercise, or execution endpoints
+- no secret output
+- no incomplete candles
+- no event trade when earnings risk is blocked
+- no fully ready state from indicative option data
+- no performance claims from fixture or underlying-only evidence
+- full premium loss is always possible for a long call
+
+Read the training manual before using the system:
+
+- canonical source: `docs/Bullish_Participation_v4_Training_Manual.md`
+- visually verified DOCX:
+  `docs/Ali_Swing_Suite_Bullish_Participation_v4_Training_Manual.docx`
+
+## Quality Gates
 
 ```bash
 python -m pytest
-python -m ruff check scanner tests
+python -m ruff check scanner tests scripts
 python -m mypy scanner
+python scripts/check_pine_parity.py
+python scripts/release_audit.py
+python -m scanner.run_scan validate_configuration --fixture
+python -m scanner.run_scan post_close --fixture
 ```
-
-The test suite covers indicators, grading, contract classification, reports,
-notifications, fixtures, schedules, state, data quality, and the read-only
-provider boundary.
-
-## Important Limitations
-
-- Technical scores are deterministic rankings, not probabilities.
-- A qualifying chart does not prove that an option is fairly priced.
-- Delta is not a guaranteed probability of profit.
-- Options can lose the full premium, including when the long-term market trend is up.
-- Historical upward drift does not guarantee appreciation during a specific option's life.
-- The user remains responsible for independent review and every trading decision.
