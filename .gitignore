@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+tmp/
 *.pyc
 data/raw/*
 data/processed/*
@@ -16,7 +17,7 @@ data/research/*
 !data/research/.gitkeep
 reports/post_close/*
 reports/premarket/*
-reports/four_hour/*
+reports/intraday/*
 reports/archive/*
 reports/engineering/*
 reports/charts/*
@@ -24,7 +25,7 @@ reports/research/*
 reports/dashboard/*
 !reports/post_close/.gitkeep
 !reports/premarket/.gitkeep
-!reports/four_hour/.gitkeep
+!reports/intraday/.gitkeep
 !reports/archive/.gitkeep
 !reports/engineering/.gitkeep
 !reports/charts/.gitkeep

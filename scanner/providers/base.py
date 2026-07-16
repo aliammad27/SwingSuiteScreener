@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from scanner.models import Candle, EventRisk, OptionContractSnapshot
+from scanner.models import Candle, EventRisk, OptionContractSnapshot, StrategyLane
 
 
 @dataclass(frozen=True)
@@ -28,12 +28,14 @@ class HistoricalOptionQuote:
 
 
 class MarketDataProvider(ABC):
+    stock_feed: str = "unknown"
+
     @abstractmethod
     def daily(self, symbol: str) -> list[Candle]:
         raise NotImplementedError
 
     @abstractmethod
-    def four_hour(self, symbol: str) -> list[Candle]:
+    def one_hour(self, symbol: str) -> list[Candle]:
         raise NotImplementedError
 
     @abstractmethod
@@ -45,18 +47,41 @@ class OptionDataProvider(ABC):
     option_feed: str = "unknown"
 
     @abstractmethod
+    def eligible_underlyings(
+        self,
+        symbols: list[str],
+        expiration_date_gte: date,
+        expiration_date_lte: date,
+    ) -> set[str]:
+        raise NotImplementedError
+
+    @abstractmethod
     def call_chain(
         self,
         symbol: str,
         expiration_date_gte: date,
         expiration_date_lte: date,
+        as_of: datetime,
+    ) -> list[OptionContractSnapshot]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def latest_quotes(
+        self,
+        contracts: list[OptionContractSnapshot],
+        as_of: datetime,
     ) -> list[OptionContractSnapshot]:
         raise NotImplementedError
 
 
 class EventRiskProvider(ABC):
     @abstractmethod
-    def event_risk(self, symbol: str) -> EventRisk:
+    def event_risk(
+        self,
+        symbol: str,
+        as_of: datetime,
+        lane: StrategyLane,
+    ) -> EventRisk:
         raise NotImplementedError
 
 

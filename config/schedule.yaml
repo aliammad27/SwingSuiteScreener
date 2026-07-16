@@ -2,6 +2,13 @@ timezone: America/New_York
 nightly_prep_time: "21:00"
 post_close_time: "16:20"
 premarket_time: "08:45"
-four_hour_time: "13:35"
+intraday_scan_times:
+  - "10:35"
+  - "11:35"
+  - "12:35"
+  - "13:35"
+  - "14:35"
+  - "15:35"
+final_intraday_scan_management_only: true
 respect_holidays: true
 respect_half_days: true

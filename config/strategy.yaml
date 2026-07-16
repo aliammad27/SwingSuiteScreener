@@ -1,12 +1,13 @@
-schema_version: 4
-profile_name: Bullish Participation v4
+schema_version: 5
+profile_name: Bullish Weekly Participation v5
 direction: bullish_only
+validation_state: research_default
 
 review_thresholds:
   trend: 80
   leadership: 70
   setup: 75
-  momentum: 75
+  timing: 75
   market: 70
   contract: 80
   risk: 70
@@ -17,47 +18,78 @@ market:
   mixed_minimum: 45
 
 patterns:
-  enabled:
+  production:
     - controlled_pullback
     - confirmed_breakout
     - bull_flag
-    - flat_base
-    - ascending_triangle
-    - vcp_tight_base
-    - cup_with_handle
     - breakout_retest
+    - flat_base
+    - vcp_tight_base
+    - ascending_triangle
+  context_only:
+    - cup_with_handle
     - double_bottom
     - inverse_head_and_shoulders
     - falling_wedge
     - rounding_base
-  ready_distance_atr: 0.5
-  maximum_confirmed_extension_atr: 1.0
-  maximum_confirmed_age_bars: 3
+  ready_distance_atr: 0.30
+  maximum_confirmed_extension_atr: 0.75
+  maximum_confirmed_age_bars: 1
 
 event_risk:
-  earnings_blackout_calendar_days: 7
+  leader_earnings_buffer_sessions: 2
+  macro_post_event_completed_hours: 1
+  maximum_source_age_hours: 24
+  index_macro_events:
+    - fomc
+    - cpi
+    - employment_situation
+
+timing:
+  entry_window_start_et: "10:30"
+  entry_window_end_et: "14:45"
+  final_hour_management_only: true
+  minimum_completed_bars: 80
+
+data_trust:
+  required_stock_feed: sip
+  required_option_feed: opra
+  maximum_quote_age_minutes: 2
+
+universe:
+  minimum_price: 20
+  minimum_average_daily_dollar_volume_usd: 100000000
+  options_required: true
 
 lanes:
-  index_core:
+  index_weekly:
     symbols: [SPY, QQQ]
-    preferred_dte: [45, 90]
-    hard_dte: [30, 120]
+    preferred_dte: [10, 16]
+    hard_dte: [7, 21]
     preferred_delta: [0.60, 0.75]
     hard_delta: [0.50, 0.85]
-    intended_hold_sessions: [10, 30]
-    requalify_dte: 30
+    intended_hold_sessions: [1, 4]
+    requalify_dte: 5
+    no_progress_sessions: 2
+    maximum_spread_percent: 3.0
+    minimum_open_interest: 2000
+    minimum_volume: 500
+    minimum_bid_ask_size: 10
+    maximum_theta_ask_percent: 5.0
+    prefer_nonstandard_weekly: true
+    monthly_liquidity_advantage_percent: 25.0
+  leader_weekly:
+    preferred_dte: [14, 21]
+    hard_dte: [10, 24]
+    preferred_delta: [0.55, 0.70]
+    hard_delta: [0.45, 0.80]
+    intended_hold_sessions: [1, 5]
+    requalify_dte: 7
+    no_progress_sessions: 2
     maximum_spread_percent: 5.0
     minimum_open_interest: 1000
-    minimum_volume: 500
-    maximum_quote_age_minutes: 30
-  leader_swing:
-    preferred_dte: [30, 60]
-    hard_dte: [21, 75]
-    preferred_delta: [0.45, 0.65]
-    hard_delta: [0.35, 0.75]
-    intended_hold_sessions: [5, 15]
-    requalify_dte: 21
-    maximum_spread_percent: 8.0
-    minimum_open_interest: 500
-    minimum_volume: 100
-    maximum_quote_age_minutes: 30
+    minimum_volume: 200
+    minimum_bid_ask_size: 5
+    maximum_theta_ask_percent: 6.0
+    prefer_nonstandard_weekly: true
+    monthly_liquidity_advantage_percent: 25.0

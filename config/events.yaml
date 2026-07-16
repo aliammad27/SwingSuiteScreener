@@ -1,2 +1,8 @@
+schema_version: 5
 default_status: unknown
+maximum_source_age_hours: 24
+official_sources:
+  earnings: Massive Benzinga earnings
+  fomc: Federal Reserve FOMC calendar
+  cpi_and_employment: U.S. Bureau of Labor Statistics release calendar
 events: {}

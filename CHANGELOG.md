@@ -1,21 +1,32 @@
 # Changelog
 
-## 4.0.0 - 2026-07-16
+## 5.0.0 - 2026-07-16
 
-- Established Bullish Participation v4 as the only active strategy surface.
-- Added separate Index Core and Leader Swing contract lanes.
-- Added deterministic market, trend, leadership, momentum, event, risk, and option
-  evidence gates.
-- Added a twelve-pattern bullish library with shared lifecycle states.
-- Added actual call-chain selection with DTE, delta, spread, liquidity, and freshness
-  controls.
-- Added Markdown, JSON, self-contained HTML, Telegram, and chart outputs.
-- Added a point-in-time research ledger, sequential replay, conservative long-call
-  simulator, chronological walk-forward evaluation, and shadow-promotion gate.
-- Added maintained NYSE calendar support.
-- Added two Pine v6 overlays with confirmed higher-timeframe data and configuration
-  parity checks.
-- Added the v4 build plan, training manual, CI workflow, and release audit.
-- Removed inactive strategy specifications, chart scripts, reports, commands, and
-  manuals from the active tree. Prior development remains available through normal
+- Replaced the active strategy with Bullish Weekly Participation v5 and launched it
+  under `validation_state: research_default`.
+- Added separate Index Weekly and Leader Weekly lanes with 7-24 DTE hard bounds,
+  lane-specific delta, hold, requalification, liquidity, depth, and theta controls.
+- Replaced slower timing with completed 60-minute EMA, VWAP, RSI, MACD, volume,
+  structure, and intraday-index confirmation.
+- Added seven production continuation patterns and retained five context-only patterns
+  in the visual atlas.
+- Added a two-stage scanner that fetches chains only for technical and event-clear
+  finalists, then re-quotes the top three contracts.
+- Added SIP, OPRA, quote-stability, event-source freshness, Massive earnings, and
+  official Fed/BLS macro-event trust gates.
+- Added separate tactical warning, tactical failure, structural invalidation,
+  confirmed pivot, and 2R planning-objective fields.
+- Rebuilt the HTML screener as a dense sortable, filterable, comparable operational
+  workspace with contract alternatives and precise rejection diagnostics.
+- Added five Pine v6 scripts for daily command, hourly timing, pattern atlas, Pine
+  Screener columns, and explicitly labeled underlying-proxy research.
+- Upgraded historical option research with trigger-aligned quotes, minute sequencing,
+  pessimistic fills, commissions, purge/embargo folds, overlap metrics, frozen
+  baseline comparison, stability checks, and shadow gates.
+- Migrated the research ledger in place to store hourly timing, trust provenance,
+  level separation, depth, theta/ask, quote age, expiration style, and re-quote data.
+- Replaced hosted refresh jobs with six daylight-saving-safe intraday windows,
+  including a management-only final scan.
+- Replaced the build plan, training manual, engineering contract, CI, release audit,
+  and active documentation with v5 material. Earlier releases remain available in
   Git history.

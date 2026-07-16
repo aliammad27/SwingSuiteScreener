@@ -10,7 +10,7 @@ services:
     schedule: "45 12 * * 1-5"
     dockerCommand: "python -m scanner.run_scan premarket"
   - type: cron
-    name: swingsuite-four-hour
+    name: swingsuite-intraday
     runtime: docker
-    schedule: "35 17 * * 1-5"
-    dockerCommand: "python -m scanner.run_scan four_hour"
+    schedule: "35 14-21 * * 1-5"
+    dockerCommand: "python -m scanner.run_scan intraday"

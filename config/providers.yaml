@@ -1,12 +1,13 @@
 market_data: alpaca
 options: alpaca
-events: configured_calendar
+events: trusted_official_calendars
 notifications: telegram
 persistence: local_json
 alpaca:
   data_base_url: https://data.alpaca.markets
-  feed: iex
-  option_feed: indicative
+  metadata_base_url: https://paper-api.alpaca.markets
+  feed: sip
+  option_feed: opra
 research:
   historical_options: massive
   require_point_in_time_quotes: true

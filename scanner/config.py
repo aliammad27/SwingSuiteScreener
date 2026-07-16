@@ -52,13 +52,22 @@ def validate_configuration(fixture: bool = False) -> list[str]:
     for name in required:
         load_config(name)
     strategy = load_config("strategy")
-    if strategy.get("schema_version") != 4:
-        raise ConfigurationError("Strategy schema_version must be 4.")
+    if strategy.get("schema_version") != 5:
+        raise ConfigurationError("Strategy schema_version must be 5.")
     if strategy.get("direction") != "bullish_only":
-        raise ConfigurationError("Bullish Participation v4 requires direction: bullish_only.")
+        raise ConfigurationError(
+            "Bullish Weekly Participation v5 requires direction: bullish_only."
+        )
+    if strategy.get("validation_state") != "research_default":
+        raise ConfigurationError("V5 must launch with validation_state: research_default.")
     lanes = strategy.get("lanes")
-    if not isinstance(lanes, dict) or set(lanes) != {"index_core", "leader_swing"}:
-        raise ConfigurationError("Strategy must define index_core and leader_swing lanes.")
+    if not isinstance(lanes, dict) or set(lanes) != {
+        "index_weekly",
+        "leader_weekly",
+    }:
+        raise ConfigurationError(
+            "Strategy must define index_weekly and leader_weekly lanes."
+        )
     for lane_name, raw_lane in lanes.items():
         if not isinstance(raw_lane, dict):
             raise ConfigurationError(f"Lane {lane_name} must be a mapping.")
@@ -77,13 +86,21 @@ def validate_configuration(fixture: bool = False) -> list[str]:
         if float(preferred_delta[0]) < float(hard_delta[0]) or float(preferred_delta[1]) > float(hard_delta[1]):
             raise ConfigurationError(f"Lane {lane_name} preferred delta must fit inside hard delta.")
     patterns = strategy.get("patterns")
-    if not isinstance(patterns, dict) or not isinstance(patterns.get("enabled"), list):
-        raise ConfigurationError("Strategy patterns.enabled must be a list.")
-    enabled_patterns = [str(value) for value in patterns["enabled"]]
-    if len(enabled_patterns) != len(set(enabled_patterns)):
-        raise ConfigurationError("Strategy patterns.enabled must not contain duplicates.")
-    if len(enabled_patterns) < 12:
-        raise ConfigurationError("Bullish Participation v4 requires the full pattern library.")
+    if (
+        not isinstance(patterns, dict)
+        or not isinstance(patterns.get("production"), list)
+        or not isinstance(patterns.get("context_only"), list)
+    ):
+        raise ConfigurationError(
+            "Strategy patterns.production and patterns.context_only must be lists."
+        )
+    production = [str(value) for value in patterns["production"]]
+    context_only = [str(value) for value in patterns["context_only"]]
+    if len(production) != 7 or len(context_only) != 5:
+        raise ConfigurationError("V5 requires seven production and five context patterns.")
+    all_patterns = production + context_only
+    if len(all_patterns) != len(set(all_patterns)):
+        raise ConfigurationError("Strategy pattern lists must not contain duplicates.")
     if not (ROOT / "CLAUDE.md").exists():
         raise ConfigurationError("Root CLAUDE.md is required.")
     if fixture:
@@ -96,7 +113,11 @@ def validate_configuration(fixture: bool = False) -> list[str]:
         warnings.append(
             "Telegram token or chat id is not configured; live notifications are disabled."
         )
-    if os.environ.get("ALPACA_OPTION_FEED", "indicative").lower() != "opra":
+    if os.environ.get("ALPACA_FEED", "sip").lower() != "sip":
+        warnings.append(
+            "The configured stock feed is not SIP; candidates will require data verification."
+        )
+    if os.environ.get("ALPACA_OPTION_FEED", "opra").lower() != "opra":
         warnings.append(
             "The configured option feed is not OPRA; candidates will require contract verification."
         )

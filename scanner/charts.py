@@ -130,7 +130,7 @@ def render_daily_chart(
         (
             f"{candidate.symbol} daily | {candidate.state.label} | "
             f"T{candidate.scores.trend} S{candidate.scores.setup} "
-            f"M{candidate.scores.momentum}"
+            f"H{candidate.scores.timing}"
         ),
         candidate.entry_plan.trigger,
         candidate.entry_plan.support,
@@ -147,13 +147,13 @@ def render_candidate_summary(candidate: Candidate, output_dir: Path | None = Non
 
     output = output_dir or ROOT / "reports" / "charts"
     output.mkdir(parents=True, exist_ok=True)
-    path = output / f"{candidate.symbol}_v4_summary.png"
-    score_names = ["Trend", "Lead", "Setup", "Mom", "Market", "Contract", "Risk"]
+    path = output / f"{candidate.symbol}_v5_summary.png"
+    score_names = ["Trend", "Lead", "Setup", "Timing", "Market", "Contract", "Risk"]
     score_values = [
         candidate.scores.trend,
         candidate.scores.leadership or 0,
         candidate.scores.setup,
-        candidate.scores.momentum,
+        candidate.scores.timing,
         candidate.scores.market,
         candidate.scores.contract,
         candidate.scores.risk,

@@ -5,6 +5,7 @@ from statistics import pstdev
 
 from scanner.indicators import anchored_vwap, atr, ema, sma
 from scanner.models import Candle, TrendAnalysis
+from scanner.strategy_profile import StrategyProfile
 from scanner.structure import (
     classify_structure,
     confirmed_pivot_highs,
@@ -13,7 +14,11 @@ from scanner.structure import (
 )
 
 
-def analyze_trend(daily: list[Candle], weekly: list[Candle]) -> TrendAnalysis:
+def analyze_trend(
+    daily: list[Candle],
+    weekly: list[Candle],
+    profile: StrategyProfile,
+) -> TrendAnalysis:
     if len(daily) < 220 or len(weekly) < 30:
         raise ValueError("Trend analysis requires 220 daily bars and 30 weekly bars.")
     closes = [candle.close for candle in daily]
@@ -42,8 +47,10 @@ def analyze_trend(daily: list[Candle], weekly: list[Candle]) -> TrendAnalysis:
     pullback_setup = pullback_touched and pullback_held
     pivot_highs = confirmed_pivot_highs(highs, 5, 3)
     overhead = [value for _, value in pivot_highs if value > daily[-1].close]
-    resistance = min(overhead) if overhead else max(breakout_level, daily[-1].close + current_atr)
-    extended = daily[-1].close > ema21 + (1.50 * current_atr)
+    resistance = min(overhead) if overhead else None
+    extended = daily[-1].close > breakout_level + (
+        profile.maximum_confirmed_extension_atr * current_atr
+    )
 
     score = 0
     score += 15 if closes[-1] > ema21 else 0
@@ -57,7 +64,7 @@ def analyze_trend(daily: list[Candle], weekly: list[Candle]) -> TrendAnalysis:
     if closes[-1] < sma200:
         failures.append("below_sma200")
     if extended:
-        failures.append("extended_more_than_1_5_atr")
+        failures.append("extended_beyond_configured_atr_limit")
     return TrendAnalysis(
         score=min(score, 100),
         close=closes[-1],
@@ -110,7 +117,10 @@ def calculate_leadership(
         score += 12
     stock_return = (stock[-1] / stock[-64]) - 1
     peer_return = (peer[-1] / peer[-64]) - 1
-    score += 25 if stock_return > peer_return else 0
+    if stock_return >= peer_return + 0.03:
+        score += 50
+    elif stock_return > peer_return:
+        score += 25
     return min(score, 100)
 
 

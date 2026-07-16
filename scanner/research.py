@@ -19,7 +19,7 @@ from scanner.models import (
 from scanner.providers.base import MarketDataProvider
 from scanner.strategy_profile import PROFILE
 
-OBSERVATION_HORIZONS = (1, 3, 5, 10, 15)
+OBSERVATION_HORIZONS = (1, 2, 3, 4, 5)
 
 
 def strategy_config_hash() -> str:
@@ -32,9 +32,9 @@ def strategy_config_hash() -> str:
 
 
 def evidence_maturity(observation_count: int) -> EvidenceMaturity:
-    if observation_count >= 100:
+    if observation_count >= 150:
         return EvidenceMaturity.VALIDATED
-    if observation_count >= 30:
+    if observation_count >= 50:
         return EvidenceMaturity.PROVISIONAL
     return EvidenceMaturity.EXPLORATORY
 
@@ -95,7 +95,8 @@ class ResearchLedger:
                 config_hash TEXT NOT NULL,
                 market_regime TEXT NOT NULL,
                 market_score INTEGER NOT NULL,
-                fixture INTEGER NOT NULL
+                fixture INTEGER NOT NULL,
+                validation_state TEXT NOT NULL DEFAULT 'research_default'
             );
             CREATE TABLE IF NOT EXISTS signals (
                 id TEXT PRIMARY KEY,
@@ -112,6 +113,18 @@ class ResearchLedger:
                 target REAL NOT NULL,
                 underlying_close REAL NOT NULL,
                 config_hash TEXT NOT NULL,
+                timing_timestamp TEXT,
+                tactical_warning REAL,
+                tactical_failure REAL,
+                structural_invalidation REAL,
+                confirmed_pivot REAL,
+                planning_objective_2r REAL,
+                stock_feed TEXT,
+                option_feed TEXT,
+                event_source TEXT,
+                event_source_timestamp TEXT,
+                event_checked_at TEXT,
+                quote_age_minutes REAL,
                 UNIQUE(signal_timestamp, symbol, pattern_type, config_hash)
             );
             CREATE TABLE IF NOT EXISTS contract_snapshots (
@@ -132,6 +145,15 @@ class ResearchLedger:
                 open_interest INTEGER NOT NULL,
                 volume INTEGER NOT NULL,
                 feed TEXT NOT NULL,
+                bid_size INTEGER,
+                ask_size INTEGER,
+                spread_percent REAL,
+                theta_ask_percent REAL,
+                extrinsic_value_percent REAL,
+                quote_age_minutes REAL,
+                quote_change_percent REAL,
+                expiration_style TEXT,
+                requoted_count INTEGER NOT NULL DEFAULT 0,
                 UNIQUE(signal_id, contract_symbol)
             );
             CREATE TABLE IF NOT EXISTS observations (
@@ -155,19 +177,65 @@ class ResearchLedger:
                 ON observations(horizon_sessions);
             """
         )
-        existing_columns = {
-            str(row[1]) for row in self.connection.execute("PRAGMA table_info(observations)")
-        }
-        for column, definition in (
-            ("triggered_at", "TEXT"),
-            ("invalidated_at", "TEXT"),
-            ("trigger_invalidation_order", "TEXT NOT NULL DEFAULT 'neither'"),
-        ):
-            if column not in existing_columns:
-                self.connection.execute(
-                    f"ALTER TABLE observations ADD COLUMN {column} {definition}"
-                )
+        self._ensure_columns(
+            "scan_runs",
+            (("validation_state", "TEXT NOT NULL DEFAULT 'research_default'"),),
+        )
+        self._ensure_columns(
+            "signals",
+            (
+                ("timing_timestamp", "TEXT"),
+                ("tactical_warning", "REAL"),
+                ("tactical_failure", "REAL"),
+                ("structural_invalidation", "REAL"),
+                ("confirmed_pivot", "REAL"),
+                ("planning_objective_2r", "REAL"),
+                ("stock_feed", "TEXT"),
+                ("option_feed", "TEXT"),
+                ("event_source", "TEXT"),
+                ("event_source_timestamp", "TEXT"),
+                ("event_checked_at", "TEXT"),
+                ("quote_age_minutes", "REAL"),
+            ),
+        )
+        self._ensure_columns(
+            "contract_snapshots",
+            (
+                ("bid_size", "INTEGER"),
+                ("ask_size", "INTEGER"),
+                ("spread_percent", "REAL"),
+                ("theta_ask_percent", "REAL"),
+                ("extrinsic_value_percent", "REAL"),
+                ("quote_age_minutes", "REAL"),
+                ("quote_change_percent", "REAL"),
+                ("expiration_style", "TEXT"),
+                ("requoted_count", "INTEGER NOT NULL DEFAULT 0"),
+            ),
+        )
+        self._ensure_columns(
+            "observations",
+            (
+                ("triggered_at", "TEXT"),
+                ("invalidated_at", "TEXT"),
+                ("trigger_invalidation_order", "TEXT NOT NULL DEFAULT 'neither'"),
+            ),
+        )
         self.connection.commit()
+
+    def _ensure_columns(
+        self,
+        table: str,
+        columns: tuple[tuple[str, str], ...],
+    ) -> None:
+        existing = {
+            str(row[1])
+            for row in self.connection.execute(f"PRAGMA table_info({table})")
+        }
+        for column, definition in columns:
+            if column not in existing:
+                self.connection.execute(
+                    f"ALTER TABLE {table} ADD COLUMN {column} {definition}"
+                )
 
     def record_scan(self, result: ScanResult) -> str:
         config_hash = strategy_config_hash()
@@ -177,8 +245,9 @@ class ResearchLedger:
         self.connection.execute(
             """
             INSERT OR IGNORE INTO scan_runs
-            (id, generated_at, scan_type, profile_version, config_hash, market_regime, market_score, fixture)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (id, generated_at, scan_type, profile_version, config_hash, market_regime,
+             market_score, fixture, validation_state)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 run_id,
@@ -189,6 +258,7 @@ class ResearchLedger:
                 result.market.regime,
                 result.market.score,
                 int(result.fixture),
+                result.validation_state,
             ),
         )
         for candidate in result.candidates:
@@ -199,8 +269,12 @@ class ResearchLedger:
                 """
                 INSERT OR IGNORE INTO signals
                 (id, scan_run_id, signal_timestamp, symbol, lane, review_state, pattern_type,
-                 pattern_status, market_regime, trigger, invalidation, target, underlying_close, config_hash)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 pattern_status, market_regime, trigger, invalidation, target, underlying_close,
+                 config_hash, timing_timestamp, tactical_warning, tactical_failure,
+                 structural_invalidation, confirmed_pivot, planning_objective_2r, stock_feed,
+                 option_feed, event_source, event_source_timestamp, event_checked_at,
+                 quote_age_minutes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     signal_id,
@@ -217,19 +291,53 @@ class ResearchLedger:
                     candidate.entry_plan.target_price,
                     candidate.trend.close,
                     config_hash,
+                    candidate.timing.completed_at.isoformat(),
+                    candidate.entry_plan.tactical_warning,
+                    candidate.entry_plan.tactical_failure,
+                    candidate.entry_plan.invalidation,
+                    candidate.entry_plan.resistance_level,
+                    candidate.entry_plan.planning_objective_2r,
+                    candidate.data_trust.stock_feed,
+                    candidate.data_trust.option_feed,
+                    candidate.data_trust.event_source,
+                    (
+                        candidate.event_risk.source_timestamp.isoformat()
+                        if candidate.event_risk.source_timestamp
+                        else None
+                    ),
+                    candidate.event_risk.checked_at.isoformat(),
+                    candidate.data_trust.quote_age_minutes,
                 ),
             )
-            contracts = (
-                ((candidate.contracts.primary,) if candidate.contracts.primary else ())
-                + candidate.contracts.alternatives
+            contracts_with_risk = []
+            if candidate.contracts.primary:
+                contracts_with_risk.append(
+                    (
+                        candidate.contracts.primary,
+                        candidate.contracts.primary_risk,
+                    )
+                )
+            contracts_with_risk.extend(
+                (
+                    contract,
+                    (
+                        candidate.contracts.alternative_risks[index]
+                        if index < len(candidate.contracts.alternative_risks)
+                        else None
+                    ),
+                )
+                for index, contract in enumerate(candidate.contracts.alternatives)
             )
-            for contract in contracts:
+            for contract, risk in contracts_with_risk:
                 self.connection.execute(
                     """
                     INSERT OR IGNORE INTO contract_snapshots
                     (signal_id, captured_at, contract_symbol, expiration_date, strike, dte, delta,
-                     gamma, theta, vega, implied_volatility, bid, ask, open_interest, volume, feed)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     gamma, theta, vega, implied_volatility, bid, ask, open_interest, volume, feed,
+                     bid_size, ask_size, spread_percent, theta_ask_percent,
+                     extrinsic_value_percent, quote_age_minutes, quote_change_percent,
+                     expiration_style, requoted_count)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         signal_id,
@@ -248,6 +356,15 @@ class ResearchLedger:
                         contract.open_interest,
                         contract.volume,
                         contract.feed,
+                        contract.bid_size,
+                        contract.ask_size,
+                        contract.spread_percent,
+                        risk.theta_ask_percent if risk else None,
+                        risk.extrinsic_value_percent if risk else None,
+                        risk.quote_age_minutes if risk else None,
+                        risk.quote_change_percent if risk else None,
+                        risk.expiration_style if risk else None,
+                        candidate.contracts.requoted_count,
                     ),
                 )
         self.connection.commit()
@@ -321,7 +438,7 @@ class ResearchLedger:
         self.connection.commit()
         return inserted
 
-    def summary(self, horizon_sessions: int = 10) -> tuple[ResearchSummaryRow, ...]:
+    def summary(self, horizon_sessions: int = 5) -> tuple[ResearchSummaryRow, ...]:
         rows = self.connection.execute(
             """
             SELECT s.lane, s.pattern_type, s.market_regime, o.forward_return,
@@ -378,7 +495,7 @@ class ResearchLedger:
             "",
             "Outcomes are descriptive evidence, not a profit claim or automatic threshold update.",
             "",
-            "| Lane | Pattern | Regime | N | Maturity | Median 10D | MFE | MAE | Confirmed | Invalidated | Unresolved |",
+            "| Lane | Pattern | Regime | N | Maturity | Median 5D | MFE | MAE | Confirmed | Invalidated | Unresolved |",
             "|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|",
         ]
         for row in rows:

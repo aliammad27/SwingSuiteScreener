@@ -27,10 +27,11 @@ jobs:
       ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
       ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
       ALPACA_DATA_BASE_URL: https://data.alpaca.markets
-      ALPACA_FEED: iex
-      ALPACA_OPTION_FEED: indicative
+      ALPACA_FEED: sip
+      ALPACA_OPTION_FEED: opra
       ALPACA_MIN_REQUEST_INTERVAL_SECONDS: "0.45"
       ALPACA_MAX_RETRIES: "8"
+      MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
       TELEGRAM_BOT_USERNAME: AlisScreenerBot
       TELEGRAM_BOT_URL: https://t.me/AlisScreenerBot
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

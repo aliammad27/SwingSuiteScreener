@@ -8,18 +8,18 @@ from enum import StrEnum
 class ScanType(StrEnum):
     POST_CLOSE = "post_close"
     PREMARKET = "premarket"
-    FOUR_HOUR = "four_hour"
+    INTRADAY = "intraday"
 
 
 class StrategyLane(StrEnum):
-    INDEX_CORE = "index_core"
-    LEADER_SWING = "leader_swing"
+    INDEX_WEEKLY = "index_weekly"
+    LEADER_WEEKLY = "leader_weekly"
 
     @property
     def label(self) -> str:
         return {
-            StrategyLane.INDEX_CORE: "Index Core",
-            StrategyLane.LEADER_SWING: "Leader Swing",
+            StrategyLane.INDEX_WEEKLY: "Index Weekly",
+            StrategyLane.LEADER_WEEKLY: "Leader Weekly",
         }[self]
 
 
@@ -53,6 +53,13 @@ class EventRiskStatus(StrEnum):
     CLEAR = "clear"
     BLOCKED = "blocked"
     UNKNOWN = "unknown"
+
+
+class EventType(StrEnum):
+    EARNINGS = "earnings"
+    FOMC = "fomc"
+    CPI = "cpi"
+    EMPLOYMENT_SITUATION = "employment_situation"
 
 
 class EvidenceMaturity(StrEnum):
@@ -91,6 +98,22 @@ class AssetMetadata:
 
 
 @dataclass(frozen=True)
+class DataTrust:
+    stock_feed: str
+    option_feed: str
+    event_source: str
+    stock_trusted: bool
+    option_trusted: bool
+    event_trusted: bool
+    quote_age_minutes: float | None
+    reasons: tuple[str, ...] = ()
+
+    @property
+    def trustworthy(self) -> bool:
+        return self.stock_trusted and self.option_trusted and self.event_trusted
+
+
+@dataclass(frozen=True)
 class OptionContractSnapshot:
     contract_symbol: str
     underlying_symbol: str
@@ -125,6 +148,30 @@ class OptionContractSnapshot:
 
 
 @dataclass(frozen=True)
+class ContractRiskMetrics:
+    theta_ask_percent: float | None
+    extrinsic_value_percent: float | None
+    iv_to_realized_volatility: float | None
+    depth_contracts: int
+    gamma: float | None
+    quote_age_minutes: float
+    quote_change_percent: float | None
+    quote_stable: bool
+    expiration_style: str
+
+
+@dataclass(frozen=True)
+class EventWindow:
+    event_type: EventType
+    starts_at: datetime
+    event_at: datetime
+    blocked_until: datetime
+    source: str
+    source_timestamp: datetime
+    summary: str
+
+
+@dataclass(frozen=True)
 class EventRisk:
     symbol: str
     status: EventRiskStatus
@@ -132,6 +179,8 @@ class EventRisk:
     summary: str
     source: str
     checked_at: datetime
+    windows: tuple[EventWindow, ...] = ()
+    source_timestamp: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -152,7 +201,7 @@ class EvidenceScores:
     trend: int
     leadership: int | None
     setup: int
-    momentum: int
+    timing: int
     market: int
     contract: int
     risk: int
@@ -175,7 +224,7 @@ class TrendAnalysis:
     breakout_confirmed: bool
     pullback_support: float
     pullback_setup: bool
-    resistance_level: float
+    resistance_level: float | None
     extended: bool
     hard_failures: tuple[str, ...] = ()
 
@@ -212,12 +261,40 @@ class MomentumResult:
 
 
 @dataclass(frozen=True)
+class TimingAnalysis:
+    symbol: str
+    score: int
+    state: str
+    completed_at: datetime
+    ema9: float
+    ema21: float
+    session_vwap: float
+    rsi: float
+    macd_histogram: float
+    relative_volume: float
+    higher_low: bool
+    reclaim: bool
+    market_confirmation: bool
+    entry_window_open: bool
+    management_only: bool
+    bullish_confirmation: bool
+    trigger: float
+    support: float
+    tactical_warning: float
+    tactical_failure: float
+    reasons: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class EntryPlan:
     entry_mode: str
     trigger: float
     support: float
     invalidation: float
-    resistance_level: float
+    tactical_warning: float
+    tactical_failure: float
+    resistance_level: float | None
+    planning_objective_2r: float
     target_price: float
     target_basis: str
     target_gain_percent: float
@@ -227,6 +304,7 @@ class EntryPlan:
     status: str
     intended_hold_sessions: tuple[int, int]
     requalify_dte: int
+    no_progress_sessions: int
 
 
 @dataclass(frozen=True)
@@ -237,6 +315,9 @@ class ContractSelection:
     feed: str
     realized_volatility: float | None
     iv_to_realized_volatility: float | None
+    primary_risk: ContractRiskMetrics | None = None
+    alternative_risks: tuple[ContractRiskMetrics, ...] = ()
+    requoted_count: int = 0
     rejection_reasons: tuple[str, ...] = ()
 
     @property
@@ -255,9 +336,10 @@ class Candidate:
     leadership_score: int | None
     pattern: PatternSignal
     daily_momentum: MomentumResult
-    four_hour_momentum: MomentumResult
+    timing: TimingAnalysis
     market: MarketContext
     event_risk: EventRisk
+    data_trust: DataTrust
     contracts: ContractSelection
     entry_plan: EntryPlan
     scores: EvidenceScores
@@ -287,6 +369,7 @@ class ScanResult:
     verify_contract: tuple[Candidate, ...]
     rejected: tuple[RejectedRecord, ...]
     fixture: bool = False
+    validation_state: str = "research_default"
 
     @property
     def candidates(self) -> tuple[Candidate, ...]:

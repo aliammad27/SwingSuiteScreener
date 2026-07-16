@@ -1,4 +1,4 @@
-name: V4 CI
+name: V5 CI
 
 on:
   pull_request:
@@ -32,6 +32,7 @@ jobs:
       - name: Fixture smoke scans
         run: |
           python -m scanner.run_scan validate_configuration --fixture
+          python -m scanner.run_scan intraday --fixture --scenario ready
           python -m scanner.run_scan post_close --fixture --scenario ready
           python -m scanner.run_scan premarket --fixture --scenario technical_watch
           python -m scanner.run_scan replay --fixture --symbol SPY --horizon 5

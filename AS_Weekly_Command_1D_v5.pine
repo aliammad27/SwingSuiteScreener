@@ -1,0 +1,276 @@
+//@version=6
+indicator(
+    title = "Ali Swing Suite: Weekly Command 1D v5",
+    shorttitle = "AS Weekly Command 1D v5",
+    overlay = true,
+    max_bars_back = 500,
+    max_labels_count = 150,
+    max_lines_count = 80
+)
+
+// config/strategy.yaml parity constants. Do not edit independently.
+const int PARITY_SCHEMA_VERSION = 5
+const int PARITY_TREND_MINIMUM = 80
+const int PARITY_LEADERSHIP_MINIMUM = 70
+const int PARITY_SETUP_MINIMUM = 75
+const int PARITY_MARKET_MINIMUM = 70
+const float PARITY_READY_DISTANCE_ATR = 0.30
+const float PARITY_MAX_EXTENSION_ATR = 0.75
+const int PARITY_MAX_CONFIRMED_AGE = 1
+
+string GROUP_CONTEXT = "Daily context"
+string GROUP_MARKET = "Market and leadership"
+string GROUP_DISPLAY = "Display"
+
+int emaLength = input.int(21, "EMA length", minval = 5, group = GROUP_CONTEXT)
+int mediumLength = input.int(50, "Medium SMA length", minval = 20, group = GROUP_CONTEXT)
+int longLength = input.int(200, "Long SMA length", minval = 100, group = GROUP_CONTEXT)
+int atrLength = input.int(14, "ATR length", minval = 5, group = GROUP_CONTEXT)
+string peerSymbol = input.symbol("AMEX:SPY", "Leadership benchmark", group = GROUP_MARKET)
+bool requireMarket = input.bool(true, "Require SPY and QQQ confirmation", group = GROUP_MARKET)
+bool showAverages = input.bool(true, "Show averages", group = GROUP_DISPLAY)
+bool showLevels = input.bool(true, "Show research levels", group = GROUP_DISPLAY)
+bool showPatternLabels = input.bool(true, "Show pattern labels", group = GROUP_DISPLAY)
+bool showTable = input.bool(true, "Show command table", group = GROUP_DISPLAY)
+
+f_score_color(int value, int minimum) =>
+    value >= minimum ? color.rgb(18, 122, 78) :
+     value >= minimum - 15 ? color.rgb(173, 101, 10) :
+     color.rgb(170, 55, 55)
+
+f_state_color(string value) =>
+    value == "Ready - Verify" ? color.rgb(18, 122, 78) :
+     value == "Developing" ? color.rgb(27, 91, 151) :
+     color.rgb(108, 116, 124)
+
+bool completedBar = barstate.isconfirmed
+float sourceClose = completedBar ? close : close[1]
+float sourceOpen = completedBar ? open : open[1]
+float sourceHigh = completedBar ? high : high[1]
+float sourceLow = completedBar ? low : low[1]
+float sourceVolume = completedBar ? volume : volume[1]
+float ema21Raw = ta.ema(close, emaLength)
+float sma50Raw = ta.sma(close, mediumLength)
+float sma200Raw = ta.sma(close, longLength)
+float atrRaw = ta.atr(atrLength)
+float ema21 = completedBar ? ema21Raw : ema21Raw[1]
+float sma50 = completedBar ? sma50Raw : sma50Raw[1]
+float sma200 = completedBar ? sma200Raw : sma200Raw[1]
+float sma200Prior = completedBar ? sma200Raw[10] : sma200Raw[11]
+float currentAtr = completedBar ? atrRaw : atrRaw[1]
+float averageVolumeRaw = ta.sma(volume, 20)
+float averageVolume = completedBar ? averageVolumeRaw : averageVolumeRaw[1]
+float relativeVolume = averageVolume > 0 ? sourceVolume / averageVolume : 0.0
+float pivotHighRaw = ta.pivothigh(high, 5, 3)
+float pivotLowRaw = ta.pivotlow(low, 5, 3)
+float latestPivotHigh = ta.valuewhen(not na(pivotHighRaw), pivotHighRaw, 0)
+float latestPivotLow = nz(ta.valuewhen(not na(pivotLowRaw), pivotLowRaw, 0), sma50)
+float nearestConfirmedPivot = latestPivotHigh > sourceClose ? latestPivotHigh : na
+float breakoutLevelRaw = ta.highest(high[1], 20)
+float breakoutLevel = completedBar ? breakoutLevelRaw : breakoutLevelRaw[1]
+
+[weeklyClose, weeklyEma21] = request.security(
+    syminfo.tickerid,
+    "1W",
+    [close[1], ta.ema(close, 21)[1]],
+    lookahead = barmerge.lookahead_on
+)
+[spyClose, spySma50, spySma200] = request.security(
+    "AMEX:SPY",
+    "1D",
+    [close[1], ta.sma(close, 50)[1], ta.sma(close, 200)[1]],
+    lookahead = barmerge.lookahead_on
+)
+[qqqClose, qqqSma50, qqqSma200] = request.security(
+    "NASDAQ:QQQ",
+    "1D",
+    [close[1], ta.sma(close, 50)[1], ta.sma(close, 200)[1]],
+    lookahead = barmerge.lookahead_on
+)
+[peerClose, peerClose63] = request.security(
+    peerSymbol,
+    "1D",
+    [close[1], close[64]],
+    lookahead = barmerge.lookahead_on
+)
+
+bool weeklyAligned = weeklyClose > weeklyEma21
+int trendScore = 0
+trendScore += sourceClose > ema21 ? 15 : 0
+trendScore += ema21 > sma50 ? 15 : 0
+trendScore += sourceClose > sma50 ? 10 : 0
+trendScore += sma50 > sma200 ? 20 : 0
+trendScore += sourceClose > sma200 ? 15 : 0
+trendScore += sma200 > sma200Prior ? 10 : 0
+trendScore += weeklyAligned ? 15 : 0
+
+bool spyPass = spyClose > spySma50 and spySma50 > spySma200
+bool qqqPass = qqqClose > qqqSma50 and qqqSma50 > qqqSma200
+int marketScore = (spyPass ? 50 : 0) + (qqqPass ? 50 : 0)
+bool marketPass = not requireMarket or marketScore >= PARITY_MARKET_MINIMUM
+
+bool indexLane = syminfo.ticker == "SPY" or syminfo.ticker == "QQQ"
+float stockReturn64 = close[64] > 0 ? sourceClose / close[64] - 1.0 : 0.0
+float peerReturn64 = peerClose63 > 0 ? peerClose / peerClose63 - 1.0 : 0.0
+float relativeEdge = stockReturn64 - peerReturn64
+int leadershipScore = relativeEdge >= 0.03 ? 100 : relativeEdge >= 0.0 ? 75 : relativeEdge >= -0.03 ? 50 : 20
+bool leadershipPass = indexLane or leadershipScore >= PARITY_LEADERSHIP_MINIMUM
+
+bool trendPass = trendScore >= PARITY_TREND_MINIMUM and sourceClose > sma200
+float support = math.max(math.min(ema21, sourceClose), math.min(latestPivotLow, sourceClose))
+
+bool controlled_pullback = trendPass and sourceLow <= support + 0.30 * currentAtr and sourceClose > support and sourceClose >= sourceOpen
+float pullbackTrigger = ta.highest(high, 2)
+float pullbackInvalidation = support - 0.20 * currentAtr
+int pullbackQuality = controlled_pullback ? 90 : 0
+
+bool confirmed_breakout = trendPass and sourceClose > breakoutLevel and close[1] <= breakoutLevel and relativeVolume >= 1.20
+float breakoutInvalidation = math.max(ema21, breakoutLevel - 0.50 * currentAtr)
+int breakoutQuality = confirmed_breakout ? 92 : sourceClose >= breakoutLevel - PARITY_READY_DISTANCE_ATR * currentAtr ? 78 : 0
+
+float flagPole = close[5] - close[15]
+float flagLow = ta.lowest(low, 5)
+float flagRetracement = flagPole > 0 ? (close[5] - flagLow) / flagPole : 1.0
+bool bull_flag = trendPass and flagPole >= 2.0 * currentAtr and flagRetracement >= 0.10 and flagRetracement <= 0.50 and ta.sma(volume, 5) <= ta.sma(volume[5], 10)
+float flagTrigger = ta.highest(high, 5)
+int flagQuality = bull_flag ? 88 : 0
+
+bool breakoutEvent = close > ta.highest(high[1], 30) and volume >= ta.sma(volume, 20) * 1.20
+float priorBreakout = ta.valuewhen(breakoutEvent, ta.highest(high[1], 30), 0)
+int barsSinceBreakout = nz(ta.barssince(breakoutEvent), 10000)
+bool breakout_retest = trendPass and barsSinceBreakout >= 1 and barsSinceBreakout <= 8 and sourceLow <= priorBreakout + 0.30 * currentAtr and sourceClose > priorBreakout
+float retestInvalidation = ta.lowest(low, 8)
+int retestQuality = breakout_retest ? 90 : 0
+
+float baseHigh = ta.highest(high, 25)
+float baseLow = ta.lowest(low, 25)
+float baseDepth = baseHigh > 0 ? (baseHigh - baseLow) / baseHigh : 1.0
+bool flat_base = trendPass and baseDepth <= 0.12 and ta.sma(volume, 10) <= ta.sma(volume[10], 15)
+float flatTrigger = ta.highest(high[1], 24)
+int flatQuality = flat_base ? 84 : 0
+
+float vcpRange60 = ta.highest(high, 60) - ta.lowest(low, 60)
+float vcpRange40 = ta.highest(high, 40) - ta.lowest(low, 40)
+float vcpRange20 = ta.highest(high, 20) - ta.lowest(low, 20)
+bool vcp_tight_base = trendPass and vcpRange40 <= 0.85 * vcpRange60 and vcpRange20 <= 0.85 * vcpRange40 and ta.sma(volume, 20) <= 0.80 * ta.sma(volume[20], 20)
+float vcpTrigger = ta.highest(high[1], 19)
+float vcpLow = ta.lowest(low, 20)
+int vcpQuality = vcp_tight_base ? 86 : 0
+
+float triangleTop = ta.highest(high[1], 40)
+float triangleLowRecent = ta.lowest(low, 15)
+float triangleLowPrior = ta.lowest(low[15], 15)
+bool ascending_triangle = trendPass and triangleLowRecent > triangleLowPrior and sourceClose >= triangleTop - PARITY_READY_DISTANCE_ATR * currentAtr
+int triangleQuality = ascending_triangle ? 85 : 0
+
+int selectedQuality = 0
+int selectedPatternCode = 0
+string selectedPattern = "no_valid_setup"
+float selectedTrigger = breakoutLevel
+float selectedInvalidation = support - 0.20 * currentAtr
+
+if controlled_pullback and pullbackQuality > selectedQuality
+    selectedQuality := pullbackQuality
+    selectedPatternCode := 1
+    selectedPattern := "controlled_pullback"
+    selectedTrigger := pullbackTrigger
+    selectedInvalidation := pullbackInvalidation
+if breakoutQuality > selectedQuality
+    selectedQuality := breakoutQuality
+    selectedPatternCode := 2
+    selectedPattern := "confirmed_breakout"
+    selectedTrigger := breakoutLevel
+    selectedInvalidation := breakoutInvalidation
+if bull_flag and flagQuality > selectedQuality
+    selectedQuality := flagQuality
+    selectedPatternCode := 3
+    selectedPattern := "bull_flag"
+    selectedTrigger := flagTrigger
+    selectedInvalidation := flagLow
+if breakout_retest and retestQuality > selectedQuality
+    selectedQuality := retestQuality
+    selectedPatternCode := 4
+    selectedPattern := "breakout_retest"
+    selectedTrigger := priorBreakout
+    selectedInvalidation := retestInvalidation
+if flat_base and flatQuality > selectedQuality
+    selectedQuality := flatQuality
+    selectedPatternCode := 5
+    selectedPattern := "flat_base"
+    selectedTrigger := flatTrigger
+    selectedInvalidation := baseLow
+if vcp_tight_base and vcpQuality > selectedQuality
+    selectedQuality := vcpQuality
+    selectedPatternCode := 6
+    selectedPattern := "vcp_tight_base"
+    selectedTrigger := vcpTrigger
+    selectedInvalidation := vcpLow
+if ascending_triangle and triangleQuality > selectedQuality
+    selectedQuality := triangleQuality
+    selectedPatternCode := 7
+    selectedPattern := "ascending_triangle"
+    selectedTrigger := triangleTop
+    selectedInvalidation := triangleLowRecent
+
+float distanceAtr = (selectedTrigger - sourceClose) / math.max(currentAtr, syminfo.mintick)
+bool crossedTrigger = sourceClose > selectedTrigger and close[1] <= selectedTrigger[1]
+int confirmedAge = nz(ta.barssince(crossedTrigger), 10000)
+bool patternReady = distanceAtr >= 0 and distanceAtr <= PARITY_READY_DISTANCE_ATR
+bool patternConfirmed = confirmedAge <= PARITY_MAX_CONFIRMED_AGE and sourceClose <= selectedTrigger + PARITY_MAX_EXTENSION_ATR * currentAtr
+bool patternExtended = sourceClose > selectedTrigger + PARITY_MAX_EXTENSION_ATR * currentAtr
+bool setupPass = selectedQuality >= PARITY_SETUP_MINIMUM and (patternReady or patternConfirmed)
+bool technicalReady = completedBar and trendPass and leadershipPass and marketPass and setupPass and not patternExtended
+bool developing = trendScore >= 60 and selectedQuality > 0 and marketScore >= 50
+string reviewState = technicalReady ? "Ready - Verify" : developing ? "Developing" : "Rejected"
+string patternState = sourceClose < selectedInvalidation ? "Failed" : patternExtended ? "Extended" : patternConfirmed ? "Confirmed" : patternReady ? "Ready" : "Forming"
+
+float structuralInvalidation = selectedInvalidation
+float riskPerShare = math.max(selectedTrigger - structuralInvalidation, 0.25 * currentAtr)
+float planningObjective2R = selectedTrigger + 2.0 * riskPerShare
+
+plot(showAverages ? ema21 : na, "EMA21", color = color.rgb(31, 90, 148), linewidth = 2)
+plot(showAverages ? sma50 : na, "SMA50", color = color.rgb(184, 108, 20), linewidth = 2)
+plot(showAverages ? sma200 : na, "SMA200", color = color.rgb(34, 43, 52), linewidth = 2)
+plot(showLevels ? selectedTrigger : na, "Daily Trigger", color = color.rgb(18, 122, 78), style = plot.style_linebr)
+plot(showLevels ? structuralInvalidation : na, "Structural Invalidation", color = color.rgb(170, 55, 55), style = plot.style_linebr)
+plot(showLevels ? nearestConfirmedPivot : na, "Nearest Confirmed Pivot", color = color.rgb(173, 101, 10), style = plot.style_linebr)
+plot(showLevels ? planningObjective2R : na, "2R Planning Objective", color = color.rgb(27, 91, 151), style = plot.style_linebr)
+plotshape(showPatternLabels and technicalReady, title = "Ready - Verify", style = shape.labelup, location = location.belowbar, color = f_state_color(reviewState), text = "VERIFY", textcolor = color.white, size = size.tiny)
+
+plot(trendScore, "V5 Trend Score", display = display.data_window)
+plot(leadershipScore, "V5 Leadership Score", display = display.data_window)
+plot(selectedQuality, "V5 Setup Score", display = display.data_window)
+plot(marketScore, "V5 Market Score", display = display.data_window)
+plot(selectedPatternCode, "V5 Pattern Code", display = display.data_window)
+
+var table commandTable = table.new(position.top_right, 2, 12, frame_color = color.rgb(210, 216, 222), border_width = 1)
+if barstate.islast and showTable
+    table.cell(commandTable, 0, 0, "WEEKLY V5", text_color = color.white, bgcolor = color.rgb(28, 36, 44))
+    table.cell(commandTable, 1, 0, syminfo.ticker, text_color = color.white, bgcolor = color.rgb(28, 36, 44))
+    table.cell(commandTable, 0, 1, "Validation")
+    table.cell(commandTable, 1, 1, "Research default", text_color = color.rgb(173, 101, 10))
+    table.cell(commandTable, 0, 2, "Lane")
+    table.cell(commandTable, 1, 2, indexLane ? "Index Weekly" : "Leader Weekly")
+    table.cell(commandTable, 0, 3, "State")
+    table.cell(commandTable, 1, 3, reviewState, text_color = f_state_color(reviewState))
+    table.cell(commandTable, 0, 4, "Pattern")
+    table.cell(commandTable, 1, 4, selectedPattern)
+    table.cell(commandTable, 0, 5, "Lifecycle")
+    table.cell(commandTable, 1, 5, patternState)
+    table.cell(commandTable, 0, 6, "Trend")
+    table.cell(commandTable, 1, 6, str.tostring(trendScore), text_color = f_score_color(trendScore, PARITY_TREND_MINIMUM))
+    table.cell(commandTable, 0, 7, "Setup")
+    table.cell(commandTable, 1, 7, str.tostring(selectedQuality), text_color = f_score_color(selectedQuality, PARITY_SETUP_MINIMUM))
+    table.cell(commandTable, 0, 8, "Market")
+    table.cell(commandTable, 1, 8, str.tostring(marketScore), text_color = f_score_color(marketScore, PARITY_MARKET_MINIMUM))
+    table.cell(commandTable, 0, 9, "Trigger")
+    table.cell(commandTable, 1, 9, str.tostring(selectedTrigger, format.mintick))
+    table.cell(commandTable, 0, 10, "Structural")
+    table.cell(commandTable, 1, 10, str.tostring(structuralInvalidation, format.mintick))
+    table.cell(commandTable, 0, 11, "2R objective")
+    table.cell(commandTable, 1, 11, str.tostring(planningObjective2R, format.mintick))
+
+alertcondition(technicalReady and not technicalReady[1], "V5 daily setup ready for verification", "{{ticker}} has a completed daily Bullish Weekly Participation v5 setup. Verify event, data, and contract evidence.")
+alertcondition(crossedTrigger and setupPass and completedBar, "V5 daily trigger confirmed", "{{ticker}} closed through its selected v5 daily trigger.")
+alertcondition(sourceClose < structuralInvalidation and close[1] >= structuralInvalidation[1] and completedBar, "V5 structural invalidation", "{{ticker}} closed below its v5 structural invalidation.")
+alertcondition(patternExtended and not patternExtended[1] and completedBar, "V5 extension warning", "{{ticker}} exceeded the v5 maximum confirmed extension.")

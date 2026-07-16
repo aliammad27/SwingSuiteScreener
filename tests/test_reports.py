@@ -5,8 +5,10 @@ from scanner.reports import FIXTURE_LABEL, result_to_json, write_reports
 from scanner.run_scan import run_scan
 
 
-def test_report_publishes_v4_evidence_and_actual_contract(tmp_path, monkeypatch) -> None:
-    result = run_scan(ScanType.POST_CLOSE, fixture=True, scenario="ready")
+def test_report_publishes_v5_timing_trust_and_actual_contract(
+    tmp_path, monkeypatch
+) -> None:
+    result = run_scan(ScanType.INTRADAY, fixture=True, scenario="ready")
     import scanner.reports as reports
 
     monkeypatch.setattr(reports, "ROOT", tmp_path)
@@ -15,21 +17,24 @@ def test_report_publishes_v4_evidence_and_actual_contract(tmp_path, monkeypatch)
     payload = json.loads(json_path.read_text(encoding="utf-8"))
     dashboard = markdown_path.with_name("latest.html").read_text(encoding="utf-8")
     assert FIXTURE_LABEL in text
-    assert "Evidence: Trend" in text
+    assert "Hourly timing:" in text
+    assert "Tactical warning / failure:" in text
+    assert "Theta / ask:" in text
+    assert "Data trust:" in text
     assert "Primary call:" in text
-    assert "research strike" not in text.lower()
-    assert "long call can lose the full premium" in text.lower()
-    assert payload["schema_version"] == 4
-    assert payload["ready"][0]["state"] == "ready"
-    assert "Bullish Participation v4" in dashboard
+    assert payload["schema_version"] == 5
+    assert payload["validation_state"] == "research_default"
+    assert payload["ready_verify"][0]["state"] == "ready_verify"
+    assert "Bullish Weekly Participation v5" in dashboard
     assert "SIMULATED FIXTURE - NOT CURRENT MARKET DATA" in dashboard
-    assert 'data-filter-state="ready"' in dashboard
-    assert "SSTR" in dashboard
-    assert "A long call can" in dashboard
+    assert 'id="compare-panel"' in dashboard
+    assert 'id="dte"' in dashboard
+    assert "Contract Alternatives" in dashboard
+    assert "A long call can lose" in dashboard
 
 
-def test_json_schema_exposes_only_v4_review_state_groups() -> None:
-    payload = result_to_json(run_scan(ScanType.POST_CLOSE, fixture=True))
+def test_json_schema_exposes_only_v5_review_state_groups() -> None:
+    payload = result_to_json(run_scan(ScanType.INTRADAY, fixture=True))
     candidate_groups = {
         key
         for key, value in payload.items()

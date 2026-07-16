@@ -1,7 +1,7 @@
 [project]
 name = "swingsuite-screener"
-version = "4.0.0"
-description = "Deterministic Bullish Participation v4 call-option research screener"
+version = "5.0.0"
+description = "Deterministic Bullish Weekly Participation v5 call-option research screener"
 requires-python = ">=3.12"
 dependencies = [
   "requests>=2.31.0",

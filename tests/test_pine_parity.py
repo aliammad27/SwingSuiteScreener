@@ -18,14 +18,17 @@ def test_parity_check_detects_drift(tmp_path) -> None:
     for relative_path in (
         "config/strategy.yaml",
         "config/pine_parity.json",
-        "AS_Command_1D_v4.pine",
-        "AS_Momentum_4H_v4.pine",
+        "AS_Weekly_Command_1D_v5.pine",
+        "AS_Weekly_Timing_1H_v5.pine",
+        "AS_Bullish_Pattern_Atlas_1D_v5.pine",
+        "AS_Weekly_Screener_v5.pine",
+        "AS_Weekly_Underlying_Research_v5.pine",
     ):
         source = ROOT / relative_path
         target = tmp_path / relative_path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(source.read_text())
-    command_path = tmp_path / "AS_Command_1D_v4.pine"
+    command_path = tmp_path / "AS_Weekly_Command_1D_v5.pine"
     command_path.write_text(
         command_path.read_text().replace(
             "const int PARITY_TREND_MINIMUM = 80",
@@ -35,22 +38,40 @@ def test_parity_check_detects_drift(tmp_path) -> None:
     assert any("PARITY_TREND_MINIMUM" in error for error in check_parity(tmp_path))
 
 
-def test_pine_suite_is_bullish_v4_and_non_repainting() -> None:
-    command = (ROOT / "AS_Command_1D_v4.pine").read_text(encoding="utf-8")
-    momentum = (ROOT / "AS_Momentum_4H_v4.pine").read_text(encoding="utf-8")
-    suite = command + momentum
-    assert command.startswith("//@version=6")
-    assert momentum.startswith("//@version=6")
-    assert "AS_Bullish_Patterns" not in suite
+def test_pine_suite_is_bullish_v5_and_non_repainting() -> None:
+    paths = (
+        "AS_Weekly_Command_1D_v5.pine",
+        "AS_Weekly_Timing_1H_v5.pine",
+        "AS_Bullish_Pattern_Atlas_1D_v5.pine",
+        "AS_Weekly_Screener_v5.pine",
+        "AS_Weekly_Underlying_Research_v5.pine",
+    )
+    files = {path: (ROOT / path).read_text(encoding="utf-8") for path in paths}
+    suite = "\n".join(files.values())
+    assert all(payload.startswith("//@version=6") for payload in files.values())
     assert not re.search(r"\bput\b", suite, re.IGNORECASE)
-    assert not re.search(r"\bv[123]\b", suite, re.IGNORECASE)
-    assert suite.count("request.security(") <= 5
+    assert not re.search(r"\bv[1-4]\b", suite, re.IGNORECASE)
     assert "lookahead = barmerge.lookahead_on" in suite
     assert "[1]" in suite
-    assert "close > ema21 + PARITY_MAX_EXTENSION_ATR * currentAtr" in command
-    assert 'syminfo.ticker == "SPY" or syminfo.ticker == "QQQ"' in command
-    assert "bool leadershipPass = indexCore or" in command
-    assert 'patternStale ? "Stale"' in command
+    assert "barstate.isconfirmed" in suite
+    assert "Ready - Verify" in files["AS_Weekly_Command_1D_v5.pine"]
+    assert "Research default" in files["AS_Weekly_Command_1D_v5.pine"]
+    assert "NOT OPTION PERFORMANCE" in files["AS_Weekly_Underlying_Research_v5.pine"]
+    screener = files["AS_Weekly_Screener_v5.pine"]
+    assert screener.count("request.security(") <= 5
+    plot_titles = re.findall(r'plot\([^,\n]+,\s*"([^"]+)"', screener)
+    assert plot_titles[:10] == [
+        "State",
+        "Pattern Code",
+        "Trend",
+        "Setup",
+        "Timing",
+        "Market",
+        "Distance ATR",
+        "Daily Relative Volume",
+        "Extension ATR",
+        "Lane",
+    ]
     for pattern in (
         "controlled_pullback",
         "confirmed_breakout",
@@ -65,4 +86,26 @@ def test_pine_suite_is_bullish_v4_and_non_repainting() -> None:
         "falling_wedge",
         "rounding_base",
     ):
+        assert pattern in files["AS_Bullish_Pattern_Atlas_1D_v5.pine"]
+
+
+def test_production_command_excludes_context_only_patterns() -> None:
+    command = (ROOT / "AS_Weekly_Command_1D_v5.pine").read_text(encoding="utf-8")
+    for pattern in (
+        "controlled_pullback",
+        "confirmed_breakout",
+        "bull_flag",
+        "breakout_retest",
+        "flat_base",
+        "vcp_tight_base",
+        "ascending_triangle",
+    ):
         assert pattern in command
+    for pattern in (
+        "cup_with_handle",
+        "double_bottom",
+        "inverse_head_and_shoulders",
+        "falling_wedge",
+        "rounding_base",
+    ):
+        assert pattern not in command

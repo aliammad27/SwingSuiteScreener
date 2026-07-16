@@ -31,7 +31,7 @@ def completion_snapshot(result: ScanResult) -> dict[str, Any]:
     """Material state of a scan result used to detect meaningful change.
 
     Two runs with equal snapshots carry the same actionable information, so a
-    second premarket or four-hour completion message would be pure noise.
+    second premarket or intraday completion message would be pure noise.
     """
     setups: dict[str, Any] = {}
     for candidate in result.candidates:
@@ -50,7 +50,10 @@ def completion_snapshot(result: ScanResult) -> dict[str, Any]:
                 else None
             ),
             "contract_feed": candidate.contracts.feed,
-            "daily_filter": candidate.four_hour_momentum.daily_filter_passed,
+            "timing_state": candidate.timing.state,
+            "timing_completed_at": candidate.timing.completed_at.isoformat(),
+            "entry_window_open": candidate.timing.entry_window_open,
+            "data_trust": candidate.data_trust.trustworthy,
         }
     return {"market_regime": result.market.regime, "market_score": result.market.score, "setups": setups}
 

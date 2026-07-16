@@ -3,39 +3,73 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
 from scanner.config import ConfigurationError, load_local_env, validate_configuration
 from scanner.contract_selection import select_contracts
 from scanner.data_quality import DataQualityError, require_completed_candles
+from scanner.data_trust import assess_data_trust, event_trust_reasons
 from scanner.entry_plan import build_entry_plan
 from scanner.evidence import (
     analyze_trend,
     annualized_realized_volatility,
     calculate_leadership,
 )
-from scanner.grading import calculate_risk_score, classify_candidate
+from scanner.grading import (
+    calculate_risk_score,
+    chart_qualification_failures,
+    classify_candidate,
+    technical_qualification_failures,
+)
 from scanner.indicators import ema
 from scanner.market_context import calculate_market_context
 from scanner.models import (
+    AssetMetadata,
     Candidate,
+    Candle,
+    ContractSelection,
+    DataTrust,
+    EntryPlan,
+    EventRisk,
+    EventRiskStatus,
     EvidenceScores,
+    MarketContext,
+    MomentumResult,
+    PatternSignal,
     RejectedRecord,
     ReviewState,
     ScanResult,
     ScanType,
     StrategyLane,
+    TimingAnalysis,
+    TrendAnalysis,
 )
-from scanner.momentum import calculate_momentum, strict_daily_filter
+from scanner.momentum import calculate_momentum
 from scanner.patterns import detect_best_pattern
-from scanner.providers.alpaca import AlpacaDataProvider, ConfiguredEventRiskProvider
+from scanner.providers.alpaca import AlpacaDataProvider
 from scanner.providers.base import EventRiskProvider, MarketDataProvider, OptionDataProvider
 from scanner.providers.cache import CachedMarketDataProvider, CachedOptionDataProvider
+from scanner.providers.events import TrustedEventRiskProvider
 from scanner.providers.fixtures import FIXTURE_TIMESTAMP, FixtureDataProvider
 from scanner.strategy_profile import PROFILE
+from scanner.timing import analyze_timing, market_hourly_confirmation
 from scanner.universe import configured_leader_symbols, configured_symbols, metadata_for
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _TechnicalRecord:
+    metadata: AssetMetadata
+    trend: TrendAnalysis
+    leadership: int | None
+    pattern: PatternSignal
+    daily_momentum: MomentumResult
+    timing: TimingAnalysis
+    entry: EntryPlan
+    daily_realized_volatility: float | None
+    provisional_scores: EvidenceScores
 
 
 def _configure_logging() -> None:
@@ -52,105 +86,16 @@ def _providers(
 ) -> tuple[MarketDataProvider, OptionDataProvider, EventRiskProvider]:
     if fixture:
         provider = FixtureDataProvider(scenario=scenario)
-        return CachedMarketDataProvider(provider), CachedOptionDataProvider(provider), provider
+        return (
+            CachedMarketDataProvider(provider),
+            CachedOptionDataProvider(provider),
+            provider,
+        )
     alpaca = AlpacaDataProvider()
     return (
         CachedMarketDataProvider(alpaca),
         CachedOptionDataProvider(alpaca),
-        ConfiguredEventRiskProvider(),
-    )
-
-
-def _scan_symbol(
-    symbol: str,
-    market: MarketDataProvider,
-    options: OptionDataProvider,
-    events: EventRiskProvider,
-    market_context: object,
-    as_of: datetime,
-) -> Candidate:
-    from scanner.models import MarketContext
-
-    if not isinstance(market_context, MarketContext):
-        raise TypeError("market_context must be MarketContext")
-    metadata = metadata_for(symbol)
-    daily = market.daily(symbol)
-    four_hour = market.four_hour(symbol)
-    weekly = market.weekly(symbol)
-    require_completed_candles(daily, minimum=220, label=f"{symbol} daily")
-    require_completed_candles(four_hour, minimum=60, label=f"{symbol} four_hour")
-    require_completed_candles(weekly, minimum=30, label=f"{symbol} weekly")
-
-    trend = analyze_trend(daily, weekly)
-    leadership: int | None = None
-    if metadata.lane == StrategyLane.LEADER_SWING:
-        leadership = calculate_leadership(
-            daily,
-            market.daily(metadata.peer_etf),
-            market.daily("SPY"),
-        )
-    daily_htf = weekly[-1].close > ema([candle.close for candle in weekly], 21)
-    daily_momentum = calculate_momentum(symbol, daily, "1D", daily_htf)
-    four_hour_momentum = calculate_momentum(
-        symbol,
-        four_hour,
-        "4H",
-        strict_daily_filter(daily_momentum),
-    )
-    pattern = detect_best_pattern(daily, trend, PROFILE)
-    lane_profile = PROFILE.lane(metadata.lane)
-    entry = build_entry_plan(trend, pattern, lane_profile)
-    expiry_start = as_of.date() + timedelta(days=lane_profile.hard_dte[0])
-    expiry_end = as_of.date() + timedelta(days=lane_profile.hard_dte[1])
-    chain = options.call_chain(symbol, expiry_start, expiry_end)
-    contracts = select_contracts(
-        chain,
-        lane_profile,
-        as_of,
-        annualized_realized_volatility(daily),
-        feed_when_empty=getattr(options, "option_feed", "unknown"),
-    )
-    event = events.event_risk(symbol)
-    risk_score = calculate_risk_score(trend, pattern, entry, event)
-    scores = EvidenceScores(
-        trend=trend.score,
-        leadership=leadership,
-        setup=pattern.quality,
-        momentum=round((daily_momentum.score + four_hour_momentum.score) / 2),
-        market=market_context.score,
-        contract=contracts.score,
-        risk=risk_score,
-    )
-    state, reasons = classify_candidate(
-        lane=metadata.lane,
-        scores=scores,
-        trend=trend,
-        pattern=pattern,
-        four_hour=four_hour_momentum,
-        market=market_context,
-        event=event,
-        contracts=contracts,
-        profile=PROFILE,
-        as_of=as_of,
-    )
-    return Candidate(
-        symbol=symbol,
-        company=metadata.company,
-        sector=metadata.sector,
-        peer_etf=metadata.peer_etf,
-        lane=metadata.lane,
-        trend=trend,
-        leadership_score=leadership,
-        pattern=pattern,
-        daily_momentum=daily_momentum,
-        four_hour_momentum=four_hour_momentum,
-        market=market_context,
-        event_risk=event,
-        contracts=contracts,
-        entry_plan=entry,
-        scores=scores,
-        state=state,
-        reasons=reasons,
+        TrustedEventRiskProvider(),
     )
 
 
@@ -162,6 +107,180 @@ def _fixture_symbols(scenario: str) -> list[str]:
         "technical_watch": ["SSTR"],
         "zero": ["ZERO"],
     }.get(scenario, configured_symbols(fixture=True))
+
+
+def _empty_contracts(feed: str) -> ContractSelection:
+    return ContractSelection(
+        score=0,
+        primary=None,
+        alternatives=(),
+        feed=feed,
+        realized_volatility=None,
+        iv_to_realized_volatility=None,
+        rejection_reasons=("not_fetched_until_technical_finalist",),
+    )
+
+
+def _unchecked_event(symbol: str, as_of: datetime) -> EventRisk:
+    return EventRisk(
+        symbol=symbol,
+        status=EventRiskStatus.UNKNOWN,
+        earnings_date=None,
+        summary="Event source is checked only after chart qualification.",
+        source="not_checked_until_technical_finalist",
+        checked_at=as_of,
+        source_timestamp=None,
+    )
+
+
+def _unchecked_trust(stock_feed: str, option_feed: str) -> DataTrust:
+    return DataTrust(
+        stock_feed=stock_feed,
+        option_feed=option_feed,
+        event_source="not_checked_until_technical_finalist",
+        stock_trusted=stock_feed.lower() == PROFILE.required_stock_feed.lower(),
+        option_trusted=False,
+        event_trusted=False,
+        quote_age_minutes=None,
+        reasons=("not_checked_until_technical_finalist",),
+    )
+
+
+def _leader_universe_failures(
+    daily: list[Candle],
+) -> tuple[str, ...]:
+    if not daily:
+        return ("leader_daily_data_unavailable",)
+    failures: list[str] = []
+    if daily[-1].close < PROFILE.minimum_price:
+        failures.append("leader_price_below_minimum")
+    recent = daily[-20:]
+    average_dollar_volume = (
+        sum(candle.close * candle.volume for candle in recent) / len(recent)
+        if recent
+        else 0.0
+    )
+    if average_dollar_volume < PROFILE.minimum_average_daily_dollar_volume_usd:
+        failures.append("leader_average_dollar_volume_below_minimum")
+    return tuple(failures)
+
+
+def _technical_record(
+    symbol: str,
+    *,
+    market: MarketDataProvider,
+    market_context: MarketContext,
+    market_confirmation: bool,
+    as_of: datetime,
+    scan_type: ScanType,
+) -> _TechnicalRecord:
+    metadata = metadata_for(symbol)
+    daily = market.daily(symbol)
+    hourly = market.one_hour(symbol)
+    weekly = market.weekly(symbol)
+    require_completed_candles(daily, minimum=220, label=f"{symbol} daily")
+    require_completed_candles(
+        hourly,
+        minimum=PROFILE.minimum_hourly_bars,
+        label=f"{symbol} one_hour",
+    )
+    require_completed_candles(weekly, minimum=30, label=f"{symbol} weekly")
+    if metadata.lane == StrategyLane.LEADER_WEEKLY:
+        failures = _leader_universe_failures(daily)
+        if failures:
+            raise DataQualityError(",".join(failures))
+
+    trend = analyze_trend(daily, weekly, PROFILE)
+    leadership: int | None = None
+    if metadata.lane == StrategyLane.LEADER_WEEKLY:
+        leadership = calculate_leadership(
+            daily,
+            market.daily(metadata.peer_etf),
+            market.daily("SPY"),
+        )
+    daily_htf = weekly[-1].close > ema([candle.close for candle in weekly], 21)
+    daily_momentum = calculate_momentum(symbol, daily, "1D", daily_htf)
+    timing = analyze_timing(
+        symbol,
+        hourly,
+        daily_filter_passed=(
+            trend.score >= PROFILE.thresholds.trend
+            and trend.weekly_aligned
+            and not trend.extended
+        ),
+        market_confirmation=market_confirmation,
+        as_of=as_of,
+        scan_type=scan_type,
+        profile=PROFILE,
+    )
+    pattern = detect_best_pattern(daily, trend, PROFILE)
+    lane_profile = PROFILE.lane(metadata.lane)
+    entry = build_entry_plan(trend, pattern, timing, lane_profile)
+    provisional_event = EventRisk(
+        symbol=symbol,
+        status=EventRiskStatus.CLEAR,
+        earnings_date=None,
+        summary="Provisional chart-stage event state.",
+        source="chart_stage",
+        checked_at=as_of,
+        source_timestamp=as_of,
+    )
+    risk_score = calculate_risk_score(
+        trend, pattern, entry, provisional_event, PROFILE
+    )
+    scores = EvidenceScores(
+        trend=trend.score,
+        leadership=leadership,
+        setup=pattern.quality,
+        timing=timing.score,
+        market=market_context.score,
+        contract=0,
+        risk=risk_score,
+    )
+    return _TechnicalRecord(
+        metadata=metadata,
+        trend=trend,
+        leadership=leadership,
+        pattern=pattern,
+        daily_momentum=daily_momentum,
+        timing=timing,
+        entry=entry,
+        daily_realized_volatility=annualized_realized_volatility(daily),
+        provisional_scores=scores,
+    )
+
+
+def _candidate_from_record(
+    record: _TechnicalRecord,
+    *,
+    market_context: MarketContext,
+    event: EventRisk,
+    contracts: ContractSelection,
+    data_trust: DataTrust,
+    scores: EvidenceScores,
+    state: ReviewState,
+    reasons: tuple[str, ...],
+) -> Candidate:
+    return Candidate(
+        symbol=record.metadata.symbol,
+        company=record.metadata.company,
+        sector=record.metadata.sector,
+        peer_etf=record.metadata.peer_etf,
+        lane=record.metadata.lane,
+        trend=record.trend,
+        leadership_score=record.leadership,
+        pattern=record.pattern,
+        daily_momentum=record.daily_momentum,
+        timing=record.timing,
+        market=market_context,
+        event_risk=event,
+        data_trust=data_trust,
+        contracts=contracts,
+        entry_plan=record.entry,
+        scores=scores,
+        state=state,
+        reasons=reasons,
+    )
 
 
 def _candidate_rank(candidate: Candidate) -> tuple[int, int]:
@@ -178,7 +297,7 @@ def _candidate_rank(candidate: Candidate) -> tuple[int, int]:
             candidate.scores.trend,
             candidate.scores.leadership,
             candidate.scores.setup,
-            candidate.scores.momentum,
+            candidate.scores.timing,
             candidate.scores.market,
             candidate.scores.contract,
             candidate.scores.risk,
@@ -199,35 +318,261 @@ def run_scan(
     as_of = FIXTURE_TIMESTAMP if fixture else datetime.now(UTC)
     breadth_symbols = configured_leader_symbols(fixture=fixture)
     market_context = calculate_market_context(market, breadth_symbols, PROFILE)
+    market_confirmation = market_hourly_confirmation(
+        market.one_hour("SPY"),
+        market.one_hour("QQQ"),
+    )
     symbols = _fixture_symbols(scenario) if fixture else configured_symbols()
     candidates: list[Candidate] = []
     rejected: list[RejectedRecord] = []
-    for symbol in symbols:
+    leader_symbols = [
+        symbol
+        for symbol in symbols
+        if metadata_for(symbol).lane == StrategyLane.LEADER_WEEKLY
+    ]
+    eligible_leaders = set(leader_symbols)
+    eligibility_error: str | None = None
+    if PROFILE.options_required and leader_symbols:
+        leader_lane = PROFILE.lane(StrategyLane.LEADER_WEEKLY)
         try:
-            candidate = _scan_symbol(
-                symbol,
-                market,
-                options,
-                events,
-                market_context,
-                as_of,
+            eligible_leaders = options.eligible_underlyings(
+                leader_symbols,
+                as_of.date() + timedelta(days=leader_lane.hard_dte[0]),
+                as_of.date() + timedelta(days=leader_lane.hard_dte[1]),
             )
-        except (DataQualityError, ValueError, RuntimeError) as exc:
+        except (OSError, RuntimeError, ValueError) as exc:
+            eligible_leaders = set()
+            eligibility_error = str(exc)
+
+    for symbol in symbols:
+        metadata = metadata_for(symbol)
+        if (
+            metadata.lane == StrategyLane.LEADER_WEEKLY
+            and symbol not in eligible_leaders
+        ):
+            reason = (
+                "leader_options_eligibility_unavailable"
+                if eligibility_error is not None
+                else "leader_no_eligible_weekly_expiration"
+            )
             rejected.append(
                 RejectedRecord(
                     symbol=symbol,
-                    stage="data_quality",
-                    reason_codes=("scan_error",),
+                    stage="universe",
+                    reason_codes=(reason,),
+                    details={
+                        "lane": metadata.lane.value,
+                        "eligibility_error": eligibility_error or "",
+                    },
+                )
+            )
+            continue
+        try:
+            record = _technical_record(
+                symbol,
+                market=market,
+                market_context=market_context,
+                market_confirmation=market_confirmation,
+                as_of=as_of,
+                scan_type=scan_type,
+            )
+        except (DataQualityError, ValueError, RuntimeError) as exc:
+            reason_codes = tuple(
+                part for part in str(exc).split(",") if part
+            ) or ("scan_error",)
+            rejected.append(
+                RejectedRecord(
+                    symbol=symbol,
+                    stage="universe_or_data_quality",
+                    reason_codes=reason_codes,
                     details={"error": str(exc)},
                 )
             )
             continue
-        if candidate.state == ReviewState.REJECTED:
+
+        chart_failures = chart_qualification_failures(
+            lane=record.metadata.lane,
+            scores=record.provisional_scores,
+            trend=record.trend,
+            pattern=record.pattern,
+            timing=record.timing,
+            market=market_context,
+            profile=PROFILE,
+        )
+        hard_chart_failures = {
+            "below_sma200",
+            "extended_beyond_configured_atr_limit",
+            "hostile_market_regime",
+            "pattern_failed",
+            "pattern_stale",
+            "pattern_not_promoted_for_production",
+        }
+        if chart_failures:
+            if any(reason in hard_chart_failures for reason in chart_failures):
+                rejected.append(
+                    RejectedRecord(
+                        symbol=symbol,
+                        stage="technical",
+                        reason_codes=chart_failures,
+                        details={
+                            "lane": record.metadata.lane.value,
+                            "pattern": record.pattern.pattern_type,
+                        },
+                    )
+                )
+                continue
+            event = _unchecked_event(symbol, as_of)
+            contracts = _empty_contracts(getattr(options, "option_feed", "unknown"))
+            candidates.append(
+                _candidate_from_record(
+                    record,
+                    market_context=market_context,
+                    event=event,
+                    contracts=contracts,
+                    data_trust=_unchecked_trust(
+                        getattr(market, "stock_feed", "unknown"),
+                        getattr(options, "option_feed", "unknown"),
+                    ),
+                    scores=record.provisional_scores,
+                    state=ReviewState.DEVELOPING,
+                    reasons=chart_failures,
+                )
+            )
+            continue
+
+        event = events.event_risk(symbol, as_of, record.metadata.lane)
+        event_freshness_failures = event_trust_reasons(event, as_of, PROFILE)
+        if event_freshness_failures:
             rejected.append(
                 RejectedRecord(
                     symbol=symbol,
-                    stage="qualification",
-                    reason_codes=candidate.reasons or ("not_qualified",),
+                    stage="event",
+                    reason_codes=event_freshness_failures,
+                    details={
+                        "event_source": event.source,
+                        "event_summary": event.summary,
+                    },
+                )
+            )
+            continue
+        risk_score = calculate_risk_score(
+            record.trend,
+            record.pattern,
+            record.entry,
+            event,
+            PROFILE,
+        )
+        pre_contract_scores = EvidenceScores(
+            trend=record.provisional_scores.trend,
+            leadership=record.provisional_scores.leadership,
+            setup=record.provisional_scores.setup,
+            timing=record.provisional_scores.timing,
+            market=record.provisional_scores.market,
+            contract=0,
+            risk=risk_score,
+        )
+        event_failures = technical_qualification_failures(
+            lane=record.metadata.lane,
+            scores=pre_contract_scores,
+            trend=record.trend,
+            pattern=record.pattern,
+            timing=record.timing,
+            market=market_context,
+            event=event,
+            profile=PROFILE,
+        )
+        if event_failures:
+            rejected.append(
+                RejectedRecord(
+                    symbol=symbol,
+                    stage="event",
+                    reason_codes=event_failures,
+                    details={
+                        "event_source": event.source,
+                        "event_summary": event.summary,
+                    },
+                )
+            )
+            continue
+
+        lane_profile = PROFILE.lane(record.metadata.lane)
+        expiry_start = as_of.date() + timedelta(days=lane_profile.hard_dte[0])
+        expiry_end = as_of.date() + timedelta(days=lane_profile.hard_dte[1])
+        chain = options.call_chain(symbol, expiry_start, expiry_end, as_of)
+        initial = select_contracts(
+            chain,
+            lane_profile,
+            as_of,
+            record.daily_realized_volatility,
+            record.trend.close,
+            maximum_quote_age_minutes=PROFILE.maximum_quote_age_minutes,
+            feed_when_empty=getattr(options, "option_feed", "unknown"),
+        )
+        top = (
+            [initial.primary, *initial.alternatives]
+            if initial.primary is not None
+            else []
+        )
+        top_contracts = [contract for contract in top if contract is not None]
+        previous_quotes = {
+            contract.contract_symbol: contract for contract in top_contracts
+        }
+        refreshed = options.latest_quotes(top_contracts, as_of)
+        contracts = select_contracts(
+            refreshed if top_contracts else chain,
+            lane_profile,
+            as_of,
+            record.daily_realized_volatility,
+            record.trend.close,
+            maximum_quote_age_minutes=PROFILE.maximum_quote_age_minutes,
+            feed_when_empty=getattr(options, "option_feed", "unknown"),
+            previous_quotes=previous_quotes,
+            requoted_count=len(refreshed),
+        )
+        data_trust = assess_data_trust(
+            stock_feed=getattr(market, "stock_feed", "unknown"),
+            contracts=contracts,
+            event=event,
+            as_of=as_of,
+            profile=PROFILE,
+        )
+        scores = EvidenceScores(
+            trend=pre_contract_scores.trend,
+            leadership=pre_contract_scores.leadership,
+            setup=pre_contract_scores.setup,
+            timing=pre_contract_scores.timing,
+            market=pre_contract_scores.market,
+            contract=contracts.score,
+            risk=pre_contract_scores.risk,
+        )
+        state, reasons = classify_candidate(
+            lane=record.metadata.lane,
+            scores=scores,
+            trend=record.trend,
+            pattern=record.pattern,
+            timing=record.timing,
+            market=market_context,
+            event=event,
+            contracts=contracts,
+            data_trust=data_trust,
+            profile=PROFILE,
+        )
+        candidate = _candidate_from_record(
+            record,
+            market_context=market_context,
+            event=event,
+            contracts=contracts,
+            data_trust=data_trust,
+            scores=scores,
+            state=state,
+            reasons=reasons,
+        )
+        if state == ReviewState.REJECTED:
+            rejected.append(
+                RejectedRecord(
+                    symbol=symbol,
+                    stage="contract",
+                    reason_codes=reasons or ("not_qualified",),
                     details={
                         "lane": candidate.lane.value,
                         "pattern": candidate.pattern.pattern_type,
@@ -236,15 +581,17 @@ def run_scan(
             )
         else:
             candidates.append(candidate)
+
     candidates.sort(key=_candidate_rank, reverse=True)
     market_timestamp = (
-        FIXTURE_TIMESTAMP
-        if fixture
+        max(candle.timestamp for candle in market.one_hour("SPY"))
+        + timedelta(hours=1)
+        if scan_type == ScanType.INTRADAY
         else max(candle.timestamp for candle in market.daily("SPY"))
     )
     return ScanResult(
         scan_type=scan_type,
-        generated_at=datetime.now(UTC),
+        generated_at=as_of if fixture else datetime.now(UTC),
         market_data_timestamp=market_timestamp,
         market=market_context,
         universe_count=len(symbols),
@@ -259,18 +606,23 @@ def run_scan(
         ),
         rejected=tuple(rejected),
         fixture=fixture,
+        validation_state=PROFILE.validation_state,
     )
 
 
 def readiness_check() -> int:
     load_local_env()
     warnings = validate_configuration(fixture=False)
-    print(f"Bullish Participation v4 readiness check for {date.today().isoformat()}")
-    print(f"Equity feed: {os.environ.get('ALPACA_FEED', 'iex')}")
-    print(f"Option feed: {os.environ.get('ALPACA_OPTION_FEED', 'indicative')}")
+    print(f"Bullish Weekly Participation v5 readiness check for {date.today().isoformat()}")
+    print(f"Equity feed: {os.environ.get('ALPACA_FEED', 'sip')}")
+    print(f"Option feed: {os.environ.get('ALPACA_OPTION_FEED', 'opra')}")
     print(
         "Historical option research: "
-        + ("Massive key configured" if os.environ.get("MASSIVE_API_KEY") else "not configured")
+        + (
+            "Massive key configured"
+            if os.environ.get("MASSIVE_API_KEY")
+            else "not configured"
+        )
     )
     for warning in warnings:
         print(f"WARNING: {warning}")
@@ -285,7 +637,7 @@ def main() -> int:
         choices=[
             "post_close",
             "premarket",
-            "four_hour",
+            "intraday",
             "daily_prep",
             "weekly_radar",
             "test_notification",
@@ -332,7 +684,7 @@ def main() -> int:
                 for error in errors:
                     print(f"ERROR: {error}")
                 return 1
-            print("Bullish Participation v4 release audit passed.")
+            print("Bullish Weekly Participation v5 release audit passed.")
             return 0
         if args.command == "test_notification":
             from scanner.notifications import TELEGRAM_TEST_MESSAGE, TelegramNotifier
@@ -342,7 +694,11 @@ def main() -> int:
                 return 0
             delivery = TelegramNotifier().send(TELEGRAM_TEST_MESSAGE)
             print(f"Telegram test: {delivery.status}")
-            return 0 if delivery.delivered or delivery.status == "not_configured" else 1
+            return (
+                0
+                if delivery.delivered or delivery.status == "not_configured"
+                else 1
+            )
         if args.command == "evaluate-signals":
             from scanner.research import ResearchLedger
 
@@ -383,9 +739,7 @@ def main() -> int:
             if args.command in {"daily_prep", "weekly_radar"}
             else ScanType(args.command)
         )
-        result = run_scan(
-            scan_type, fixture=args.fixture, scenario=args.scenario
-        )
+        result = run_scan(scan_type, fixture=args.fixture, scenario=args.scenario)
         from scanner.notifications import notify_scan
         from scanner.reports import write_reports
 

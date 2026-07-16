@@ -10,6 +10,7 @@ from scanner.models import Candle, PatternSignal, PatternStatus, TrendAnalysis
 from scanner.patterns import (
     _status,
     detect_ascending_triangle,
+    detect_atlas_pattern_candidates,
     detect_breakout_retest,
     detect_bull_flag,
     detect_confirmed_breakout,
@@ -19,6 +20,7 @@ from scanner.patterns import (
     detect_falling_wedge,
     detect_flat_base,
     detect_inverse_head_and_shoulders,
+    detect_pattern_candidates,
     detect_rounding_base,
     detect_vcp_tight_base,
 )
@@ -311,13 +313,17 @@ def test_pattern_detectors_ignore_an_unconfirmed_future_bar(
 
 @pytest.mark.parametrize("pattern_type", [case[0] for case in CASES])
 def test_shared_pattern_state_boundaries_apply_to_every_pattern(pattern_type: str) -> None:
-    ready_bars = [_candle(0, 99.0), _candle(1, 99.5)]
+    ready_bars = [_candle(0, 99.0), _candle(1, 99.7)]
     ready, _ = _status(ready_bars, 100.0, 95.0, 1.0, PROFILE)
     assert ready == PatternStatus.READY, pattern_type
 
-    extension_boundary = [_candle(0, 99.0), _candle(1, 101.0)]
+    extension_boundary = [_candle(0, 99.0), _candle(1, 100.75)]
     confirmed, age = _status(extension_boundary, 100.0, 95.0, 1.0, PROFILE)
     assert (confirmed, age) == (PatternStatus.CONFIRMED, 0), pattern_type
+
+    outside_extension = [_candle(0, 99.0), _candle(1, 100.76)]
+    stale, _ = _status(outside_extension, 100.0, 95.0, 1.0, PROFILE)
+    assert stale == PatternStatus.STALE, pattern_type
 
     stale_bars = [_candle(0, 99.0), _candle(1, 100.2)] + [
         _candle(index, 100.4) for index in range(2, 6)
@@ -328,3 +334,11 @@ def test_shared_pattern_state_boundaries_apply_to_every_pattern(pattern_type: st
     failed_bars = [_candle(0, 99.0), _candle(1, 94.9)]
     failed, _ = _status(failed_bars, 100.0, 95.0, 1.0, PROFILE)
     assert failed == PatternStatus.FAILED, pattern_type
+
+
+def test_production_detection_excludes_context_only_patterns() -> None:
+    candles, _, trend = _cup_with_handle()
+    production = detect_pattern_candidates(candles, trend, PROFILE)
+    atlas = detect_atlas_pattern_candidates(candles, trend, PROFILE)
+    assert all(signal.pattern_type != "cup_with_handle" for signal in production)
+    assert any(signal.pattern_type == "cup_with_handle" for signal in atlas)

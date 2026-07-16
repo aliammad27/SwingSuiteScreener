@@ -8,10 +8,10 @@ def _universe_config() -> dict[str, object]:
     return load_config("universe")
 
 
-def index_core_symbols() -> list[str]:
-    raw = _universe_config().get("index_core")
+def index_weekly_symbols() -> list[str]:
+    raw = _universe_config().get("index_weekly")
     if not isinstance(raw, dict) or not isinstance(raw.get("symbols"), list):
-        raise ConfigurationError("universe.index_core.symbols must be a list.")
+        raise ConfigurationError("universe.index_weekly.symbols must be a list.")
     return [str(symbol) for symbol in raw["symbols"]]
 
 
@@ -33,19 +33,19 @@ def leader_metadata() -> dict[str, AssetMetadata]:
                 company=symbol,
                 sector=str(sector),
                 peer_etf=benchmark,
-                lane=StrategyLane.LEADER_SWING,
+                lane=StrategyLane.LEADER_WEEKLY,
             )
     return metadata
 
 
 def metadata_for(symbol: str) -> AssetMetadata:
-    if symbol in index_core_symbols():
+    if symbol in index_weekly_symbols():
         return AssetMetadata(
             symbol=symbol,
             company=symbol,
             sector="Index ETF",
             peer_etf="SPY" if symbol == "QQQ" else "QQQ",
-            lane=StrategyLane.INDEX_CORE,
+            lane=StrategyLane.INDEX_WEEKLY,
         )
     if symbol in {"SSTR", "APLUS", "BTIER", "ZERO"}:
         return AssetMetadata(
@@ -58,7 +58,7 @@ def metadata_for(symbol: str) -> AssetMetadata:
             }[symbol],
             sector="Technology",
             peer_etf="XLK",
-            lane=StrategyLane.LEADER_SWING,
+            lane=StrategyLane.LEADER_WEEKLY,
         )
     metadata = leader_metadata()
     if symbol not in metadata:
@@ -69,7 +69,7 @@ def metadata_for(symbol: str) -> AssetMetadata:
 def configured_symbols(fixture: bool = False) -> list[str]:
     if fixture:
         return ["SPY", "QQQ", "SSTR", "APLUS", "BTIER", "ZERO"]
-    return index_core_symbols() + list(leader_metadata())
+    return index_weekly_symbols() + list(leader_metadata())
 
 
 def configured_leader_symbols(fixture: bool = False) -> list[str]:

@@ -19,7 +19,7 @@ from scanner.storage.local_json import LocalJsonStorage
 
 TELEGRAM_TEST_MESSAGE = (
     "ALI'S SCREENER BOT TEST\n\n"
-    "Bullish Participation v4 notifications are connected.\n"
+    "Bullish Weekly Participation v5 notifications are connected.\n"
     "This is a delivery test only; no market scan was performed."
 )
 
@@ -132,7 +132,7 @@ def _score_line(candidate: Candidate) -> str:
     scores = candidate.scores
     leadership = "-" if scores.leadership is None else str(scores.leadership)
     return (
-        f"T{scores.trend} L{leadership} S{scores.setup} M{scores.momentum} "
+        f"T{scores.trend} L{leadership} S{scores.setup} H{scores.timing} "
         f"Mk{scores.market} C{scores.contract} R{scores.risk}"
     )
 
@@ -152,7 +152,9 @@ def candidate_caption(candidate: Candidate) -> str:
     return (
         f"{candidate.symbol} | {candidate.lane.label} | {candidate.state.label}\n"
         f"{candidate.pattern.pattern_type.replace('_', ' ')} / {candidate.pattern.status.value} / age {candidate.pattern.age_bars}\n"
-        f"${candidate.trend.close:.2f} -> ${entry.trigger:.2f} | Inv ${entry.invalidation:.2f} | Obj ${entry.target_price:.2f}\n"
+        f"${candidate.trend.close:.2f} -> ${entry.trigger:.2f} | "
+        f"Tac ${entry.tactical_failure:.2f} | Struct ${entry.invalidation:.2f} | "
+        f"Obj ${entry.target_price:.2f}\n"
         f"{_score_line(candidate)}\n{_contract_line(candidate)}\n"
         "Manual review only. A long call can lose the full premium."
     )
@@ -162,7 +164,7 @@ def completion_message(result: ScanResult, report_path: Path) -> str:
     now_et = datetime.now(NY).strftime("%-I:%M %p ET")
     candidates = result.candidates
     header = (
-        f"{result.scan_type.value.replace('_', ' ').upper()} - BULLISH V4\n"
+        f"{result.scan_type.value.replace('_', ' ').upper()} - BULLISH WEEKLY V5\n"
         f"Market {result.market.regime} {result.market.score}/100 | "
         f"Breadth {result.market.breadth_above_sma50:.0f}% >50D / "
         f"{result.market.breadth_above_ema21:.0f}% >21D | {now_et}\n\n"
@@ -177,7 +179,10 @@ def completion_message(result: ScanResult, report_path: Path) -> str:
             [
                 f"{candidate.symbol} | {candidate.lane.label} | {candidate.state.label}",
                 f"{candidate.pattern.pattern_type.replace('_', ' ')} {candidate.pattern.status.value} age {candidate.pattern.age_bars}",
-                f"${candidate.trend.close:.2f} -> ${candidate.entry_plan.trigger:.2f} | Inv ${candidate.entry_plan.invalidation:.2f} | Obj ${candidate.entry_plan.target_price:.2f}",
+                f"${candidate.trend.close:.2f} -> ${candidate.entry_plan.trigger:.2f} | "
+                f"Tac ${candidate.entry_plan.tactical_failure:.2f} | "
+                f"Struct ${candidate.entry_plan.invalidation:.2f} | "
+                f"Obj ${candidate.entry_plan.target_price:.2f}",
                 _score_line(candidate),
                 _contract_line(candidate),
                 "",
@@ -218,13 +223,13 @@ def notify_scan(result: ScanResult, report_path: Path, *, fixture: bool) -> None
         return
     state = NotificationState(LocalJsonStorage())
     snapshot = completion_snapshot(result)
-    only_on_change = result.scan_type in {ScanType.PREMARKET, ScanType.FOUR_HOUR}
+    only_on_change = result.scan_type in {ScanType.PREMARKET, ScanType.INTRADAY}
     configured = load_config("notifications")
     if only_on_change:
         setting = configured.get(
             "send_premarket_only_on_change"
             if result.scan_type == ScanType.PREMARKET
-            else "send_four_hour_only_on_change",
+            else "send_intraday_only_on_change",
             True,
         )
         only_on_change = bool(setting)

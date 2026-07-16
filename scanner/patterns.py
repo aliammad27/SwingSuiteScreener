@@ -42,10 +42,11 @@ def _status(
     if closes[-1] < invalidation:
         return PatternStatus.FAILED, 0
     breakout_index: int | None = None
-    for idx in range(1, len(closes)):
-        if closes[idx - 1] <= trigger < closes[idx]:
-            breakout_index = idx
-    if breakout_index is not None:
+    if closes[-1] > trigger:
+        for idx in range(1, len(closes)):
+            if closes[idx - 1] <= trigger < closes[idx]:
+                breakout_index = idx
+    if breakout_index is not None and closes[-1] > trigger:
         age = len(closes) - 1 - breakout_index
         extension_atr = (closes[-1] - trigger) / max(current_atr, 0.01)
         if (
@@ -94,7 +95,7 @@ def detect_controlled_pullback(
     if not trend.pullback_setup and distance > 0.75:
         return None
     risk = max(trend.close - (trend.pullback_support - 0.20 * trend.atr), 0.01)
-    target = max(trend.resistance_level, trend.close + 2 * risk)
+    target = max(trend.resistance_level or 0.0, trend.close + 2 * risk)
     room_pass = target - trend.close >= 1.5 * risk
     quality = _quality(
         40 if trend.pullback_setup else 28,
@@ -580,7 +581,19 @@ def detect_pattern_candidates(
         signal
         for detector in _DETECTORS
         if (signal := detector(candles, trend, profile)) is not None
-        and signal.pattern_type in profile.enabled_patterns
+        and signal.pattern_type in profile.production_patterns
+    )
+
+
+def detect_atlas_pattern_candidates(
+    candles: list[Candle], trend: TrendAnalysis, profile: StrategyProfile
+) -> tuple[PatternSignal, ...]:
+    atlas_patterns = set(profile.production_patterns + profile.context_patterns)
+    return tuple(
+        signal
+        for detector in _DETECTORS
+        if (signal := detector(candles, trend, profile)) is not None
+        and signal.pattern_type in atlas_patterns
     )
 
 
@@ -595,7 +608,7 @@ def detect_best_pattern(
             quality=0,
             trigger=trend.breakout_level,
             invalidation=max(trend.pullback_support - 0.20 * trend.atr, 0.01),
-            target=max(trend.resistance_level, trend.close + 2 * trend.atr),
+            target=max(trend.resistance_level or 0.0, trend.close + 2 * trend.atr),
             age_bars=0,
             geometry_notes=("No qualifying bullish setup geometry",),
         )
