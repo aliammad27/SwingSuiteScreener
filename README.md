@@ -139,16 +139,23 @@ open reports/intraday/latest.html
 
 ## Pine v6 Suite
 
-- `AS_Weekly_Command_1D_v5.pine`: daily trend, seven production patterns, levels,
-  research state, and alerts.
-- `AS_Weekly_Timing_1H_v5.pine`: completed-hour timing, VWAP, tactical levels, entry
-  confirmation, and management alerts.
-- `AS_Bullish_Pattern_Atlas_1D_v5.pine`: visual geometry for all twelve bullish
-  patterns with production/context labeling.
+- `AS_Weekly_Command_1D_v5.pine`: clean daily overlay with trend averages, current
+  trigger/invalidation, optional planning levels, and alerts.
+- `AS_Weekly_Timing_1H_v5.pine`: clean completed-hour overlay with EMA9, EMA21,
+  VWAP, current tactical levels, and management alerts.
+- `AS_Bullish_Pattern_Atlas_1D_v5.pine`: current trigger/invalidation geometry for
+  all twelve bullish patterns, with context-only patterns disabled by default.
 - `AS_Weekly_Screener_v5.pine`: Pine Screener-compatible state, pattern, trend,
-  setup, timing, market, distance, volume, extension, and lane columns.
-- `AS_Weekly_Underlying_Research_v5.pine`: explicitly labeled underlying-proxy
-  tester, not option performance.
+  setup, timing, market, distance, volume, extension, and lane columns that remain
+  hidden on the chart.
+- `AS_Weekly_Underlying_Research_v5.pine`: underlying-proxy tester with no custom
+  chart annotations; it is not option performance.
+
+The suite intentionally uses no custom labels, shapes, or tables. Only current
+decision levels are drawn, and optional pivot/2R planning lines are off by default.
+Scores, pattern codes, and lifecycle codes remain available in the Data Window.
+TradingView's built-in strategy trade markers can be hidden from the tester through
+`Settings > Style > Trades on chart`.
 
 Shared constants are checked by:
 

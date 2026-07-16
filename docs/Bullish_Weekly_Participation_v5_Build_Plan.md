@@ -399,11 +399,12 @@ No control, label, table, or detail pane may overlap or clip.
 - daily trend
 - production patterns
 - pattern lifecycle
-- trigger and structural invalidation
-- confirmed pivot and 2R objective
+- short current trigger and structural invalidation
+- optional current confirmed pivot and 2R objective, off by default
 - market and leadership proxies
 - `Ready - Verify` research state
 - daily alerts
+- no custom labels, shapes, or tables
 
 ### AS_Weekly_Timing_1H_v5.pine
 
@@ -413,15 +414,18 @@ No control, label, table, or detail pane may overlap or clip.
 - relative volume
 - higher-low/reclaim
 - intraday market confirmation
-- tactical warning and failure
+- short current tactical warning and failure
 - entry-window and management alerts
+- no custom labels, shapes, or tables
 
 ### AS_Bullish_Pattern_Atlas_1D_v5.pine
 
 - all twelve patterns
 - production/context distinction
-- selected trigger/invalidation geometry
+- current selected trigger/invalidation geometry
+- context-only patterns off by default
 - shared lifecycle
+- numeric evidence in the Data Window, without historical badges
 
 ### AS_Weekly_Screener_v5.pine
 
@@ -441,6 +445,8 @@ First ten plots:
 The script uses no more than five `request.*` calls. TradingView documents both the
 five-request limit and first-ten-plot behavior in
 [Pine Screener requirements](https://www.tradingview.com/support/solutions/43000742436-tradingview-pine-screener-key-features-and-requirements/).
+The ten outputs are hidden from the chart and exposed only to Pine Screener and the
+Data Window.
 
 ### AS_Weekly_Underlying_Research_v5.pine
 
@@ -448,6 +454,7 @@ five-request limit and first-ten-plot behavior in
 - completed daily bars
 - no option-performance claim
 - no automatic parameter promotion
+- no custom labels, shapes, or warning table
 
 ## 17. Research Ledger
 

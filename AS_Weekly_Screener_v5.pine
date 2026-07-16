@@ -2,7 +2,7 @@
 indicator(
     title = "Ali Swing Suite: Weekly Screener v5",
     shorttitle = "AS Weekly Screener v5",
-    overlay = false,
+    overlay = true,
     max_bars_back = 500
 )
 
@@ -17,7 +17,7 @@ const float PARITY_READY_DISTANCE_ATR = 0.30
 const float PARITY_MAX_EXTENSION_ATR = 0.75
 const int PARITY_MAX_CONFIRMED_AGE = 1
 
-string benchmarkSymbol = input.symbol("AMEX:SPY", "Hourly market benchmark")
+const string BENCHMARK_SYMBOL = "AMEX:SPY"
 
 // Four request calls. Pine Screener allows at most five.
 [dClose, dClose1, dClose63, dLow, dEma21, dSma50, dSma200, dSma200Prior, dAtr, dRelVolume, dBreakout, dBaseHigh, dBaseLow, dFlagLow, dFlagPole, dVcp60, dVcp40, dVcp20, dTriangleLowRecent, dTriangleLowPrior, dPullbackTrigger, dFlagTrigger] = request.security(
@@ -79,7 +79,7 @@ string benchmarkSymbol = input.symbol("AMEX:SPY", "Hourly market benchmark")
     lookahead = barmerge.lookahead_on
 )
 [marketHourClose, marketHourEma9, marketHourEma21] = request.security(
-    benchmarkSymbol,
+    BENCHMARK_SYMBOL,
     "60",
     [close[1], ta.ema(close, 9)[1], ta.ema(close, 21)[1]],
     lookahead = barmerge.lookahead_on
@@ -131,15 +131,17 @@ int stateCode = technicalReady ? 2 : trendScore >= 60 and setupScore > 0 ? 1 : 0
 int laneCode = indexLane ? 1 : 2
 
 // Keep these as the first ten plots: TradingView Pine Screener exposes them as columns.
-plot(stateCode, "State")
-plot(patternCode, "Pattern Code")
-plot(trendScore, "Trend")
-plot(setupScore, "Setup")
-plot(timingScore, "Timing")
-plot(marketScore, "Market")
-plot(distanceAtr, "Distance ATR")
-plot(dRelVolume, "Daily Relative Volume")
-plot(extensionAtr, "Extension ATR")
-plot(laneCode, "Lane")
+// They are deliberately hidden from the chart and available only to Pine Screener
+// and the Data Window.
+plot(stateCode, "State", display = display.data_window + display.pine_screener)
+plot(patternCode, "Pattern Code", display = display.data_window + display.pine_screener)
+plot(trendScore, "Trend", display = display.data_window + display.pine_screener)
+plot(setupScore, "Setup", display = display.data_window + display.pine_screener)
+plot(timingScore, "Timing", display = display.data_window + display.pine_screener)
+plot(marketScore, "Market", display = display.data_window + display.pine_screener)
+plot(distanceAtr, "Distance ATR", display = display.data_window + display.pine_screener)
+plot(dRelVolume, "Daily Relative Volume", display = display.data_window + display.pine_screener)
+plot(extensionAtr, "Extension ATR", display = display.data_window + display.pine_screener)
+plot(laneCode, "Lane", display = display.data_window + display.pine_screener)
 
 alertcondition(technicalReady, "V5 screener technical finalist", "{{ticker}} is a v5 technical finalist. Live event, feed, and option verification is still required.")

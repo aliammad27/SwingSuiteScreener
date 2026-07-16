@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Reworked all five Pine scripts around a clean-chart contract: no custom labels,
+  pattern badges, shapes, or tables.
+- Replaced full-history decision levels with short current-state line objects and
+  made pivot/2R planning levels optional and off by default.
+- Disabled context-only Pattern Atlas geometry by default and moved pattern,
+  lifecycle, score, and state evidence into the Data Window.
+- Hid all ten Pine Screener outputs from the price chart while preserving them as
+  Pine Screener columns.
+- Added automated release checks that reject future custom Pine labels or tables.
+
 ## 5.0.0 - 2026-07-16
 
 - Replaced the active strategy with Bullish Weekly Participation v5 and launched it

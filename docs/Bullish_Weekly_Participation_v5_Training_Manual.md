@@ -1373,19 +1373,19 @@ Installation:
 4. Save.
 5. Add to chart.
 6. Set the chart to one day.
-7. Confirm the table shows `Research default`.
-8. Confirm the state never displays a validated `Ready` while the profile is
-   research default.
+7. Confirm the chart contains no labels, badges, or status table.
+8. Open the Data Window to inspect trend, leadership, setup, market, and pattern
+   codes without covering price.
+9. Keep `Show current pivot and 2R objective` off unless those planning levels are
+   needed for the current review.
 
 Review:
 
 - EMA21, SMA50, SMA200
-- selected production pattern
-- trigger
-- structural invalidation
-- confirmed pivot
-- 2R objective
-- market and leadership
+- short current trigger and structural-invalidation lines
+- optional current confirmed pivot and 2R objective
+- selected production-pattern code in the Data Window
+- market and leadership scores in the Data Window
 
 ## 15.2 Hourly Timing
 
@@ -1400,9 +1400,11 @@ Installation:
 1. Add the script to the same symbol.
 2. Set chart to 60 minutes.
 3. Confirm EMA9, EMA21, and VWAP.
-4. Confirm the timing table recognizes the timeframe.
-5. Confirm entry timing appears only inside the entry window.
-6. Confirm the final scheduled hour is management-only.
+4. Confirm the chart contains no labels or timing table.
+5. Use the Data Window for timing score, RSI, MACD histogram, relative volume, and
+   entry-window state.
+6. Confirm entry alerts appear only inside the entry window.
+7. Confirm the final scheduled hour is management-only.
 
 ## 15.3 Pattern Atlas
 
@@ -1415,8 +1417,9 @@ AS_Bullish_Pattern_Atlas_1D_v5.pine
 Use:
 
 - study all twelve patterns
-- distinguish green production labels from context labels
-- inspect selected trigger and invalidation
+- inspect only the current selected trigger and invalidation
+- use Data Window pattern, class, and lifecycle codes instead of chart badges
+- enable context-only patterns only for deliberate study; they are off by default
 - compare chart geometry with the Python report
 
 The atlas does not promote context patterns.
@@ -1464,7 +1467,9 @@ Lane codes:
 
 TradingView uses the first ten plots as Screener columns and permits no more than five
 `request.*` calls in the scanned script. The v5 script is designed around those
-limits.
+limits. All ten outputs use Pine Screener/Data Window display modes, so adding the
+script does not draw a pane, labels, or values over price. The hourly benchmark is
+fixed to SPY because Pine Screener ignores symbol-input changes.
 
 ## 15.5 Underlying Research Tester
 
@@ -1479,6 +1484,10 @@ The tester is labeled:
 ```text
 NOT OPTION PERFORMANCE
 ```
+
+The script creates no custom labels or warning table. TradingView's own strategy
+trade markers are controlled through `Settings > Style > Trades on chart`; turn that
+setting off for a completely bare research chart.
 
 It does not model:
 

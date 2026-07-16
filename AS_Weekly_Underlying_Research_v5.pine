@@ -24,9 +24,33 @@ const float PARITY_MAX_EXTENSION_ATR = 0.75
 const int PARITY_MAX_CONFIRMED_AGE = 1
 
 string GROUP_RESEARCH = "Underlying-proxy research"
+string GROUP_DISPLAY = "Display"
 int maximumHoldBars = input.int(5, "Maximum daily bars held", minval = 1, maxval = 5, group = GROUP_RESEARCH)
 int noProgressBars = input.int(2, "No-progress reassessment bars", minval = 1, maxval = 3, group = GROUP_RESEARCH)
 bool requireMarket = input.bool(true, "Require confirmed SPY/QQQ daily context", group = GROUP_RESEARCH)
+bool showAverages = input.bool(true, "Show EMA21 and SMA50", group = GROUP_DISPLAY)
+bool showCurrentInvalidation = input.bool(true, "Show current structural invalidation", group = GROUP_DISPLAY)
+int levelBarsBack = input.int(18, "Current level bars left", minval = 3, maxval = 100, group = GROUP_DISPLAY)
+int levelBarsForward = input.int(8, "Current level bars right", minval = 1, maxval = 50, group = GROUP_DISPLAY)
+
+f_sync_level(line currentLine, bool visible, float level, color levelColor, string levelStyle, int levelWidth) =>
+    line result = currentLine
+    if barstate.islast
+        if visible and not na(level)
+            int leftBar = math.max(bar_index - levelBarsBack, 0)
+            int rightBar = bar_index + levelBarsForward
+            if na(result)
+                result := line.new(leftBar, level, rightBar, level, xloc = xloc.bar_index, extend = extend.none, color = levelColor, style = levelStyle, width = levelWidth)
+            else
+                line.set_xy1(result, leftBar, level)
+                line.set_xy2(result, rightBar, level)
+                line.set_color(result, levelColor)
+                line.set_style(result, levelStyle)
+                line.set_width(result, levelWidth)
+        else if not na(result)
+            line.delete(result)
+            result := na
+    result
 
 bool completedBar = barstate.isconfirmed
 float ema21 = ta.ema(close, 21)
@@ -107,13 +131,16 @@ if completedBar and (noProgress or maximumHold or structuralFailure)
     entryBar := na
     entryUnderlyingPrice := na
 
-plot(ema21, "EMA21", color = color.rgb(31, 90, 148), linewidth = 2)
-plot(sma50, "SMA50", color = color.rgb(173, 101, 10), linewidth = 2)
-plot(structuralInvalidation, "Underlying Structural Invalidation", color = color.rgb(170, 55, 55), style = plot.style_linebr)
-plotshape(researchEntry and strategy.position_size == 0, title = "Underlying proxy signal", style = shape.labelup, location = location.belowbar, color = color.rgb(18, 122, 78), text = "PROXY", textcolor = color.white, size = size.tiny)
+plot(showAverages ? ema21 : na, "EMA21", color = color.rgb(39, 110, 168), linewidth = 2, display = display.pane)
+plot(showAverages ? sma50 : na, "SMA50", color = color.rgb(200, 136, 42), linewidth = 1, display = display.pane)
 
-var table warningTable = table.new(position.top_right, 1, 3, frame_color = color.rgb(170, 55, 55), border_width = 2)
-if barstate.islast
-    table.cell(warningTable, 0, 0, "UNDERLYING PROXY RESEARCH", text_color = color.white, bgcolor = color.rgb(170, 55, 55))
-    table.cell(warningTable, 0, 1, "NOT OPTION PERFORMANCE", text_color = color.rgb(170, 55, 55))
-    table.cell(warningTable, 0, 2, "Research default - no promotion claim")
+var line invalidationLine = na
+invalidationLine := f_sync_level(invalidationLine, showCurrentInvalidation, structuralInvalidation, color.rgb(190, 67, 67), line.style_solid, 2)
+
+plot(trendScore, "V5 Trend Score", display = display.data_window)
+plot(marketScore, "V5 Market Score", display = display.data_window)
+plot(extensionAtr, "V5 Extension ATR", display = display.data_window)
+plot(structuralInvalidation, "V5 Structural Invalidation", display = display.data_window)
+
+// TradingView controls built-in strategy trade markers in Settings > Style.
+// Disable "Trades on chart" there when inspecting a completely bare price chart.

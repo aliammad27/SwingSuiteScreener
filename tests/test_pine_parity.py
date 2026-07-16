@@ -72,6 +72,9 @@ def test_pine_suite_is_bullish_v5_and_non_repainting() -> None:
         "Extension ATR",
         "Lane",
     ]
+    assert screener.count("display.pine_screener") == 10
+    assert "input.symbol(" not in screener
+    assert "overlay = true" in screener
     for pattern in (
         "controlled_pullback",
         "confirmed_breakout",
@@ -87,6 +90,40 @@ def test_pine_suite_is_bullish_v5_and_non_repainting() -> None:
         "rounding_base",
     ):
         assert pattern in files["AS_Bullish_Pattern_Atlas_1D_v5.pine"]
+
+
+def test_pine_suite_has_no_custom_chart_labels_or_tables() -> None:
+    paths = (
+        "AS_Weekly_Command_1D_v5.pine",
+        "AS_Weekly_Timing_1H_v5.pine",
+        "AS_Bullish_Pattern_Atlas_1D_v5.pine",
+        "AS_Weekly_Screener_v5.pine",
+        "AS_Weekly_Underlying_Research_v5.pine",
+    )
+    forbidden = ("plotshape(", "plotchar(", "label.", "table.")
+    for relative_path in paths:
+        payload = (ROOT / relative_path).read_text(encoding="utf-8")
+        for token in forbidden:
+            assert token not in payload, f"{relative_path} contains visual clutter: {token}"
+        for line in payload.splitlines():
+            if line.strip().startswith("plot("):
+                assert "display =" in line, (
+                    f"{relative_path} has a plot that can leak into the status line "
+                    "or price scale"
+                )
+
+    command = (ROOT / "AS_Weekly_Command_1D_v5.pine").read_text(encoding="utf-8")
+    timing = (ROOT / "AS_Weekly_Timing_1H_v5.pine").read_text(encoding="utf-8")
+    atlas = (ROOT / "AS_Bullish_Pattern_Atlas_1D_v5.pine").read_text(
+        encoding="utf-8"
+    )
+    tester = (ROOT / "AS_Weekly_Underlying_Research_v5.pine").read_text(
+        encoding="utf-8"
+    )
+    assert "showPlanningLevels = input.bool(false" in command
+    assert "Show current tactical levels" in timing
+    assert 'includeContextPatterns = input.bool(false' in atlas
+    assert "Show current structural invalidation" in tester
 
 
 def test_production_command_excludes_context_only_patterns() -> None:

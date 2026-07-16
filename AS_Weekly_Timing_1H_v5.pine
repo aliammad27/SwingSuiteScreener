@@ -4,8 +4,7 @@ indicator(
     shorttitle = "AS Weekly Timing 1H v5",
     overlay = true,
     max_bars_back = 500,
-    max_labels_count = 100,
-    max_lines_count = 60
+    max_lines_count = 8
 )
 
 // config/strategy.yaml parity constants. Do not edit independently.
@@ -19,20 +18,35 @@ string GROUP_DISPLAY = "Display"
 int rsiLength = input.int(14, "RSI length", minval = 5, group = GROUP_TIMING)
 int relativeVolumeLength = input.int(20, "Relative-volume length", minval = 10, group = GROUP_TIMING)
 bool showAverages = input.bool(true, "Show EMA9, EMA21, and VWAP", group = GROUP_DISPLAY)
-bool showLevels = input.bool(true, "Show tactical levels", group = GROUP_DISPLAY)
-bool showTable = input.bool(true, "Show timing table", group = GROUP_DISPLAY)
+bool showTacticalLevels = input.bool(true, "Show current tactical levels", group = GROUP_DISPLAY)
+int levelBarsBack = input.int(12, "Current level bars left", minval = 3, maxval = 60, group = GROUP_DISPLAY)
+int levelBarsForward = input.int(6, "Current level bars right", minval = 1, maxval = 30, group = GROUP_DISPLAY)
 
-f_score_color(int value) =>
-    value >= PARITY_TIMING_MINIMUM ? color.rgb(18, 122, 78) :
-     value >= 60 ? color.rgb(173, 101, 10) :
-     color.rgb(170, 55, 55)
+f_sync_level(line currentLine, bool visible, float level, color levelColor, string levelStyle, int levelWidth) =>
+    line result = currentLine
+    if barstate.islast
+        if visible and not na(level)
+            int leftBar = math.max(bar_index - levelBarsBack, 0)
+            int rightBar = bar_index + levelBarsForward
+            if na(result)
+                result := line.new(leftBar, level, rightBar, level, xloc = xloc.bar_index, extend = extend.none, color = levelColor, style = levelStyle, width = levelWidth)
+            else
+                line.set_xy1(result, leftBar, level)
+                line.set_xy2(result, rightBar, level)
+                line.set_color(result, levelColor)
+                line.set_style(result, levelStyle)
+                line.set_width(result, levelWidth)
+        else if not na(result)
+            line.delete(result)
+            result := na
+    result
 
 bool completedBar = barstate.isconfirmed
 float ema9Raw = ta.ema(close, 9)
 float ema21Raw = ta.ema(close, 21)
 float vwapRaw = ta.vwap(hlc3)
 float rsiRaw = ta.rsi(close, rsiLength)
-[macdLineRaw, macdSignalRaw, macdHistogramRaw] = ta.macd(close, 12, 26, 9)
+[_, _, macdHistogramRaw] = ta.macd(close, 12, 26, 9)
 float relativeVolumeRaw = volume / math.max(ta.sma(volume, relativeVolumeLength), 1)
 float sourceClose = completedBar ? close : close[1]
 float sourceLow = completedBar ? low : low[1]
@@ -92,53 +106,31 @@ bool finalHourManagementOnly = closeMinuteOfDay > 14 * 60 + 45
 bool enoughHistory = bar_index + 1 >= PARITY_MINIMUM_COMPLETED_BARS
 bool recommendedTimeframe = timeframe.period == "60"
 bool timingReady = completedBar and enoughHistory and recommendedTimeframe and entryWindow and dailyAligned and timingScore >= PARITY_TIMING_MINIMUM
+bool developing = entryWindow and dailyAligned and timingScore >= 60
+int timingStateCode = timingReady ? 3 : finalHourManagementOnly ? 2 : developing ? 1 : 0
 
 float tacticalWarning = math.min(ema21, sessionVwap)
 float tacticalFailure = ta.lowest(low, 4)
-string timingState = timingReady ? "Entry timing confirmed" :
-     finalHourManagementOnly ? "Management only" :
-     not entryWindow ? "Outside entry window" :
-     not dailyAligned ? "Daily blocked" :
-     timingScore >= 60 ? "Improving" :
-     "Not confirmed"
+plot(showAverages ? ema9 : na, "1H EMA9", color = color.rgb(18, 122, 78), linewidth = 2, display = display.pane)
+plot(showAverages ? ema21 : na, "1H EMA21", color = color.rgb(31, 90, 148), linewidth = 2, display = display.pane)
+plot(showAverages ? sessionVwap : na, "Session VWAP", color = color.rgb(173, 101, 10), linewidth = 2, display = display.pane)
 
-plot(showAverages ? ema9 : na, "1H EMA9", color = color.rgb(18, 122, 78), linewidth = 2)
-plot(showAverages ? ema21 : na, "1H EMA21", color = color.rgb(31, 90, 148), linewidth = 2)
-plot(showAverages ? sessionVwap : na, "Session VWAP", color = color.rgb(173, 101, 10), linewidth = 2)
-plot(showLevels ? tacticalWarning : na, "Tactical Warning", color = color.rgb(173, 101, 10), style = plot.style_linebr)
-plot(showLevels ? tacticalFailure : na, "Tactical Failure", color = color.rgb(170, 55, 55), style = plot.style_linebr)
-plotshape(timingReady, title = "Completed-hour entry confirmation", style = shape.triangleup, location = location.belowbar, color = color.rgb(18, 122, 78), size = size.tiny)
+var line warningLine = na
+var line failureLine = na
+warningLine := f_sync_level(warningLine, showTacticalLevels, tacticalWarning, color.rgb(190, 128, 35), line.style_dashed, 1)
+failureLine := f_sync_level(failureLine, showTacticalLevels, tacticalFailure, color.rgb(190, 67, 67), line.style_solid, 2)
 
 plot(timingScore, "V5 Timing Score", display = display.data_window)
 plot(rsiValue, "V5 RSI", display = display.data_window)
 plot(macdHistogram, "V5 MACD Histogram", display = display.data_window)
 plot(relativeVolume, "V5 Relative Volume", display = display.data_window)
 plot(entryWindow ? 1 : 0, "V5 Entry Window", display = display.data_window)
-
-var table timingTable = table.new(position.top_right, 2, 11, frame_color = color.rgb(210, 216, 222), border_width = 1)
-if barstate.islast and showTable
-    table.cell(timingTable, 0, 0, "WEEKLY TIMING V5", text_color = color.white, bgcolor = color.rgb(28, 36, 44))
-    table.cell(timingTable, 1, 0, syminfo.ticker, text_color = color.white, bgcolor = color.rgb(28, 36, 44))
-    table.cell(timingTable, 0, 1, "State")
-    table.cell(timingTable, 1, 1, timingState)
-    table.cell(timingTable, 0, 2, "Score")
-    table.cell(timingTable, 1, 2, str.tostring(timingScore), text_color = f_score_color(timingScore))
-    table.cell(timingTable, 0, 3, "Window")
-    table.cell(timingTable, 1, 3, entryWindow ? "Entry eligible" : finalHourManagementOnly ? "Management only" : "Closed")
-    table.cell(timingTable, 0, 4, "Daily")
-    table.cell(timingTable, 1, 4, dailyAligned ? "Aligned" : "Blocked")
-    table.cell(timingTable, 0, 5, "Market")
-    table.cell(timingTable, 1, 5, intradayMarketAligned ? "Confirmed" : "Not confirmed")
-    table.cell(timingTable, 0, 6, "RSI")
-    table.cell(timingTable, 1, 6, str.tostring(rsiValue, "#.0"))
-    table.cell(timingTable, 0, 7, "MACD hist")
-    table.cell(timingTable, 1, 7, str.tostring(macdHistogram, "#.000"))
-    table.cell(timingTable, 0, 8, "Rel volume")
-    table.cell(timingTable, 1, 8, str.tostring(relativeVolume, "#.00"))
-    table.cell(timingTable, 0, 9, "Warning")
-    table.cell(timingTable, 1, 9, str.tostring(tacticalWarning, format.mintick))
-    table.cell(timingTable, 0, 10, "Failure")
-    table.cell(timingTable, 1, 10, str.tostring(tacticalFailure, format.mintick))
+plot(timingStateCode, "V5 Timing State Code", display = display.data_window)
+plot(dailyAligned ? 1 : 0, "V5 Daily Aligned", display = display.data_window)
+plot(intradayMarketAligned ? 1 : 0, "V5 Market Aligned", display = display.data_window)
+plot(recommendedTimeframe ? 1 : 0, "V5 Recommended Timeframe", display = display.data_window)
+plot(tacticalWarning, "V5 Tactical Warning", display = display.data_window)
+plot(tacticalFailure, "V5 Tactical Failure", display = display.data_window)
 
 alertcondition(timingReady and not timingReady[1], "V5 completed-hour entry confirmation", "{{ticker}} has completed-hour v5 timing confirmation inside the entry window.")
 alertcondition(sourceClose < tacticalWarning and close[1] >= tacticalWarning[1] and completedBar, "V5 tactical warning", "{{ticker}} closed below its v5 tactical warning level.")

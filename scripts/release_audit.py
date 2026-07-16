@@ -233,6 +233,7 @@ def _check_package_version(root: Path, errors: list[str]) -> None:
 
 
 def _check_pine_contract(root: Path, errors: list[str]) -> None:
+    forbidden_visual_tokens = ("plotshape(", "plotchar(", "label.", "table.")
     for relative in PINE_FILES:
         path = root / relative
         if not path.is_file():
@@ -242,6 +243,16 @@ def _check_pine_contract(root: Path, errors: list[str]) -> None:
             errors.append(f"{relative} must use Pine v6")
         if "PARITY_SCHEMA_VERSION = 5" not in text:
             errors.append(f"{relative} must expose PARITY_SCHEMA_VERSION = 5")
+        for token in forbidden_visual_tokens:
+            if token in text:
+                errors.append(
+                    f"{relative} must remain label-free; found visual token {token!r}"
+                )
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if line.strip().startswith("plot(") and "display =" not in line:
+                errors.append(
+                    f"{relative}:{line_number} must set an explicit plot display mode"
+                )
 
     screener = root / "AS_Weekly_Screener_v5.pine"
     if screener.is_file():
@@ -255,6 +266,16 @@ def _check_pine_contract(root: Path, errors: list[str]) -> None:
         if plot_count < 10:
             errors.append(
                 f"AS_Weekly_Screener_v5.pine exposes {plot_count} plots; at least 10 required"
+            )
+        if text.count("display.pine_screener") != 10:
+            errors.append(
+                "AS_Weekly_Screener_v5.pine must expose exactly ten data-only "
+                "Pine Screener plots"
+            )
+        if "input.symbol(" in text:
+            errors.append(
+                "AS_Weekly_Screener_v5.pine cannot use input.symbol because "
+                "Pine Screener ignores symbol inputs"
             )
 
     tester = root / "AS_Weekly_Underlying_Research_v5.pine"

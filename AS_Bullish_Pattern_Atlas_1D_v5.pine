@@ -4,8 +4,7 @@ indicator(
     shorttitle = "AS Pattern Atlas 1D v5",
     overlay = true,
     max_bars_back = 500,
-    max_labels_count = 250,
-    max_lines_count = 100
+    max_lines_count = 8
 )
 
 // config/strategy.yaml parity constants. Do not edit independently.
@@ -15,10 +14,29 @@ const float PARITY_MAX_EXTENSION_ATR = 0.75
 const int PARITY_MAX_CONFIRMED_AGE = 1
 
 string GROUP_DISPLAY = "Atlas display"
-bool showProduction = input.bool(true, "Show production patterns", group = GROUP_DISPLAY)
-bool showContext = input.bool(true, "Show context-only patterns", group = GROUP_DISPLAY)
-bool showGeometry = input.bool(true, "Show selected geometry", group = GROUP_DISPLAY)
-bool showTable = input.bool(true, "Show atlas table", group = GROUP_DISPLAY)
+bool includeContextPatterns = input.bool(false, "Include context-only patterns", group = GROUP_DISPLAY)
+bool showCurrentGeometry = input.bool(true, "Show current trigger and invalidation", group = GROUP_DISPLAY)
+int levelBarsBack = input.int(18, "Current level bars left", minval = 3, maxval = 100, group = GROUP_DISPLAY)
+int levelBarsForward = input.int(8, "Current level bars right", minval = 1, maxval = 50, group = GROUP_DISPLAY)
+
+f_sync_level(line currentLine, bool visible, float level, color levelColor, string levelStyle, int levelWidth) =>
+    line result = currentLine
+    if barstate.islast
+        if visible and not na(level)
+            int leftBar = math.max(bar_index - levelBarsBack, 0)
+            int rightBar = bar_index + levelBarsForward
+            if na(result)
+                result := line.new(leftBar, level, rightBar, level, xloc = xloc.bar_index, extend = extend.none, color = levelColor, style = levelStyle, width = levelWidth)
+            else
+                line.set_xy1(result, leftBar, level)
+                line.set_xy2(result, rightBar, level)
+                line.set_color(result, levelColor)
+                line.set_style(result, levelStyle)
+                line.set_width(result, levelWidth)
+        else if not na(result)
+            line.delete(result)
+            result := na
+    result
 
 bool completedBar = barstate.isconfirmed
 float sourceClose = completedBar ? close : close[1]
@@ -111,116 +129,97 @@ float roundingRim = math.max(roundingLeftRim, roundingRightRim)
 float roundingDepth = roundingRim > 0 ? (roundingRim - roundingBottom) / roundingRim : 1.0
 bool rounding_base = trendPass and roundingDepth >= 0.08 and roundingDepth <= 0.30 and math.abs(roundingLeftRim - roundingRightRim) / roundingRim <= 0.06
 
-string selectedPattern = "none"
-string selectedClass = "none"
+int selectedPatternCode = 0
+int selectedClassCode = 0
 float selectedTrigger = na
 float selectedInvalidation = na
 
 if controlled_pullback
-    selectedPattern := "controlled_pullback"
-    selectedClass := "production"
+    selectedPatternCode := 1
+    selectedClassCode := 1
     selectedTrigger := pullbackTrigger
     selectedInvalidation := pullbackInvalidation
 else if confirmed_breakout or sourceClose >= breakoutTrigger - PARITY_READY_DISTANCE_ATR * currentAtr
-    selectedPattern := "confirmed_breakout"
-    selectedClass := "production"
+    selectedPatternCode := 2
+    selectedClassCode := 1
     selectedTrigger := breakoutTrigger
     selectedInvalidation := breakoutInvalidation
 else if bull_flag
-    selectedPattern := "bull_flag"
-    selectedClass := "production"
+    selectedPatternCode := 3
+    selectedClassCode := 1
     selectedTrigger := flagTrigger
     selectedInvalidation := flagLow
 else if breakout_retest
-    selectedPattern := "breakout_retest"
-    selectedClass := "production"
+    selectedPatternCode := 4
+    selectedClassCode := 1
     selectedTrigger := priorBreakout
     selectedInvalidation := retestInvalidation
 else if flat_base
-    selectedPattern := "flat_base"
-    selectedClass := "production"
+    selectedPatternCode := 5
+    selectedClassCode := 1
     selectedTrigger := flatTrigger
     selectedInvalidation := baseLow
 else if vcp_tight_base
-    selectedPattern := "vcp_tight_base"
-    selectedClass := "production"
+    selectedPatternCode := 6
+    selectedClassCode := 1
     selectedTrigger := vcpTrigger
     selectedInvalidation := vcpLow
 else if ascending_triangle
-    selectedPattern := "ascending_triangle"
-    selectedClass := "production"
+    selectedPatternCode := 7
+    selectedClassCode := 1
     selectedTrigger := triangleTop
     selectedInvalidation := triangleLowRecent
-else if cup_with_handle
-    selectedPattern := "cup_with_handle"
-    selectedClass := "context only"
+else if includeContextPatterns and cup_with_handle
+    selectedPatternCode := 8
+    selectedClassCode := 2
     selectedTrigger := cupRightRim
     selectedInvalidation := handleLow
-else if double_bottom
-    selectedPattern := "double_bottom"
-    selectedClass := "context only"
+else if includeContextPatterns and double_bottom
+    selectedPatternCode := 9
+    selectedClassCode := 2
     selectedTrigger := doubleNeckline
     selectedInvalidation := math.min(bottomOne, bottomTwo)
-else if inverse_head_and_shoulders
-    selectedPattern := "inverse_head_and_shoulders"
-    selectedClass := "context only"
+else if includeContextPatterns and inverse_head_and_shoulders
+    selectedPatternCode := 10
+    selectedClassCode := 2
     selectedTrigger := ihsNeckline
     selectedInvalidation := headLow
-else if falling_wedge
-    selectedPattern := "falling_wedge"
-    selectedClass := "context only"
+else if includeContextPatterns and falling_wedge
+    selectedPatternCode := 11
+    selectedClassCode := 2
     selectedTrigger := wedgeUpper
     selectedInvalidation := wedgeLow
-else if rounding_base
-    selectedPattern := "rounding_base"
-    selectedClass := "context only"
+else if includeContextPatterns and rounding_base
+    selectedPatternCode := 12
+    selectedClassCode := 2
     selectedTrigger := roundingRightRim
     selectedInvalidation := roundingBottom
 
 float distanceAtr = not na(selectedTrigger) ? (selectedTrigger - sourceClose) / math.max(currentAtr, syminfo.mintick) : na
 bool crossedTrigger = not na(selectedTrigger) and sourceClose > selectedTrigger and close[1] <= selectedTrigger[1]
 int confirmedAge = nz(ta.barssince(crossedTrigger), 10000)
+bool failed = not na(selectedInvalidation) and sourceClose < selectedInvalidation
 bool extended = not na(selectedTrigger) and sourceClose > selectedTrigger + PARITY_MAX_EXTENSION_ATR * currentAtr
-string lifecycle = sourceClose < selectedInvalidation ? "Failed" :
-     extended ? "Extended" :
-     confirmedAge <= PARITY_MAX_CONFIRMED_AGE ? "Confirmed" :
-     distanceAtr >= 0 and distanceAtr <= PARITY_READY_DISTANCE_ATR ? "Ready" :
-     "Forming"
+bool ready = distanceAtr >= 0 and distanceAtr <= PARITY_READY_DISTANCE_ATR
+bool confirmed = confirmedAge <= PARITY_MAX_CONFIRMED_AGE
+int lifecycleCode = failed ? 5 : extended ? 4 : confirmed ? 3 : ready ? 2 : selectedPatternCode > 0 ? 1 : 0
 
-color productionColor = color.rgb(18, 122, 78)
-color contextColor = color.rgb(173, 101, 10)
-plot(showGeometry ? selectedTrigger : na, "Selected Pattern Trigger", color = selectedClass == "production" ? productionColor : contextColor, style = plot.style_linebr, linewidth = 2)
-plot(showGeometry ? selectedInvalidation : na, "Selected Pattern Invalidation", color = color.rgb(170, 55, 55), style = plot.style_linebr)
+var line triggerLine = na
+var line invalidationLine = na
+color triggerColor = selectedClassCode == 1 ? color.rgb(20, 145, 91) : color.rgb(190, 128, 35)
+triggerLine := f_sync_level(triggerLine, showCurrentGeometry, selectedTrigger, triggerColor, line.style_solid, 2)
+invalidationLine := f_sync_level(invalidationLine, showCurrentGeometry, selectedInvalidation, color.rgb(190, 67, 67), line.style_solid, 2)
 
-plotshape(showProduction and controlled_pullback and completedBar, "Controlled Pullback", shape.labelup, location.belowbar, productionColor, text = "PB", textcolor = color.white, size = size.tiny)
-plotshape(showProduction and confirmed_breakout and completedBar, "Confirmed Breakout", shape.labelup, location.belowbar, productionColor, text = "BO", textcolor = color.white, size = size.tiny)
-plotshape(showProduction and bull_flag and completedBar, "Bull Flag", shape.labelup, location.belowbar, productionColor, text = "BF", textcolor = color.white, size = size.tiny)
-plotshape(showProduction and breakout_retest and completedBar, "Breakout Retest", shape.labelup, location.belowbar, productionColor, text = "RT", textcolor = color.white, size = size.tiny)
-plotshape(showProduction and flat_base and completedBar, "Flat Base", shape.labelup, location.belowbar, productionColor, text = "FB", textcolor = color.white, size = size.tiny)
-plotshape(showProduction and vcp_tight_base and completedBar, "VCP Tight Base", shape.labelup, location.belowbar, productionColor, text = "VCP", textcolor = color.white, size = size.tiny)
-plotshape(showProduction and ascending_triangle and completedBar, "Ascending Triangle", shape.labelup, location.belowbar, productionColor, text = "AT", textcolor = color.white, size = size.tiny)
-plotshape(showContext and cup_with_handle and completedBar, "Cup With Handle", shape.labeldown, location.abovebar, contextColor, text = "CWH", textcolor = color.white, size = size.tiny)
-plotshape(showContext and double_bottom and completedBar, "Double Bottom", shape.labeldown, location.abovebar, contextColor, text = "DB", textcolor = color.white, size = size.tiny)
-plotshape(showContext and inverse_head_and_shoulders and completedBar, "Inverse Head And Shoulders", shape.labeldown, location.abovebar, contextColor, text = "IHS", textcolor = color.white, size = size.tiny)
-plotshape(showContext and falling_wedge and completedBar, "Falling Wedge", shape.labeldown, location.abovebar, contextColor, text = "FW", textcolor = color.white, size = size.tiny)
-plotshape(showContext and rounding_base and completedBar, "Rounding Base", shape.labeldown, location.abovebar, contextColor, text = "RB", textcolor = color.white, size = size.tiny)
+// Pattern codes: 1 pullback, 2 breakout, 3 bull flag, 4 retest, 5 flat base,
+// 6 VCP, 7 ascending triangle, 8 cup/handle, 9 double bottom, 10 inverse H&S,
+// 11 falling wedge, 12 rounding base. Class: 1 production, 2 context only.
+// Lifecycle: 0 none, 1 forming, 2 ready, 3 confirmed, 4 extended, 5 failed.
+plot(selectedPatternCode, "V5 Pattern Code", display = display.data_window)
+plot(selectedClassCode, "V5 Pattern Class", display = display.data_window)
+plot(lifecycleCode, "V5 Lifecycle Code", display = display.data_window)
+plot(distanceAtr, "V5 Distance ATR", display = display.data_window)
+plot(selectedTrigger, "V5 Pattern Trigger", display = display.data_window)
+plot(selectedInvalidation, "V5 Pattern Invalidation", display = display.data_window)
 
-var table atlasTable = table.new(position.top_right, 2, 7, frame_color = color.rgb(210, 216, 222), border_width = 1)
-if barstate.islast and showTable
-    table.cell(atlasTable, 0, 0, "PATTERN ATLAS V5", text_color = color.white, bgcolor = color.rgb(28, 36, 44))
-    table.cell(atlasTable, 1, 0, "12 patterns", text_color = color.white, bgcolor = color.rgb(28, 36, 44))
-    table.cell(atlasTable, 0, 1, "Selected")
-    table.cell(atlasTable, 1, 1, selectedPattern)
-    table.cell(atlasTable, 0, 2, "Class")
-    table.cell(atlasTable, 1, 2, selectedClass)
-    table.cell(atlasTable, 0, 3, "Lifecycle")
-    table.cell(atlasTable, 1, 3, lifecycle)
-    table.cell(atlasTable, 0, 4, "Trigger")
-    table.cell(atlasTable, 1, 4, str.tostring(selectedTrigger, format.mintick))
-    table.cell(atlasTable, 0, 5, "Invalidation")
-    table.cell(atlasTable, 1, 5, str.tostring(selectedInvalidation, format.mintick))
-    table.cell(atlasTable, 0, 6, "Distance ATR")
-    table.cell(atlasTable, 1, 6, str.tostring(distanceAtr, "#.00"))
-
-alertcondition(selectedClass == "production" and lifecycle == "Ready" and completedBar, "V5 production pattern ready", "{{ticker}} has a completed-bar production pattern inside the v5 ready distance.")
-alertcondition(selectedClass == "context only" and lifecycle == "Ready" and completedBar, "V5 context pattern observed", "{{ticker}} has a context-only bullish pattern. It is not a v5 production entry pattern.")
+alertcondition(selectedClassCode == 1 and lifecycleCode == 2 and completedBar, "V5 production pattern ready", "{{ticker}} has a completed-bar production pattern inside the v5 ready distance.")
+alertcondition(selectedClassCode == 2 and lifecycleCode == 2 and completedBar, "V5 context pattern observed", "{{ticker}} has a context-only bullish pattern. It is not a v5 production entry pattern.")
