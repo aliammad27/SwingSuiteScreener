@@ -11,6 +11,8 @@
 - Hid all ten Pine Screener outputs from the price chart while preserving them as
   Pine Screener columns.
 - Added automated release checks that reject future custom Pine labels or tables.
+- Made every Pattern Atlas history function unconditional so TradingView compiles
+  it without calculation-consistency warnings.
 
 ## 5.0.0 - 2026-07-16
 

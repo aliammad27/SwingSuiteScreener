@@ -286,6 +286,20 @@ def _check_pine_contract(root: Path, errors: list[str]) -> None:
                 "AS_Weekly_Underlying_Research_v5.pine must retain its proxy warning"
             )
 
+    atlas = root / "AS_Bullish_Pattern_Atlas_1D_v5.pine"
+    if atlas.is_file():
+        for line_number, line in enumerate(
+            atlas.read_text(encoding="utf-8").splitlines(),
+            start=1,
+        ):
+            if "ta." not in line:
+                continue
+            if "?" in line or line.lstrip().startswith(("if ", "else if ", "bool ")):
+                errors.append(
+                    "AS_Bullish_Pattern_Atlas_1D_v5.pine:"
+                    f"{line_number} must calculate history functions unconditionally"
+                )
+
 
 def _check_no_execution(root: Path, errors: list[str]) -> None:
     scanner_root = root / "scanner"

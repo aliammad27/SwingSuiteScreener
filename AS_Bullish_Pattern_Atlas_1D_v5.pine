@@ -40,94 +40,163 @@ f_sync_level(line currentLine, bool visible, float level, color levelColor, stri
 
 bool completedBar = barstate.isconfirmed
 float sourceClose = completedBar ? close : close[1]
+float sourcePriorClose = completedBar ? close[1] : close[2]
 float sourceOpen = completedBar ? open : open[1]
 float sourceLow = completedBar ? low : low[1]
+float sourceVolume = completedBar ? volume : volume[1]
+
 float currentAtrRaw = ta.atr(14)
+float ema21Raw = ta.ema(close, 21)
+float sma50Raw = ta.sma(close, 50)
+float sma200Raw = ta.sma(close, 200)
+float averageVolumeRaw = ta.sma(volume, 20)
 float currentAtr = completedBar ? currentAtrRaw : currentAtrRaw[1]
-float ema21 = completedBar ? ta.ema(close, 21) : ta.ema(close, 21)[1]
-float sma50 = completedBar ? ta.sma(close, 50) : ta.sma(close, 50)[1]
-float sma200 = completedBar ? ta.sma(close, 200) : ta.sma(close, 200)[1]
+float ema21 = completedBar ? ema21Raw : ema21Raw[1]
+float sma50 = completedBar ? sma50Raw : sma50Raw[1]
+float sma200 = completedBar ? sma200Raw : sma200Raw[1]
+float averageVolume = completedBar ? averageVolumeRaw : averageVolumeRaw[1]
 bool trendPass = sourceClose > ema21 and ema21 > sma50 and sma50 > sma200
-float averageVolume = ta.sma(volume, 20)
-float relativeVolume = averageVolume > 0 ? volume / averageVolume : 0.0
+float relativeVolume = averageVolume > 0 ? sourceVolume / averageVolume : 0.0
 
 float pivotLowRaw = ta.pivotlow(low, 4, 3)
-float latestPivotLow = nz(ta.valuewhen(not na(pivotLowRaw), pivotLowRaw, 0), sma50)
+float latestPivotLowRaw = ta.valuewhen(not na(pivotLowRaw), pivotLowRaw, 0)
+float latestPivotLow = nz(completedBar ? latestPivotLowRaw : latestPivotLowRaw[1], sma50)
 float support = math.max(math.min(ema21, sourceClose), math.min(latestPivotLow, sourceClose))
 bool controlled_pullback = trendPass and sourceLow <= support + PARITY_READY_DISTANCE_ATR * currentAtr and sourceClose > support and sourceClose >= sourceOpen
-float pullbackTrigger = ta.highest(high, 2)
+float pullbackTriggerRaw = ta.highest(high, 2)
+float pullbackTrigger = completedBar ? pullbackTriggerRaw : pullbackTriggerRaw[1]
 float pullbackInvalidation = support - 0.20 * currentAtr
 
-float breakoutTrigger = ta.highest(high[1], 20)
-bool confirmed_breakout = trendPass and sourceClose > breakoutTrigger and close[1] <= breakoutTrigger and relativeVolume >= 1.20
+float breakoutTriggerRaw = ta.highest(high[1], 20)
+float breakoutTrigger = completedBar ? breakoutTriggerRaw : breakoutTriggerRaw[1]
+bool confirmed_breakout = trendPass and sourceClose > breakoutTrigger and sourcePriorClose <= breakoutTrigger and relativeVolume >= 1.20
 float breakoutInvalidation = math.max(ema21, breakoutTrigger - 0.50 * currentAtr)
 
-float flagPole = close[5] - close[15]
-float flagLow = ta.lowest(low, 5)
-float flagRetracement = flagPole > 0 ? (close[5] - flagLow) / flagPole : 1.0
-bool bull_flag = trendPass and flagPole >= 2.0 * currentAtr and flagRetracement >= 0.10 and flagRetracement <= 0.50 and ta.sma(volume, 5) <= ta.sma(volume[5], 10)
-float flagTrigger = ta.highest(high, 5)
+float flagPoleRaw = close[5] - close[15]
+float flagReferenceCloseRaw = close[5]
+float flagLowRaw = ta.lowest(low, 5)
+float flagVolumeRaw = ta.sma(volume, 5)
+float flagPriorVolumeRaw = ta.sma(volume[5], 10)
+float flagTriggerRaw = ta.highest(high, 5)
+float flagPole = completedBar ? flagPoleRaw : flagPoleRaw[1]
+float flagReferenceClose = completedBar ? flagReferenceCloseRaw : flagReferenceCloseRaw[1]
+float flagLow = completedBar ? flagLowRaw : flagLowRaw[1]
+float flagVolume = completedBar ? flagVolumeRaw : flagVolumeRaw[1]
+float flagPriorVolume = completedBar ? flagPriorVolumeRaw : flagPriorVolumeRaw[1]
+float flagTrigger = completedBar ? flagTriggerRaw : flagTriggerRaw[1]
+float flagRetracement = flagPole > 0 ? (flagReferenceClose - flagLow) / flagPole : 1.0
+bool bull_flag = trendPass and flagPole >= 2.0 * currentAtr and flagRetracement >= 0.10 and flagRetracement <= 0.50 and flagVolume <= flagPriorVolume
 
-bool breakoutEvent = close > ta.highest(high[1], 30) and volume >= averageVolume * 1.20
-float priorBreakout = ta.valuewhen(breakoutEvent, ta.highest(high[1], 30), 0)
-int barsSinceBreakout = nz(ta.barssince(breakoutEvent), 10000)
+float breakoutLevel30Raw = ta.highest(high[1], 30)
+bool breakoutEventRaw = close > breakoutLevel30Raw and volume >= averageVolumeRaw * 1.20
+float priorBreakoutRaw = ta.valuewhen(breakoutEventRaw, breakoutLevel30Raw, 0)
+int barsSinceBreakoutRaw = nz(ta.barssince(breakoutEventRaw), 10000)
+float retestInvalidationRaw = ta.lowest(low, 8)
+float priorBreakout = completedBar ? priorBreakoutRaw : priorBreakoutRaw[1]
+int barsSinceBreakout = completedBar ? barsSinceBreakoutRaw : barsSinceBreakoutRaw[1]
+float retestInvalidation = completedBar ? retestInvalidationRaw : retestInvalidationRaw[1]
 bool breakout_retest = trendPass and barsSinceBreakout >= 1 and barsSinceBreakout <= 8 and sourceLow <= priorBreakout + PARITY_READY_DISTANCE_ATR * currentAtr and sourceClose > priorBreakout
-float retestInvalidation = ta.lowest(low, 8)
 
-float baseHigh = ta.highest(high, 25)
-float baseLow = ta.lowest(low, 25)
+float baseHighRaw = ta.highest(high, 25)
+float baseLowRaw = ta.lowest(low, 25)
+float baseVolumeRaw = ta.sma(volume, 10)
+float basePriorVolumeRaw = ta.sma(volume[10], 15)
+float flatTriggerRaw = ta.highest(high[1], 24)
+float baseHigh = completedBar ? baseHighRaw : baseHighRaw[1]
+float baseLow = completedBar ? baseLowRaw : baseLowRaw[1]
+float baseVolume = completedBar ? baseVolumeRaw : baseVolumeRaw[1]
+float basePriorVolume = completedBar ? basePriorVolumeRaw : basePriorVolumeRaw[1]
+float flatTrigger = completedBar ? flatTriggerRaw : flatTriggerRaw[1]
 float baseDepth = baseHigh > 0 ? (baseHigh - baseLow) / baseHigh : 1.0
-bool flat_base = trendPass and baseDepth <= 0.12 and ta.sma(volume, 10) <= ta.sma(volume[10], 15)
-float flatTrigger = ta.highest(high[1], 24)
+bool flat_base = trendPass and baseDepth <= 0.12 and baseVolume <= basePriorVolume
 
-float vcpRange60 = ta.highest(high, 60) - ta.lowest(low, 60)
-float vcpRange40 = ta.highest(high, 40) - ta.lowest(low, 40)
-float vcpRange20 = ta.highest(high, 20) - ta.lowest(low, 20)
-bool vcp_tight_base = trendPass and vcpRange40 <= 0.85 * vcpRange60 and vcpRange20 <= 0.85 * vcpRange40 and ta.sma(volume, 20) <= 0.80 * ta.sma(volume[20], 20)
-float vcpTrigger = ta.highest(high[1], 19)
-float vcpLow = ta.lowest(low, 20)
+float vcpRange60Raw = ta.highest(high, 60) - ta.lowest(low, 60)
+float vcpRange40Raw = ta.highest(high, 40) - ta.lowest(low, 40)
+float vcpRange20Raw = ta.highest(high, 20) - ta.lowest(low, 20)
+float vcpVolumeRaw = ta.sma(volume, 20)
+float vcpPriorVolumeRaw = ta.sma(volume[20], 20)
+float vcpTriggerRaw = ta.highest(high[1], 19)
+float vcpLowRaw = ta.lowest(low, 20)
+float vcpRange60 = completedBar ? vcpRange60Raw : vcpRange60Raw[1]
+float vcpRange40 = completedBar ? vcpRange40Raw : vcpRange40Raw[1]
+float vcpRange20 = completedBar ? vcpRange20Raw : vcpRange20Raw[1]
+float vcpVolume = completedBar ? vcpVolumeRaw : vcpVolumeRaw[1]
+float vcpPriorVolume = completedBar ? vcpPriorVolumeRaw : vcpPriorVolumeRaw[1]
+float vcpTrigger = completedBar ? vcpTriggerRaw : vcpTriggerRaw[1]
+float vcpLow = completedBar ? vcpLowRaw : vcpLowRaw[1]
+bool vcp_tight_base = trendPass and vcpRange40 <= 0.85 * vcpRange60 and vcpRange20 <= 0.85 * vcpRange40 and vcpVolume <= 0.80 * vcpPriorVolume
 
-float triangleTop = ta.highest(high[1], 40)
-float triangleLowRecent = ta.lowest(low, 15)
-float triangleLowPrior = ta.lowest(low[15], 15)
+float triangleTopRaw = ta.highest(high[1], 40)
+float triangleLowRecentRaw = ta.lowest(low, 15)
+float triangleLowPriorRaw = ta.lowest(low[15], 15)
+float triangleTop = completedBar ? triangleTopRaw : triangleTopRaw[1]
+float triangleLowRecent = completedBar ? triangleLowRecentRaw : triangleLowRecentRaw[1]
+float triangleLowPrior = completedBar ? triangleLowPriorRaw : triangleLowPriorRaw[1]
 bool ascending_triangle = trendPass and triangleLowRecent > triangleLowPrior and sourceClose >= triangleTop - PARITY_READY_DISTANCE_ATR * currentAtr
 
-float cupLeftRim = ta.highest(high[90], 30)
-float cupRightRim = ta.highest(high[15], 25)
-float cupBottom = ta.lowest(low[15], 105)
+float cupLeftRimRaw = ta.highest(high[90], 30)
+float cupRightRimRaw = ta.highest(high[15], 25)
+float cupBottomRaw = ta.lowest(low[15], 105)
+float handleLowRaw = ta.lowest(low, 15)
+float cupLeftRim = completedBar ? cupLeftRimRaw : cupLeftRimRaw[1]
+float cupRightRim = completedBar ? cupRightRimRaw : cupRightRimRaw[1]
+float cupBottom = completedBar ? cupBottomRaw : cupBottomRaw[1]
+float handleLow = completedBar ? handleLowRaw : handleLowRaw[1]
 float cupRim = math.max(cupLeftRim, cupRightRim)
 float cupDepth = cupRim > 0 ? (cupRim - cupBottom) / cupRim : 1.0
-float handleLow = ta.lowest(low, 15)
 float handleDepth = cupRightRim > 0 ? (cupRightRim - handleLow) / cupRightRim : 1.0
-bool cup_with_handle = trendPass and cupDepth >= 0.12 and cupDepth <= 0.35 and math.abs(cupLeftRim - cupRightRim) / cupRim <= 0.05 and handleDepth <= 0.12
+bool cup_with_handle = trendPass and cupRim > 0 and cupDepth >= 0.12 and cupDepth <= 0.35 and math.abs(cupLeftRim - cupRightRim) / cupRim <= 0.05 and handleDepth <= 0.12
 
-float bottomOne = ta.valuewhen(not na(pivotLowRaw), pivotLowRaw, 1)
-float bottomTwo = ta.valuewhen(not na(pivotLowRaw), pivotLowRaw, 0)
-int bottomBarOne = int(ta.valuewhen(not na(pivotLowRaw), bar_index[3], 1))
-int bottomBarTwo = int(ta.valuewhen(not na(pivotLowRaw), bar_index[3], 0))
-float doubleNeckline = ta.highest(high, 60)
+float bottomOneRaw = ta.valuewhen(not na(pivotLowRaw), pivotLowRaw, 1)
+float bottomTwoRaw = ta.valuewhen(not na(pivotLowRaw), pivotLowRaw, 0)
+int bottomBarOneRaw = int(ta.valuewhen(not na(pivotLowRaw), bar_index[3], 1))
+int bottomBarTwoRaw = int(ta.valuewhen(not na(pivotLowRaw), bar_index[3], 0))
+float doubleNecklineRaw = ta.highest(high, 60)
+float bottomOne = completedBar ? bottomOneRaw : bottomOneRaw[1]
+float bottomTwo = completedBar ? bottomTwoRaw : bottomTwoRaw[1]
+int bottomBarOne = completedBar ? bottomBarOneRaw : bottomBarOneRaw[1]
+int bottomBarTwo = completedBar ? bottomBarTwoRaw : bottomBarTwoRaw[1]
+float doubleNeckline = completedBar ? doubleNecklineRaw : doubleNecklineRaw[1]
 bool double_bottom = trendPass and bottomBarTwo - bottomBarOne >= 10 and bottomBarTwo - bottomBarOne <= 60 and math.abs(bottomOne - bottomTwo) <= math.max(0.75 * currentAtr, math.min(bottomOne, bottomTwo) * 0.03)
 
-float shoulderLeft = ta.valuewhen(not na(pivotLowRaw), pivotLowRaw, 2)
-float headLow = ta.valuewhen(not na(pivotLowRaw), pivotLowRaw, 1)
-float shoulderRight = ta.valuewhen(not na(pivotLowRaw), pivotLowRaw, 0)
-float ihsNeckline = ta.highest(high, 90)
+float shoulderLeftRaw = ta.valuewhen(not na(pivotLowRaw), pivotLowRaw, 2)
+float headLowRaw = ta.valuewhen(not na(pivotLowRaw), pivotLowRaw, 1)
+float shoulderRightRaw = ta.valuewhen(not na(pivotLowRaw), pivotLowRaw, 0)
+float ihsNecklineRaw = ta.highest(high, 90)
+float shoulderLeft = completedBar ? shoulderLeftRaw : shoulderLeftRaw[1]
+float headLow = completedBar ? headLowRaw : headLowRaw[1]
+float shoulderRight = completedBar ? shoulderRightRaw : shoulderRightRaw[1]
+float ihsNeckline = completedBar ? ihsNecklineRaw : ihsNecklineRaw[1]
 bool inverse_head_and_shoulders = trendPass and headLow < math.min(shoulderLeft, shoulderRight) - 0.75 * currentAtr and math.abs(shoulderLeft - shoulderRight) <= math.max(0.80 * currentAtr, math.min(shoulderLeft, shoulderRight) * 0.03)
 
-float wedgeHighSlope = ta.linreg(high, 35, 0) - ta.linreg(high, 35, 1)
-float wedgeLowSlope = ta.linreg(low, 35, 0) - ta.linreg(low, 35, 1)
-float wedgeEarlyWidth = ta.sma(high[25] - low[25], 10)
-float wedgeLateWidth = ta.sma(high - low, 10)
-float wedgeUpper = ta.linreg(high, 35, 0)
+float wedgeHighCurrentRaw = ta.linreg(high, 35, 0)
+float wedgeHighPriorRaw = ta.linreg(high, 35, 1)
+float wedgeLowCurrentRaw = ta.linreg(low, 35, 0)
+float wedgeLowPriorRaw = ta.linreg(low, 35, 1)
+float wedgeEarlyWidthRaw = ta.sma(high[25] - low[25], 10)
+float wedgeLateWidthRaw = ta.sma(high - low, 10)
+float wedgeLowRaw = ta.lowest(low, 12)
+float wedgeHighCurrent = completedBar ? wedgeHighCurrentRaw : wedgeHighCurrentRaw[1]
+float wedgeHighPrior = completedBar ? wedgeHighPriorRaw : wedgeHighPriorRaw[1]
+float wedgeLowCurrent = completedBar ? wedgeLowCurrentRaw : wedgeLowCurrentRaw[1]
+float wedgeLowPrior = completedBar ? wedgeLowPriorRaw : wedgeLowPriorRaw[1]
+float wedgeEarlyWidth = completedBar ? wedgeEarlyWidthRaw : wedgeEarlyWidthRaw[1]
+float wedgeLateWidth = completedBar ? wedgeLateWidthRaw : wedgeLateWidthRaw[1]
+float wedgeUpper = wedgeHighCurrent
+float wedgeLow = completedBar ? wedgeLowRaw : wedgeLowRaw[1]
+float wedgeHighSlope = wedgeHighCurrent - wedgeHighPrior
+float wedgeLowSlope = wedgeLowCurrent - wedgeLowPrior
 bool falling_wedge = trendPass and wedgeHighSlope < wedgeLowSlope and wedgeLowSlope < 0 and wedgeLateWidth <= 0.80 * wedgeEarlyWidth
-float wedgeLow = ta.lowest(low, 12)
 
-float roundingLeftRim = ta.sma(high[72], 8)
-float roundingRightRim = ta.sma(high, 8)
-float roundingBottom = ta.lowest(low[20], 40)
+float roundingLeftRimRaw = ta.sma(high[72], 8)
+float roundingRightRimRaw = ta.sma(high, 8)
+float roundingBottomRaw = ta.lowest(low[20], 40)
+float roundingLeftRim = completedBar ? roundingLeftRimRaw : roundingLeftRimRaw[1]
+float roundingRightRim = completedBar ? roundingRightRimRaw : roundingRightRimRaw[1]
+float roundingBottom = completedBar ? roundingBottomRaw : roundingBottomRaw[1]
 float roundingRim = math.max(roundingLeftRim, roundingRightRim)
 float roundingDepth = roundingRim > 0 ? (roundingRim - roundingBottom) / roundingRim : 1.0
-bool rounding_base = trendPass and roundingDepth >= 0.08 and roundingDepth <= 0.30 and math.abs(roundingLeftRim - roundingRightRim) / roundingRim <= 0.06
+bool rounding_base = trendPass and roundingRim > 0 and roundingDepth >= 0.08 and roundingDepth <= 0.30 and math.abs(roundingLeftRim - roundingRightRim) / roundingRim <= 0.06
 
 int selectedPatternCode = 0
 int selectedClassCode = 0
@@ -196,7 +265,7 @@ else if includeContextPatterns and rounding_base
     selectedInvalidation := roundingBottom
 
 float distanceAtr = not na(selectedTrigger) ? (selectedTrigger - sourceClose) / math.max(currentAtr, syminfo.mintick) : na
-bool crossedTrigger = not na(selectedTrigger) and sourceClose > selectedTrigger and close[1] <= selectedTrigger[1]
+bool crossedTrigger = not na(selectedTrigger) and sourceClose > selectedTrigger and sourcePriorClose <= selectedTrigger[1]
 int confirmedAge = nz(ta.barssince(crossedTrigger), 10000)
 bool failed = not na(selectedInvalidation) and sourceClose < selectedInvalidation
 bool extended = not na(selectedTrigger) and sourceClose > selectedTrigger + PARITY_MAX_EXTENSION_ATR * currentAtr

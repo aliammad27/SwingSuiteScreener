@@ -124,6 +124,15 @@ def test_pine_suite_has_no_custom_chart_labels_or_tables() -> None:
     assert "Show current tactical levels" in timing
     assert 'includeContextPatterns = input.bool(false' in atlas
     assert "Show current structural invalidation" in tester
+    for line in atlas.splitlines():
+        if "ta." in line:
+            assert "?" not in line, (
+                "Pattern Atlas history functions must be calculated before "
+                "completed-bar selection"
+            )
+            assert not line.lstrip().startswith(("if ", "else if ", "bool ")), (
+                "Pattern Atlas history functions must run unconditionally"
+            )
 
 
 def test_production_command_excludes_context_only_patterns() -> None:
