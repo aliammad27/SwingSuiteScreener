@@ -14,6 +14,7 @@
   enter reports.
 - Made hosted cron schedules DST-safe through Eastern-time gates, skipped live scans
   on non-NYSE sessions, and hardened the Docker image with a non-root runtime.
+- Upgraded official GitHub workflow actions to their Node 24 generations.
 - Reduced the TradingView package to three chart-analysis indicators: Daily Command,
   Hourly Timing, and the optional Daily Pattern Atlas.
 - Removed the Pine Screener and underlying-proxy strategy tester from the active

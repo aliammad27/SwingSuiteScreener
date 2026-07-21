@@ -277,6 +277,20 @@ def _check_deployment_contract(root: Path, errors: list[str]) -> None:
             errors.append("Render premarket cron must use the Eastern-time schedule gate")
         if "scanner.run_scan intraday --scheduled" not in text:
             errors.append("Render intraday cron must require a configured ET window")
+    deprecated_actions = (
+        "actions/checkout@v4",
+        "actions/setup-python@v5",
+        "actions/cache/restore@v4",
+        "actions/cache/save@v4",
+        "actions/upload-artifact@v4",
+    )
+    workflows = root / ".github" / "workflows"
+    if workflows.is_dir():
+        for workflow in workflows.glob("*.yml"):
+            text = workflow.read_text(encoding="utf-8")
+            for action in deprecated_actions:
+                if action in text:
+                    errors.append(f"{workflow.relative_to(root)} must not use deprecated {action}")
 
 
 def _check_pine_contract(root: Path, errors: list[str]) -> None:
