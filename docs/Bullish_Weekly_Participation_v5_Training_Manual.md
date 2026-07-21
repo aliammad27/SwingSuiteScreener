@@ -3,7 +3,7 @@
 **System:** SwingSuiteScreener<br>
 **Strategy profile:** Bullish Weekly Participation v5<br>
 **Validation state:** `research_default`<br>
-**Document date:** July 16, 2026<br>
+**Document date:** July 21, 2026<br>
 **Scope:** Read-only bullish stock and long-call research
 
 ---
@@ -1507,6 +1507,33 @@ Before relying on an alert:
 - confirm timezone
 - compare with Python report
 - test on SPY, QQQ, and a representative leader
+
+## 16.5 Telegram Contract Research Cards
+
+Telegram receives the market digest first. Ready, Ready - Verify, and Verify Contract
+candidates can then receive chart-backed research cards, up to the configured card
+limit. Developing candidates remain in a compact watchlist.
+
+A full card identifies:
+
+- symbol, lane, state, pattern, underlying price, and trigger
+- primary call strike, expiration, DTE, delta, bid/ask, spread, open interest, and volume
+- up to two alternative strike/expiration pairs
+- TP1 and a distinct TP2 when the 2R objective is above TP1
+- tactical failure and structural invalidation
+- intended hold and DTE requalification boundary
+- event status and data trust
+
+When the refreshed contract has a stable, current OPRA quote, the card also displays an
+estimated option-premium range at each underlying objective. The immediate end starts
+from the ask and applies the current delta plus optional gamma response. The delayed end
+starts from the bid and also applies theta through the lane maximum hold. Estimates are
+floored at intrinsic value and zero.
+
+The estimate assumes implied volatility remains stable. It is a quote-anchored scenario,
+not a forecast, guaranteed take-profit price, or instruction to trade. Missing, stale,
+unstable, invalid, or non-OPRA evidence displays `live OPRA verification required`
+instead of a premium estimate. A long call can still lose the full premium paid.
 
 ---
 

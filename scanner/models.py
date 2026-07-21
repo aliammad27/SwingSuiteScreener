@@ -308,6 +308,22 @@ class EntryPlan:
 
 
 @dataclass(frozen=True)
+class PremiumTargetScenario:
+    target_label: str
+    underlying_target: float
+    target_basis: str
+    premium_low: float | None
+    premium_high: float | None
+    modeled_sessions: tuple[int, int]
+    assumptions: str
+    unavailable_reason: str | None = None
+
+    @property
+    def available(self) -> bool:
+        return self.premium_low is not None and self.premium_high is not None
+
+
+@dataclass(frozen=True)
 class ContractSelection:
     score: int
     primary: OptionContractSnapshot | None

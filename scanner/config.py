@@ -115,6 +115,14 @@ def validate_configuration(fixture: bool = False) -> list[str]:
     if len(all_patterns) != len(set(all_patterns)):
         raise ConfigurationError("Strategy pattern lists must not contain duplicates.")
     storage = load_config("storage")
+    notifications = load_config("notifications")
+    for key in ("maximum_candidates_per_message", "maximum_candidate_cards"):
+        value = notifications.get(key)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise ConfigurationError(f"notifications.{key} must be a non-negative integer.")
+    for key in ("include_developing_watchlist", "show_premium_scenarios"):
+        if not isinstance(notifications.get(key), bool):
+            raise ConfigurationError(f"notifications.{key} must be a boolean.")
     configured_backend = os.environ.get(
         "STORAGE_BACKEND", str(storage.get("backend", "local_json"))
     )

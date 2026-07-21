@@ -6,6 +6,9 @@ send_zero_setup_completion: true
 send_premarket_only_on_change: true
 send_intraday_only_on_change: true
 maximum_candidates_per_message: 5
+maximum_candidate_cards: 5
+include_developing_watchlist: true
+show_premium_scenarios: true
 notify_on:
   state_change: true
   ready_candidate: true

@@ -14,6 +14,10 @@ def test_root_engineering_contract_present() -> None:
 def test_configuration_valid_fixture() -> None:
     assert validate_configuration(fixture=True) == []
     assert load_config("universe")["options_required"] is True
+    notifications = load_config("notifications")
+    assert notifications["maximum_candidate_cards"] == 5
+    assert notifications["include_developing_watchlist"] is True
+    assert notifications["show_premium_scenarios"] is True
 
 
 def test_bullish_weekly_v5_lanes_are_authoritative() -> None:

@@ -396,6 +396,32 @@ Acceptance viewports:
 
 No control, label, table, or detail pane may overlap or clip.
 
+### 15.1 Telegram Contract Research Cards
+
+Telegram is the primary actionable notification surface. The market digest is sent
+first. It is followed by no more than the configured number of chart-backed cards for
+Ready, Ready - Verify, and Verify Contract candidates. Developing candidates remain in
+a compact watchlist.
+
+Each card includes:
+
+- symbol, lane, review state, pattern, underlying price, and trigger
+- primary call strike, expiration, DTE, delta, bid/ask, spread, open interest, and volume
+- up to two alternative strike/expiration pairs
+- selected underlying objective and a distinct 2R objective when one exists
+- tactical failure, structural invalidation, intended hold, and DTE requalification
+- event and data-trust state
+- full-premium-loss and manual-review boundaries
+
+For a refreshed, stable OPRA contract, the card estimates an option-premium range at
+each displayed underlying objective. The high end uses the current ask plus delta and
+optional gamma response with no modeled holding delay. The low end uses the current bid
+plus the same price response and theta decay through the lane maximum hold. Both ends
+are floored at intrinsic value and zero. The display states that implied volatility is
+assumed stable and that the result is a scenario, not a forecast. Missing, stale,
+unstable, invalid, or non-OPRA evidence produces `live OPRA verification required`
+instead of an estimate.
+
 ## 16. Pine v6 Indicators
 
 ### AS_Weekly_Command_1D_v5.pine

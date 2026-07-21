@@ -14,6 +14,7 @@ from scanner.charts import render_candidate_summary
 from scanner.clocks import NY
 from scanner.config import ROOT, load_config, load_local_env
 from scanner.models import Candidate, ScanResult, ScanType
+from scanner.premium_scenarios import premium_target_scenarios
 from scanner.state import NotificationState, completion_snapshot, should_send_completion
 from scanner.storage.factory import configured_storage
 
@@ -149,23 +150,96 @@ def _contract_line(candidate: Candidate) -> str:
     )
 
 
-def candidate_caption(candidate: Candidate) -> str:
+def _short_target_basis(value: str) -> str:
+    return "confirmed pivot" if value == "nearest confirmed daily pivot" else "2R plan"
+
+
+def _target_lines(candidate: Candidate, *, show_premium_scenarios: bool) -> list[str]:
+    lines: list[str] = []
+    for scenario in premium_target_scenarios(candidate):
+        prefix = (
+            f"{scenario.target_label} ${scenario.underlying_target:.2f} "
+            f"({_short_target_basis(scenario.target_basis)})"
+        )
+        if not show_premium_scenarios:
+            lines.append(prefix)
+        elif scenario.available:
+            lines.append(
+                f"{prefix} | est call ${scenario.premium_low:.2f}-${scenario.premium_high:.2f} "
+                f"(0-{scenario.modeled_sessions[1]} sessions)"
+            )
+        else:
+            lines.append(f"{prefix} | {scenario.unavailable_reason}")
+    return lines
+
+
+def candidate_caption(
+    candidate: Candidate,
+    *,
+    show_premium_scenarios: bool = True,
+) -> str:
     entry = candidate.entry_plan
-    return (
-        f"{candidate.symbol} | {candidate.lane.label} | {candidate.state.label}\n"
-        f"{candidate.pattern.pattern_type.replace('_', ' ')} / {candidate.pattern.status.value} / age {candidate.pattern.age_bars}\n"
-        f"${candidate.trend.close:.2f} -> ${entry.trigger:.2f} | "
-        f"Tac ${entry.tactical_failure:.2f} | Struct ${entry.invalidation:.2f} | "
-        f"Obj ${entry.target_price:.2f}\n"
-        f"{_score_line(candidate)}\n{_contract_line(candidate)}\n"
-        "Manual review only. A long call can lose the full premium."
+    contract = candidate.contracts.primary
+    lines = [
+        f"{candidate.symbol} | {candidate.lane.label} | {candidate.state.label}",
+        f"{candidate.pattern.pattern_type.replace('_', ' ')} / "
+        f"{candidate.pattern.status.value} / age {candidate.pattern.age_bars}",
+        f"Underlying ${candidate.trend.close:.2f} | trigger ${entry.trigger:.2f}",
+    ]
+    if contract is None:
+        lines.append("Call: live OPRA verification required")
+    else:
+        risk = candidate.contracts.primary_risk
+        lines.extend(
+            [
+                f"Call {contract.expiration_date.strftime('%b %d')} ${contract.strike:g} | "
+                f"{contract.dte}DTE | delta {contract.delta:.2f}",
+                f"Quote ${contract.bid:.2f}/${contract.ask:.2f} | "
+                f"{contract.spread_percent:.1f}% | OI {contract.open_interest:,} | "
+                f"Vol {contract.volume:,}",
+            ]
+        )
+        if risk is not None:
+            lines.append(
+                f"Feed {candidate.contracts.feed.upper()} | quote {risk.quote_age_minutes:.1f}m | "
+                f"{'stable' if risk.quote_stable else 'unstable'}"
+            )
+        if candidate.contracts.alternatives:
+            alternatives = ", ".join(
+                f"{item.expiration_date.strftime('%b %d')} ${item.strike:g}"
+                for item in candidate.contracts.alternatives[:2]
+            )
+            lines.append(f"Alternatives: {alternatives}")
+    lines.extend(_target_lines(candidate, show_premium_scenarios=show_premium_scenarios))
+    lines.extend(
+        [
+            f"Risk: tactical failure ${entry.tactical_failure:.2f} | "
+            f"structural ${entry.invalidation:.2f}",
+            f"Hold {entry.intended_hold_sessions[0]}-{entry.intended_hold_sessions[1]} sessions | "
+            f"requalify {entry.requalify_dte}DTE",
+            f"Event {candidate.event_risk.status.value} | data "
+            f"{'trusted' if candidate.data_trust.trustworthy else 'verify'}",
+        ]
     )
+    if show_premium_scenarios and any(
+        scenario.available for scenario in premium_target_scenarios(candidate)
+    ):
+        lines.append("Premium scenarios: quote-anchored Greeks, stable IV; not forecasts.")
+    lines.append("Manual research only. A long call can lose the full premium.")
+    return "\n".join(lines)[:1024]
+
+
+def _actionable_candidates(result: ScanResult) -> tuple[Candidate, ...]:
+    return result.ready + result.ready_verify + result.verify_contract
 
 
 def completion_message(result: ScanResult, report_path: Path) -> str:
     now_et = datetime.now(NY).strftime("%-I:%M %p ET")
     candidates = result.candidates
-    header = (
+    fixture_label = (
+        "SIMULATED FIXTURE - NOT CURRENT MARKET DATA\n" if result.fixture else ""
+    )
+    header = fixture_label + (
         f"{result.scan_type.value.replace('_', ' ').upper()} - BULLISH WEEKLY V5\n"
         f"Market {result.market.regime} {result.market.score}/100 | "
         f"Breadth {result.market.breadth_above_sma50:.0f}% >50D / "
@@ -175,21 +249,30 @@ def completion_message(result: ScanResult, report_path: Path) -> str:
     )
     if not candidates:
         return header + "\n\nNo bullish setup is ready for review. Cash is a valid state."
+    configured = load_config("notifications")
+    maximum_summary_candidates = max(
+        int(configured.get("maximum_candidates_per_message", 5)), 0
+    )
+    include_developing = bool(configured.get("include_developing_watchlist", True))
     lines: list[str] = [header, ""]
-    for candidate in candidates[:8]:
+    for candidate in _actionable_candidates(result)[:maximum_summary_candidates]:
         lines.extend(
             [
                 f"{candidate.symbol} | {candidate.lane.label} | {candidate.state.label}",
-                f"{candidate.pattern.pattern_type.replace('_', ' ')} {candidate.pattern.status.value} age {candidate.pattern.age_bars}",
-                f"${candidate.trend.close:.2f} -> ${candidate.entry_plan.trigger:.2f} | "
-                f"Tac ${candidate.entry_plan.tactical_failure:.2f} | "
-                f"Struct ${candidate.entry_plan.invalidation:.2f} | "
-                f"Obj ${candidate.entry_plan.target_price:.2f}",
-                _score_line(candidate),
+                f"{candidate.pattern.pattern_type.replace('_', ' ')} | "
+                f"${candidate.trend.close:.2f} -> trigger ${candidate.entry_plan.trigger:.2f}",
                 _contract_line(candidate),
                 "",
             ]
         )
+    if include_developing and result.developing:
+        watchlist = ", ".join(
+            f"{candidate.symbol} ({candidate.lane.label}) "
+            f"{candidate.pattern.pattern_type.replace('_', ' ')} "
+            f"-> ${candidate.entry_plan.trigger:.2f}"
+            for candidate in result.developing[:maximum_summary_candidates]
+        )
+        lines.extend([f"Developing watchlist: {watchlist}", ""])
     lines.append(f"Audit report: {report_path}")
     return "\n".join(lines)[:4096]
 
@@ -220,8 +303,15 @@ def log_delivery(
 
 def notify_scan(result: ScanResult, report_path: Path, *, fixture: bool) -> None:
     message = completion_message(result, report_path)
+    configured = load_config("notifications")
+    maximum_cards = max(int(configured.get("maximum_candidate_cards", 5)), 0)
+    show_scenarios = bool(configured.get("show_premium_scenarios", True))
+    card_candidates = _actionable_candidates(result)[:maximum_cards]
     if fixture:
         print(message)
+        for candidate in card_candidates:
+            print("\n--- TELEGRAM RESEARCH CARD ---\n")
+            print(candidate_caption(candidate, show_premium_scenarios=show_scenarios))
         return
     notifier = TelegramNotifier()
     if not notifier.available():
@@ -233,7 +323,6 @@ def notify_scan(result: ScanResult, report_path: Path, *, fixture: bool) -> None
     state = NotificationState(configured_storage())
     snapshot = completion_snapshot(result)
     only_on_change = result.scan_type in {ScanType.PREMARKET, ScanType.INTRADAY}
-    configured = load_config("notifications")
     if only_on_change:
         setting = configured.get(
             "send_premarket_only_on_change"
@@ -251,15 +340,29 @@ def notify_scan(result: ScanResult, report_path: Path, *, fixture: bool) -> None
     if not delivery.delivered:
         return
     state.record_completion_snapshot(result.scan_type.value, snapshot)
-    for candidate in result.candidates[:3]:
-        chart_path = render_candidate_summary(candidate)
-        photo = notifier.send_photo(chart_path, candidate_caption(candidate))
+    for candidate in card_candidates:
+        caption = candidate_caption(candidate, show_premium_scenarios=show_scenarios)
+        try:
+            chart_path = render_candidate_summary(candidate)
+            photo = notifier.send_photo(chart_path, caption)
+        except Exception as exc:
+            photo = DeliveryResult(False, "chart_failure", redact_secret(str(exc)))
         log_delivery(
             f"chart_{candidate.symbol}",
             photo.status,
             ticker=candidate.symbol,
             event_type="candidate_chart",
             error=photo.safe_error or "",
+        )
+        if photo.delivered:
+            continue
+        fallback = notifier.send(caption, silent=result.scan_type != ScanType.POST_CLOSE)
+        log_delivery(
+            f"card_{candidate.symbol}",
+            fallback.status,
+            ticker=candidate.symbol,
+            event_type="candidate_text_fallback",
+            error=fallback.safe_error or "",
         )
 
 

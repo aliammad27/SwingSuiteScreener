@@ -105,6 +105,16 @@ can set `STORAGE_BACKEND=postgres` and `DATABASE_URL` for durable PostgreSQL or
 Supabase-backed state. A completion snapshot is persisted only after Telegram accepts
 the digest, so temporary delivery failures remain eligible for retry.
 
+Telegram is the primary actionable research surface. The digest is followed by up to
+five chart-backed contract cards for Ready, Ready - Verify, and Verify Contract
+candidates. Each card identifies the trigger, call strike and expiration, refreshed
+quote quality, underlying TP1/TP2 planning levels, tactical and structural risk, hold
+window, and DTE requalification boundary. When a fresh, trusted OPRA contract is
+available, the card also shows an immediate-to-maximum-hold premium scenario range
+using the refreshed bid/ask, delta, optional gamma, and theta. The range assumes stable
+implied volatility and is not a forecast or trade instruction. Developing candidates
+remain in a compact watchlist.
+
 ## Commands
 
 ```bash

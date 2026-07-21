@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Added Telegram contract research cards with the selected call strike, expiration,
+  refreshed quote quality, underlying objectives, risk levels, and holding constraints.
+- Added typed, quote-anchored premium scenarios that use delta, optional gamma, and
+  theta to display an immediate-to-maximum-hold range while failing closed on stale,
+  unstable, invalid, or non-OPRA contract evidence.
+- Added chart-delivery text fallback, configurable card limits, and a compact
+  Developing watchlist without changing grading, HTML/JSON output, Pine, or research
+  persistence schemas.
 - Completed the PostgreSQL/Supabase notification-state adapter and made
   `STORAGE_BACKEND` select the configured durable backend.
 - Made local notification-state writes atomic and retry-safe: failed Telegram digests
