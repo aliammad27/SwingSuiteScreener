@@ -1,4 +1,6 @@
-from scanner.config import ROOT, load_config, validate_configuration
+import pytest
+
+from scanner.config import ROOT, ConfigurationError, load_config, validate_configuration
 from scanner.models import StrategyLane
 from scanner.strategy_profile import PROFILE
 from scanner.universe import configured_symbols, leader_metadata
@@ -41,9 +43,7 @@ def test_live_universe_is_broad_unique_and_sector_mapped() -> None:
     leaders = leader_metadata()
     assert len(symbols) >= 150
     assert len(symbols) == len(set(symbols))
-    assert {"AAPL", "MSFT", "NVDA", "AMD", "JPM", "XOM", "SPY", "QQQ"}.issubset(
-        symbols
-    )
+    assert {"AAPL", "MSFT", "NVDA", "AMD", "JPM", "XOM", "SPY", "QQQ"}.issubset(symbols)
     assert leaders["NVDA"].peer_etf == "SMH"
     assert leaders["JPM"].peer_etf == "XLF"
 
@@ -57,3 +57,10 @@ def test_fixture_universe_stays_deterministic() -> None:
         "BTIER",
         "ZERO",
     ]
+
+
+def test_postgres_storage_requires_configured_dsn(monkeypatch) -> None:
+    monkeypatch.setenv("STORAGE_BACKEND", "postgres")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    with pytest.raises(ConfigurationError, match="DATABASE_URL is required"):
+        validate_configuration(fixture=True)

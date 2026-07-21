@@ -264,13 +264,15 @@ Protect:
 - Consumer Price Index
 - Employment Situation
 
-Block through the first completed post-event hour.
+Block through the first fully completed regular-session hour after the event. For a
+2:00 PM FOMC statement, the protected window therefore ends at 3:30 PM ET.
 
 ### 10.3 Freshness
 
 - maximum source age: 24 hours
 - missing timestamp: fail closed
 - stale timestamp: fail closed
+- future-dated timestamp: fail closed
 - unknown status: fail closed
 - source failure: use configured fallback; if not explicitly fresh and clear, reject
 
@@ -582,8 +584,10 @@ No decision function edits `config/strategy.yaml`.
 - unknown event
 - missing source timestamp
 - stale source timestamp
+- future-dated source timestamp
 - SIP/OPRA requirements
 - stale and unstable option quotes
+- future-dated option quotes
 
 ### Contract
 

@@ -59,7 +59,7 @@ def test_fomc_calendar_blocks_through_first_completed_post_event_hour() -> None:
     window = windows[0]
     assert window.event_type == EventType.FOMC
     assert window.event_at.hour == 14
-    assert window.blocked_until == window.event_at + timedelta(hours=1)
+    assert window.blocked_until == datetime(2026, 7, 29, 15, 30, tzinfo=NY)
 
 
 def test_index_event_window_is_blocked_then_clears(monkeypatch) -> None:
@@ -174,9 +174,15 @@ def test_event_trust_requires_fresh_source_timestamp() -> None:
         checked_at=as_of,
         source_timestamp=as_of - timedelta(hours=25),
     )
-    assert event_trust_reasons(missing, as_of, PROFILE) == (
-        "event_source_timestamp_missing",
+    future = EventRisk(
+        symbol="SPY",
+        status=EventRiskStatus.CLEAR,
+        earnings_date=None,
+        summary="Future timestamp.",
+        source="test",
+        checked_at=as_of,
+        source_timestamp=as_of + timedelta(seconds=1),
     )
-    assert event_trust_reasons(stale, as_of, PROFILE) == (
-        "event_source_stale",
-    )
+    assert event_trust_reasons(missing, as_of, PROFILE) == ("event_source_timestamp_missing",)
+    assert event_trust_reasons(stale, as_of, PROFILE) == ("event_source_stale",)
+    assert event_trust_reasons(future, as_of, PROFILE) == ("event_source_timestamp_in_future",)

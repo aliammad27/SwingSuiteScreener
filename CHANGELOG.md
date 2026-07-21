@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Completed the PostgreSQL/Supabase notification-state adapter and made
+  `STORAGE_BACKEND` select the configured durable backend.
+- Made local notification-state writes atomic and retry-safe: failed Telegram digests
+  no longer suppress the next unchanged scan.
+- Rejected future-dated event sources and option quotes instead of treating them as
+  fresh evidence.
+- Corrected FOMC protection to remain active through the first fully completed
+  regular-session hour after the statement.
+- Sanitized leader option-eligibility failures so provider response details cannot
+  enter reports.
+- Made hosted cron schedules DST-safe through Eastern-time gates, skipped live scans
+  on non-NYSE sessions, and hardened the Docker image with a non-root runtime.
 - Reduced the TradingView package to three chart-analysis indicators: Daily Command,
   Hourly Timing, and the optional Daily Pattern Atlas.
 - Removed the Pine Screener and underlying-proxy strategy tester from the active

@@ -16,11 +16,10 @@ def event_trust_reasons(
         reasons.append("event_source_unknown")
     if event.source_timestamp is None:
         reasons.append("event_source_timestamp_missing")
+    elif event.source_timestamp > as_of:
+        reasons.append("event_source_timestamp_in_future")
     else:
-        event_age_hours = max(
-            (as_of - event.source_timestamp).total_seconds() / 3600,
-            0.0,
-        )
+        event_age_hours = (as_of - event.source_timestamp).total_seconds() / 3600
         if event_age_hours > profile.maximum_event_source_age_hours:
             reasons.append("event_source_stale")
     return tuple(reasons)

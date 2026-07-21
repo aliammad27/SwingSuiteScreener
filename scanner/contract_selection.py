@@ -29,7 +29,7 @@ def _expiration_style(contract: OptionContractSnapshot) -> str:
 
 
 def _quote_age_minutes(contract: OptionContractSnapshot, as_of: datetime) -> float:
-    return max((as_of - contract.quote_timestamp).total_seconds() / 60, 0.0)
+    return (as_of - contract.quote_timestamp).total_seconds() / 60
 
 
 def calculate_contract_risk(
@@ -47,9 +47,7 @@ def calculate_contract_risk(
     )
     intrinsic = max(underlying_price - contract.strike, 0.0)
     extrinsic_percent = (
-        max(contract.ask - intrinsic, 0.0) / contract.ask * 100
-        if contract.ask > 0
-        else None
+        max(contract.ask - intrinsic, 0.0) / contract.ask * 100 if contract.ask > 0 else None
     )
     iv_ratio = None
     if (
@@ -116,6 +114,8 @@ def contract_rejection_reasons(
         reasons.append("bid_ask_size_below_minimum")
     if risk.quote_age_minutes > maximum_quote_age_minutes:
         reasons.append("quote_stale")
+    if risk.quote_age_minutes < 0:
+        reasons.append("quote_timestamp_in_future")
     if risk.theta_ask_percent is None:
         reasons.append("theta_unavailable")
     elif risk.theta_ask_percent > lane.maximum_theta_ask_percent + 1e-9:
@@ -176,16 +176,12 @@ def score_contract(
     ):
         return 0, risk
     delta_score = _range_fit(contract.delta, lane.preferred_delta, 15)
-    spread_score = 15 * max(
-        0.0, 1 - contract.spread_percent / lane.maximum_spread_percent
-    )
+    spread_score = 15 * max(0.0, 1 - contract.spread_percent / lane.maximum_spread_percent)
     preferred_dte = (float(lane.preferred_dte[0]), float(lane.preferred_dte[1]))
     dte_score = _range_fit(float(contract.dte), preferred_dte, 12)
     oi_score = 8 * min(contract.open_interest / (2 * lane.minimum_open_interest), 1.0)
     volume_score = 8 * min(contract.volume / (2 * lane.minimum_volume), 1.0)
-    depth_score = 8 * min(
-        risk.depth_contracts / (2 * lane.minimum_bid_ask_size), 1.0
-    )
+    depth_score = 8 * min(risk.depth_contracts / (2 * lane.minimum_bid_ask_size), 1.0)
     theta_score = 10 * max(
         0.0,
         1
@@ -199,9 +195,7 @@ def score_contract(
         if risk.gamma is not None
         else 0.0
     )
-    freshness_score = 4 * max(
-        0.0, 1 - risk.quote_age_minutes / maximum_quote_age_minutes
-    )
+    freshness_score = 4 * max(0.0, 1 - risk.quote_age_minutes / maximum_quote_age_minutes)
     stability_score = 3.0 if risk.quote_stable else 0.0
     return (
         round(
@@ -242,17 +236,16 @@ def _expiration_preference_order(
     if not lane.prefer_nonstandard_weekly:
         return scored
     weeklies = [item for item in scored if item[2].expiration_style == "weekly"]
-    monthlies = [
-        item for item in scored if item[2].expiration_style == "standard_monthly"
-    ]
+    monthlies = [item for item in scored if item[2].expiration_style == "standard_monthly"]
     if not weeklies or not monthlies:
         return scored
     best_weekly = weeklies[0]
     best_monthly = monthlies[0]
     advantage = 1 + lane.monthly_liquidity_advantage_percent / 100
-    monthly_materially_better = _liquidity_strength(
-        best_monthly[1], best_monthly[2], lane
-    ) >= _liquidity_strength(best_weekly[1], best_weekly[2], lane) * advantage
+    monthly_materially_better = (
+        _liquidity_strength(best_monthly[1], best_monthly[2], lane)
+        >= _liquidity_strength(best_weekly[1], best_weekly[2], lane) * advantage
+    )
     primary = best_monthly if monthly_materially_better else best_weekly
     return [primary] + [item for item in scored if item[1] != primary[1]]
 

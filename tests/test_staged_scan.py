@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import sys
 from datetime import timedelta
 
 from scanner.models import EventRisk, EventRiskStatus, ScanType, StrategyLane
@@ -91,7 +92,7 @@ class UnavailableEligibilityProvider(CountingFixtureProvider):
         expiration_date_gte,
         expiration_date_lte,
     ):
-        raise RuntimeError("contract metadata unavailable")
+        raise RuntimeError("contract metadata unavailable SECRET_RESPONSE_BODY")
 
 
 class UnavailableEventProvider(CountingFixtureProvider):
@@ -190,9 +191,7 @@ def test_ineligible_leader_stops_before_chart_and_chain_fetch(monkeypatch) -> No
     )
 
     assert result.rejected[0].stage == "universe"
-    assert result.rejected[0].reason_codes == (
-        "leader_no_eligible_weekly_expiration",
-    )
+    assert result.rejected[0].reason_codes == ("leader_no_eligible_weekly_expiration",)
     assert provider.event_calls == 0
     assert provider.chain_calls == 0
 
@@ -207,12 +206,9 @@ def test_unavailable_leader_eligibility_fails_closed(monkeypatch) -> None:
         scenario="ready",
     )
 
-    assert result.rejected[0].reason_codes == (
-        "leader_options_eligibility_unavailable",
-    )
-    assert result.rejected[0].details["eligibility_error"] == (
-        "contract metadata unavailable"
-    )
+    assert result.rejected[0].reason_codes == ("leader_options_eligibility_unavailable",)
+    assert result.rejected[0].details["provider_error_type"] == "RuntimeError"
+    assert "SECRET_RESPONSE_BODY" not in str(result.rejected[0].details)
     assert provider.chain_calls == 0
 
 
@@ -252,3 +248,16 @@ def test_unavailable_requote_is_rejected_without_aborting_scan(monkeypatch) -> N
     assert provider.refresh_calls == 1
     assert result.rejected[0].stage == "contract"
     assert result.rejected[0].reason_codes == ("option_requote_unavailable",)
+
+
+def test_live_cli_skips_non_trading_session(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(scan_module, "is_trading_day", lambda day: False)
+    monkeypatch.setattr(sys, "argv", ["scanner.run_scan", "intraday"])
+    monkeypatch.setattr(
+        scan_module,
+        "run_scan",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not scan")),
+    )
+
+    assert scan_module.main() == 0
+    assert "not an NYSE trading session" in capsys.readouterr().out

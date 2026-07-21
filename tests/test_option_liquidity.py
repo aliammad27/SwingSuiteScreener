@@ -60,13 +60,9 @@ def test_hard_spread_boundary_is_inclusive() -> None:
     _, lane, daily, chain = _inputs()
     contract = chain[0]
     bid = 4.0
-    ask = bid * (200 + lane.maximum_spread_percent) / (
-        200 - lane.maximum_spread_percent
-    )
+    ask = bid * (200 + lane.maximum_spread_percent) / (200 - lane.maximum_spread_percent)
     at_boundary = replace(contract, bid=bid, ask=ask)
-    assert at_boundary.spread_percent == pytest.approx(
-        lane.maximum_spread_percent
-    )
+    assert at_boundary.spread_percent == pytest.approx(lane.maximum_spread_percent)
     assert "spread_too_wide" not in _rejections(at_boundary, lane, daily)
     outside = replace(at_boundary, ask=ask + 0.01)
     assert "spread_too_wide" in _rejections(outside, lane, daily)
@@ -80,8 +76,7 @@ def test_quote_age_depth_and_theta_boundaries_are_hard() -> None:
         bid_size=lane.minimum_bid_ask_size,
         ask_size=lane.minimum_bid_ask_size,
         theta=-(contract.ask * lane.maximum_theta_ask_percent / 100),
-        quote_timestamp=FIXTURE_TIMESTAMP
-        - timedelta(minutes=PROFILE.maximum_quote_age_minutes),
+        quote_timestamp=FIXTURE_TIMESTAMP - timedelta(minutes=PROFILE.maximum_quote_age_minutes),
     )
     reasons = _rejections(at_boundary, lane, daily)
     assert "bid_ask_size_below_minimum" not in reasons
@@ -98,6 +93,16 @@ def test_quote_age_depth_and_theta_boundaries_are_hard() -> None:
     assert "bid_ask_size_below_minimum" in reasons
     assert "theta_ask_percent_too_high" in reasons
     assert "quote_stale" in reasons
+
+
+def test_future_dated_quote_is_rejected() -> None:
+    _, lane, daily, chain = _inputs()
+    future = replace(
+        chain[0],
+        quote_timestamp=FIXTURE_TIMESTAMP + timedelta(seconds=1),
+    )
+
+    assert "quote_timestamp_in_future" in _rejections(future, lane, daily)
 
 
 def test_exact_scan_time_dte_overrides_embedded_snapshot_dte() -> None:

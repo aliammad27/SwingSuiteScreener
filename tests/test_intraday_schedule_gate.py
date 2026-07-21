@@ -32,3 +32,19 @@ def test_intraday_gate_skips_extra_dst_cron_and_late_start() -> None:
     )
     assert not extra.should_run
     assert not late.should_run
+
+
+def test_intraday_gate_skips_exchange_holiday_and_closed_session() -> None:
+    holiday = intraday_schedule_decision(
+        datetime(2026, 7, 3, 10, 40, tzinfo=NY),
+        TARGETS,
+    )
+    closed = intraday_schedule_decision(
+        datetime(2026, 7, 16, 16, 5, tzinfo=NY),
+        TARGETS,
+    )
+
+    assert not holiday.should_run
+    assert holiday.reason == "Not an NYSE trading session."
+    assert not closed.should_run
+    assert closed.reason == "The NYSE session is closed."

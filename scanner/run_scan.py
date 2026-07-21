@@ -6,7 +6,14 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
-from scanner.config import ConfigurationError, load_local_env, validate_configuration
+from scanner.calendars import is_trading_day
+from scanner.clocks import NY
+from scanner.config import (
+    ConfigurationError,
+    load_config,
+    load_local_env,
+    validate_configuration,
+)
 from scanner.contract_selection import select_contracts
 from scanner.data_quality import DataQualityError, require_completed_candles
 from scanner.data_trust import assess_data_trust, event_trust_reasons
@@ -183,9 +190,7 @@ def _leader_universe_failures(
         failures.append("leader_price_below_minimum")
     recent = daily[-20:]
     average_dollar_volume = (
-        sum(candle.close * candle.volume for candle in recent) / len(recent)
-        if recent
-        else 0.0
+        sum(candle.close * candle.volume for candle in recent) / len(recent) if recent else 0.0
     )
     if average_dollar_volume < PROFILE.minimum_average_daily_dollar_volume_usd:
         failures.append("leader_average_dollar_volume_below_minimum")
@@ -231,9 +236,7 @@ def _technical_record(
         symbol,
         hourly,
         daily_filter_passed=(
-            trend.score >= PROFILE.thresholds.trend
-            and trend.weekly_aligned
-            and not trend.extended
+            trend.score >= PROFILE.thresholds.trend and trend.weekly_aligned and not trend.extended
         ),
         market_confirmation=market_confirmation,
         as_of=as_of,
@@ -252,9 +255,7 @@ def _technical_record(
         checked_at=as_of,
         source_timestamp=as_of,
     )
-    risk_score = calculate_risk_score(
-        trend, pattern, entry, provisional_event, PROFILE
-    )
+    risk_score = calculate_risk_score(trend, pattern, entry, provisional_event, PROFILE)
     scores = EvidenceScores(
         trend=trend.score,
         leadership=leadership,
@@ -353,12 +354,10 @@ def run_scan(
     candidates: list[Candidate] = []
     rejected: list[RejectedRecord] = []
     leader_symbols = [
-        symbol
-        for symbol in symbols
-        if metadata_for(symbol).lane == StrategyLane.LEADER_WEEKLY
+        symbol for symbol in symbols if metadata_for(symbol).lane == StrategyLane.LEADER_WEEKLY
     ]
     eligible_leaders = set(leader_symbols)
-    eligibility_error: str | None = None
+    eligibility_error_type: str | None = None
     if PROFILE.options_required and leader_symbols:
         leader_lane = PROFILE.lane(StrategyLane.LEADER_WEEKLY)
         try:
@@ -367,19 +366,20 @@ def run_scan(
                 as_of.date() + timedelta(days=leader_lane.hard_dte[0]),
                 as_of.date() + timedelta(days=leader_lane.hard_dte[1]),
             )
-        except (OSError, RuntimeError, ValueError) as exc:
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
             eligible_leaders = set()
-            eligibility_error = str(exc)
+            eligibility_error_type = type(exc).__name__
+            log.warning(
+                "Rejecting leader universe because option eligibility failed: %s",
+                eligibility_error_type,
+            )
 
     for symbol in symbols:
         metadata = metadata_for(symbol)
-        if (
-            metadata.lane == StrategyLane.LEADER_WEEKLY
-            and symbol not in eligible_leaders
-        ):
+        if metadata.lane == StrategyLane.LEADER_WEEKLY and symbol not in eligible_leaders:
             reason = (
                 "leader_options_eligibility_unavailable"
-                if eligibility_error is not None
+                if eligibility_error_type is not None
                 else "leader_no_eligible_weekly_expiration"
             )
             rejected.append(
@@ -389,7 +389,7 @@ def run_scan(
                     reason_codes=(reason,),
                     details={
                         "lane": metadata.lane.value,
-                        "eligibility_error": eligibility_error or "",
+                        "provider_error_type": eligibility_error_type or "",
                     },
                 )
             )
@@ -404,9 +404,7 @@ def run_scan(
                 scan_type=scan_type,
             )
         except (DataQualityError, ValueError, RuntimeError) as exc:
-            reason_codes = tuple(
-                part for part in str(exc).split(",") if part
-            ) or ("scan_error",)
+            reason_codes = tuple(part for part in str(exc).split(",") if part) or ("scan_error",)
             rejected.append(
                 RejectedRecord(
                     symbol=symbol,
@@ -469,7 +467,7 @@ def run_scan(
 
         try:
             event = events.event_risk(symbol, as_of, record.metadata.lane)
-        except (OSError, RuntimeError, ValueError) as exc:
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
             rejected.append(
                 _provider_rejection(
                     record,
@@ -538,7 +536,7 @@ def run_scan(
         expiry_end = as_of.date() + timedelta(days=lane_profile.hard_dte[1])
         try:
             chain = options.call_chain(symbol, expiry_start, expiry_end, as_of)
-        except (OSError, RuntimeError, ValueError) as exc:
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
             rejected.append(
                 _provider_rejection(
                     record,
@@ -557,18 +555,12 @@ def run_scan(
             maximum_quote_age_minutes=PROFILE.maximum_quote_age_minutes,
             feed_when_empty=getattr(options, "option_feed", "unknown"),
         )
-        top = (
-            [initial.primary, *initial.alternatives]
-            if initial.primary is not None
-            else []
-        )
+        top = [initial.primary, *initial.alternatives] if initial.primary is not None else []
         top_contracts = [contract for contract in top if contract is not None]
-        previous_quotes = {
-            contract.contract_symbol: contract for contract in top_contracts
-        }
+        previous_quotes = {contract.contract_symbol: contract for contract in top_contracts}
         try:
             refreshed = options.latest_quotes(top_contracts, as_of)
-        except (OSError, RuntimeError, ValueError) as exc:
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
             rejected.append(
                 _provider_rejection(
                     record,
@@ -644,8 +636,7 @@ def run_scan(
 
     candidates.sort(key=_candidate_rank, reverse=True)
     market_timestamp = (
-        max(candle.timestamp for candle in market.one_hour("SPY"))
-        + timedelta(hours=1)
+        max(candle.timestamp for candle in market.one_hour("SPY")) + timedelta(hours=1)
         if scan_type == ScanType.INTRADAY
         else max(candle.timestamp for candle in market.daily("SPY"))
     )
@@ -657,13 +648,9 @@ def run_scan(
         universe_count=len(symbols),
         evaluated_count=len(candidates) + len(rejected),
         ready=tuple(c for c in candidates if c.state == ReviewState.READY),
-        ready_verify=tuple(
-            c for c in candidates if c.state == ReviewState.READY_VERIFY
-        ),
+        ready_verify=tuple(c for c in candidates if c.state == ReviewState.READY_VERIFY),
         developing=tuple(c for c in candidates if c.state == ReviewState.DEVELOPING),
-        verify_contract=tuple(
-            c for c in candidates if c.state == ReviewState.VERIFY_CONTRACT
-        ),
+        verify_contract=tuple(c for c in candidates if c.state == ReviewState.VERIFY_CONTRACT),
         rejected=tuple(rejected),
         fixture=fixture,
         validation_state=PROFILE.validation_state,
@@ -678,11 +665,7 @@ def readiness_check() -> int:
     print(f"Option feed: {os.environ.get('ALPACA_OPTION_FEED', 'opra')}")
     print(
         "Historical option research: "
-        + (
-            "Massive key configured"
-            if os.environ.get("MASSIVE_API_KEY")
-            else "not configured"
-        )
+        + ("Massive key configured" if os.environ.get("MASSIVE_API_KEY") else "not configured")
     )
     for warning in warnings:
         print(f"WARNING: {warning}")
@@ -726,6 +709,11 @@ def main() -> int:
     parser.add_argument("--start")
     parser.add_argument("--end")
     parser.add_argument("--horizon", type=int, default=15)
+    parser.add_argument(
+        "--scheduled",
+        action="store_true",
+        help="Require the current configured ET window before a live intraday scan.",
+    )
     args = parser.parse_args()
     try:
         if args.command == "validate_configuration":
@@ -754,11 +742,7 @@ def main() -> int:
                 return 0
             delivery = TelegramNotifier().send(TELEGRAM_TEST_MESSAGE)
             print(f"Telegram test: {delivery.status}")
-            return (
-                0
-                if delivery.delivered or delivery.status == "not_configured"
-                else 1
-            )
+            return 0 if delivery.delivered or delivery.status == "not_configured" else 1
         if args.command == "evaluate-signals":
             from scanner.research import ResearchLedger
 
@@ -799,6 +783,25 @@ def main() -> int:
             if args.command in {"daily_prep", "weekly_radar"}
             else ScanType(args.command)
         )
+        if (
+            not args.fixture
+            and scan_type in {ScanType.POST_CLOSE, ScanType.PREMARKET, ScanType.INTRADAY}
+            and not is_trading_day(datetime.now(NY).date())
+        ):
+            print("Scan skipped safely: today is not an NYSE trading session.")
+            return 0
+        if args.scheduled:
+            if args.fixture or scan_type != ScanType.INTRADAY:
+                raise ConfigurationError("--scheduled is only valid for a live intraday scan.")
+            from scanner.intraday_schedule_gate import intraday_schedule_decision
+
+            raw_targets = load_config("schedule").get("intraday_scan_times", [])
+            targets = tuple(str(value) for value in raw_targets)
+            decision = intraday_schedule_decision(datetime.now(NY), targets)
+            print(decision.reason)
+            if not decision.should_run:
+                print("Scan skipped safely: no configured ET scan window is active.")
+                return 0
         result = run_scan(scan_type, fixture=args.fixture, scenario=args.scenario)
         from scanner.notifications import notify_scan
         from scanner.reports import write_reports

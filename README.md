@@ -100,6 +100,11 @@ Add read-only market-data and notification credentials to `.env`. SIP and OPRA
 entitlements are required for full trust. `MASSIVE_API_KEY` is used for entitled
 earnings and point-in-time historical option research.
 
+Notification deduplication uses atomic local JSON state by default. Hosted deployments
+can set `STORAGE_BACKEND=postgres` and `DATABASE_URL` for durable PostgreSQL or
+Supabase-backed state. A completion snapshot is persisted only after Telegram accepts
+the digest, so temporary delivery failures remain eligible for retry.
+
 ## Commands
 
 ```bash
@@ -193,9 +198,11 @@ Passing gates does not change configuration automatically.
 - no account, position, order, exercise, or execution endpoints
 - no secret output
 - no incomplete-candle decisions
+- no scheduled live scan on a non-NYSE session
 - no leader entry through protected earnings risk
 - no index entry through active FOMC, CPI, or Employment Situation windows
 - no fully trusted state without SIP, OPRA, and fresh event data
+- no future-dated event source or option quote accepted as fresh
 - no performance claims from fixtures or underlying-only evidence
 - a long call can lose its full premium
 

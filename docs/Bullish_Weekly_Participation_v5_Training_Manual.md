@@ -863,8 +863,9 @@ No leader position should be held through earnings under this process.
 
 ## 10.2 FOMC
 
-Index entries are blocked from the protected morning window through the first
-completed hour after the scheduled FOMC statement time.
+Index entries are blocked from the protected morning window through the first fully
+completed regular-session hour after the scheduled FOMC statement time. For a 2:00
+PM statement, that completed-hour boundary is 3:30 PM ET.
 
 Source:
 
@@ -887,7 +888,7 @@ Event evidence requires:
 - source timestamp
 - source age no more than 24 hours
 
-Missing or stale evidence is rejected before option-chain retrieval.
+Missing, stale, or future-dated evidence is rejected before option-chain retrieval.
 
 ---
 
@@ -1853,6 +1854,7 @@ Check:
 - `ALPACA_OPTION_FEED=opra`
 - OPRA subscription
 - quote timestamps
+- future-dated quote rejection
 - bid/ask size
 - re-quote stability
 - spread

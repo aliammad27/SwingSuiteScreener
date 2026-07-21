@@ -8,6 +8,10 @@ WORKDIR /app
 COPY requirements.txt pyproject.toml ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+RUN groupadd --system scanner && useradd --system --gid scanner --create-home scanner
+
+COPY --chown=scanner:scanner . .
+
+USER scanner
 
 CMD ["python", "-m", "scanner.run_scan", "validate_configuration"]

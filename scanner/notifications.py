@@ -15,7 +15,7 @@ from scanner.clocks import NY
 from scanner.config import ROOT, load_config, load_local_env
 from scanner.models import Candidate, ScanResult, ScanType
 from scanner.state import NotificationState, completion_snapshot, should_send_completion
-from scanner.storage.local_json import LocalJsonStorage
+from scanner.storage.factory import configured_storage
 
 TELEGRAM_TEST_MESSAGE = (
     "ALI'S SCREENER BOT TEST\n\n"
@@ -76,7 +76,9 @@ class TelegramNotifier:
                     body = json.loads(response.read().decode("utf-8"))
                 if body.get("ok") is True:
                     return DeliveryResult(True, "delivered")
-                description = redact_secret(str(body.get("description", "Telegram rejected message")))
+                description = redact_secret(
+                    str(body.get("description", "Telegram rejected message"))
+                )
                 return DeliveryResult(False, "rejected", description)
             except Exception as exc:
                 if attempt == 2:
@@ -221,7 +223,14 @@ def notify_scan(result: ScanResult, report_path: Path, *, fixture: bool) -> None
     if fixture:
         print(message)
         return
-    state = NotificationState(LocalJsonStorage())
+    notifier = TelegramNotifier()
+    if not notifier.available():
+        delivery = notifier.send(message, silent=result.scan_type != ScanType.POST_CLOSE)
+        log_delivery(
+            "digest", delivery.status, event_type="digest", error=delivery.safe_error or ""
+        )
+        return
+    state = NotificationState(configured_storage())
     snapshot = completion_snapshot(result)
     only_on_change = result.scan_type in {ScanType.PREMARKET, ScanType.INTRADAY}
     configured = load_config("notifications")
@@ -234,15 +243,14 @@ def notify_scan(result: ScanResult, report_path: Path, *, fixture: bool) -> None
         )
         only_on_change = bool(setting)
     previous = state.last_completion_snapshot(result.scan_type.value)
-    state.record_completion_snapshot(result.scan_type.value, snapshot)
     if not should_send_completion(previous, snapshot, only_on_change):
         log_delivery("digest", "suppressed_unchanged", event_type="digest")
         return
-    notifier = TelegramNotifier()
     delivery = notifier.send(message, silent=result.scan_type != ScanType.POST_CLOSE)
     log_delivery("digest", delivery.status, event_type="digest", error=delivery.safe_error or "")
     if not delivery.delivered:
         return
+    state.record_completion_snapshot(result.scan_type.value, snapshot)
     for candidate in result.candidates[:3]:
         chart_path = render_candidate_summary(candidate)
         photo = notifier.send_photo(chart_path, candidate_caption(candidate))

@@ -21,6 +21,7 @@ REQUIRED_V5_FILES = (
     "config/pine_parity.json",
     "config/providers.yaml",
     "config/schedule.yaml",
+    "config/storage.yaml",
     "config/strategy.yaml",
     "config/universe.yaml",
     "pyproject.toml",
@@ -38,6 +39,8 @@ REQUIRED_V5_FILES = (
     "scanner/data_trust.py",
     "scanner/intraday_schedule_gate.py",
     "scanner/providers/events.py",
+    "scanner/storage/factory.py",
+    "scanner/storage/postgres.py",
     "scanner/timing.py",
     "scripts/run_intraday_refresh.sh",
 )
@@ -53,6 +56,7 @@ ACTIVE_TEXT_FILES = (
     "config/pine_parity.json",
     "config/providers.yaml",
     "config/schedule.yaml",
+    "config/storage.yaml",
     "config/strategy.yaml",
     "config/universe.yaml",
     "pyproject.toml",
@@ -165,9 +169,7 @@ def _check_active_text(root: Path, errors: list[str]) -> None:
         text = path.read_text(encoding="utf-8")
         for pattern in LEGACY_ACTIVE_PATTERNS:
             if pattern.search(text):
-                errors.append(
-                    f"Legacy active-strategy reference in {relative}: {pattern.pattern}"
-                )
+                errors.append(f"Legacy active-strategy reference in {relative}: {pattern.pattern}")
 
 
 def _check_artifact_names(root: Path, errors: list[str]) -> None:
@@ -200,8 +202,7 @@ def _check_strategy_config(root: Path, errors: list[str]) -> None:
     for key, expected in required_values.items():
         if values.get(key) != expected:
             errors.append(
-                f"config/strategy.yaml {key} must be {expected!r}, "
-                f"found {values.get(key)!r}"
+                f"config/strategy.yaml {key} must be {expected!r}, found {values.get(key)!r}"
             )
 
     patterns = values.get("patterns")
@@ -215,9 +216,7 @@ def _check_strategy_config(root: Path, errors: list[str]) -> None:
         if patterns.get("ready_distance_atr") != 0.30:
             errors.append("config/strategy.yaml ready_distance_atr must be 0.30")
         if patterns.get("maximum_confirmed_extension_atr") != 0.75:
-            errors.append(
-                "config/strategy.yaml maximum_confirmed_extension_atr must be 0.75"
-            )
+            errors.append("config/strategy.yaml maximum_confirmed_extension_atr must be 0.75")
         if patterns.get("maximum_confirmed_age_bars") != 1:
             errors.append("config/strategy.yaml maximum_confirmed_age_bars must be 1")
 
@@ -244,13 +243,47 @@ def _check_package_version(root: Path, errors: list[str]) -> None:
             errors.append('scanner/__init__.py must expose __version__ = "5.0.0"')
 
 
+def _check_storage_contract(root: Path, errors: list[str]) -> None:
+    path = root / "config/storage.yaml"
+    if not path.is_file():
+        return
+    values = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(values, dict):
+        errors.append("config/storage.yaml must contain a mapping")
+        return
+    if values.get("backend") not in {"local_json", "postgres"}:
+        errors.append("config/storage.yaml backend must be local_json or postgres")
+    if not values.get("local_state_path"):
+        errors.append("config/storage.yaml must define local_state_path")
+    if not values.get("postgres_dsn_env"):
+        errors.append("config/storage.yaml must define postgres_dsn_env")
+    postgres_path = root / "scanner/storage/postgres.py"
+    if postgres_path.is_file() and "NotImplementedError" in postgres_path.read_text(
+        encoding="utf-8"
+    ):
+        errors.append("PostgreSQL storage must not contain placeholder methods")
+
+
+def _check_deployment_contract(root: Path, errors: list[str]) -> None:
+    dockerfile = root / "Dockerfile"
+    if dockerfile.is_file() and "USER scanner" not in dockerfile.read_text(encoding="utf-8"):
+        errors.append("Dockerfile must run as the non-root scanner user")
+    render_path = root / "render.yaml"
+    if render_path.is_file():
+        text = render_path.read_text(encoding="utf-8")
+        if "scanner.schedule_gate --target 16:20" not in text:
+            errors.append("Render post-close cron must use the Eastern-time schedule gate")
+        if "scanner.schedule_gate --target 08:45" not in text:
+            errors.append("Render premarket cron must use the Eastern-time schedule gate")
+        if "scanner.run_scan intraday --scheduled" not in text:
+            errors.append("Render intraday cron must require a configured ET window")
+
+
 def _check_pine_contract(root: Path, errors: list[str]) -> None:
     forbidden_visual_tokens = ("plotshape(", "plotchar(", "label.")
     for relative in FORBIDDEN_PINE_ARTIFACTS:
         if (root / relative).exists():
-            errors.append(
-                f"{relative} is retired; the active Pine suite contains indicators only"
-            )
+            errors.append(f"{relative} is retired; the active Pine suite contains indicators only")
 
     for relative in PINE_FILES:
         path = root / relative
@@ -265,9 +298,7 @@ def _check_pine_contract(root: Path, errors: list[str]) -> None:
             errors.append(f"{relative} must remain an indicator, never a strategy")
         expected_timeframe = PINE_TIMEFRAMES[relative]
         if f'timeframe.period == "{expected_timeframe}"' not in text:
-            errors.append(
-                f"{relative} must enforce the Pine v6 {expected_timeframe} timeframe"
-            )
+            errors.append(f"{relative} must enforce the Pine v6 {expected_timeframe} timeframe")
         for token in forbidden_visual_tokens:
             if token in text:
                 errors.append(
@@ -278,37 +309,26 @@ def _check_pine_contract(root: Path, errors: list[str]) -> None:
         table_count = len(re.findall(r"\btable\.new\s*\(", text))
         cell_count = len(re.findall(r"\btable\.cell\s*\(", text))
         if table_count != 1:
-            errors.append(
-                f"{relative} must contain exactly one optional quick-insights table"
-            )
+            errors.append(f"{relative} must contain exactly one optional quick-insights table")
         if expected_position not in text:
-            errors.append(
-                f"{relative} quick-insights table must use {expected_position}"
-            )
+            errors.append(f"{relative} quick-insights table must use {expected_position}")
         if cell_count != expected_cells:
-            errors.append(
-                f"{relative} quick-insights table must contain {expected_cells} cells"
-            )
+            errors.append(f"{relative} quick-insights table must contain {expected_cells} cells")
         if (
             'showInsights = input.bool(true, "Show quick insights"' not in text
             or "if barstate.islast and showInsights" not in text
         ):
-            errors.append(
-                f"{relative} quick-insights table must be optional and last-bar only"
-            )
+            errors.append(f"{relative} quick-insights table must be optional and last-bar only")
         for line_number, line in enumerate(text.splitlines(), start=1):
             if line.strip().startswith("plot(") and "display =" not in line:
-                errors.append(
-                    f"{relative}:{line_number} must set an explicit plot display mode"
-                )
+                errors.append(f"{relative}:{line_number} must set an explicit plot display mode")
 
         for line_number, line in enumerate(text.splitlines(), start=1):
             if "ta." not in line:
                 continue
             if "?" in line or line.lstrip().startswith(("if ", "else if ", "bool ")):
                 errors.append(
-                    f"{relative}:"
-                    f"{line_number} must calculate history functions unconditionally"
+                    f"{relative}:{line_number} must calculate history functions unconditionally"
                 )
 
 
@@ -332,6 +352,8 @@ def run_release_audit(root: Path = ROOT) -> list[str]:
     _check_artifact_names(root, errors)
     _check_strategy_config(root, errors)
     _check_package_version(root, errors)
+    _check_storage_contract(root, errors)
+    _check_deployment_contract(root, errors)
     _check_pine_contract(root, errors)
     _check_no_execution(root, errors)
     return errors

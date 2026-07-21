@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import re
 from datetime import UTC, date, datetime, time, timedelta
@@ -24,6 +25,17 @@ from scanner.strategy_profile import PROFILE
 
 NY = ZoneInfo("America/New_York")
 _USER_AGENT = "SwingSuiteScreener/5.0 read-only market research"
+
+
+def _post_event_blocked_until(event_at: datetime, completed_hours: int) -> datetime:
+    """Return the end of the required completed regular-session hour(s)."""
+    regular_open = datetime.combine(event_at.date(), time(9, 30), NY)
+    if event_at <= regular_open:
+        first_post_event_hour_start = regular_open
+    else:
+        elapsed_hours = (event_at - regular_open).total_seconds() / 3600
+        first_post_event_hour_start = regular_open + timedelta(hours=math.ceil(elapsed_hours))
+    return first_post_event_hour_start + timedelta(hours=completed_hours)
 
 
 def _parse_datetime(value: object) -> datetime | None:
@@ -102,9 +114,7 @@ class TrustedEventRiskProvider(EventRiskProvider):
 
     def __init__(self) -> None:
         self.massive_key = os.environ.get("MASSIVE_API_KEY")
-        self.massive_base_url = os.environ.get(
-            "MASSIVE_BASE_URL", "https://api.massive.com"
-        )
+        self.massive_base_url = os.environ.get("MASSIVE_BASE_URL", "https://api.massive.com")
         self.fallback = ConfiguredEventRiskProvider()
         self._macro_cache: tuple[datetime, tuple[EventWindow, ...]] | None = None
 
@@ -180,8 +190,7 @@ class TrustedEventRiskProvider(EventRiskProvider):
             source="Massive Benzinga earnings",
             source_timestamp=source_timestamp,
             summary=(
-                f"Earnings {status_text} for {earnings_date.isoformat()}; "
-                f"record updated {updated}."
+                f"Earnings {status_text} for {earnings_date.isoformat()}; record updated {updated}."
             ),
         )
         return EventRisk(
@@ -201,9 +210,7 @@ class TrustedEventRiskProvider(EventRiskProvider):
         windows: list[EventWindow] = []
         for block in re.findall(r"BEGIN:VEVENT(.*?)END:VEVENT", unfolded, re.S):
             summary_match = re.search(r"\nSUMMARY:(.+)", block)
-            start_match = re.search(
-                r"\nDTSTART(?:;TZID=[^:]+)?:([0-9]{8}T[0-9]{6})", block
-            )
+            start_match = re.search(r"\nDTSTART(?:;TZID=[^:]+)?:([0-9]{8}T[0-9]{6})", block)
             if summary_match is None or start_match is None:
                 continue
             summary = summary_match.group(1).strip()
@@ -213,17 +220,11 @@ class TrustedEventRiskProvider(EventRiskProvider):
             }.get(summary)
             if event_type is None:
                 continue
-            event_at = datetime.strptime(
-                start_match.group(1), "%Y%m%dT%H%M%S"
-            ).replace(tzinfo=NY)
+            event_at = datetime.strptime(start_match.group(1), "%Y%m%dT%H%M%S").replace(tzinfo=NY)
             regular_open = datetime.combine(event_at.date(), time(9, 30), NY)
-            first_completed_hour = datetime.combine(
-                event_at.date(), time(10, 30), NY
-            )
-            blocked_until = (
-                first_completed_hour
-                if event_at <= regular_open
-                else event_at + timedelta(hours=PROFILE.macro_post_event_completed_hours)
+            blocked_until = _post_event_blocked_until(
+                event_at,
+                PROFILE.macro_post_event_completed_hours,
             )
             windows.append(
                 EventWindow(
@@ -270,15 +271,14 @@ class TrustedEventRiskProvider(EventRiskProvider):
                         event_type=EventType.FOMC,
                         starts_at=starts_at,
                         event_at=event_at,
-                        blocked_until=event_at
-                        + timedelta(
-                            hours=PROFILE.macro_post_event_completed_hours
+                        blocked_until=_post_event_blocked_until(
+                            event_at,
+                            PROFILE.macro_post_event_completed_hours,
                         ),
                         source="Federal Reserve FOMC calendar",
                         source_timestamp=source_timestamp,
                         summary=(
-                            "FOMC statement window at "
-                            f"{event_at.strftime('%Y-%m-%d %H:%M %Z')}."
+                            f"FOMC statement window at {event_at.strftime('%Y-%m-%d %H:%M %Z')}."
                         ),
                     )
                 )
@@ -289,9 +289,7 @@ class TrustedEventRiskProvider(EventRiskProvider):
             cache_age = as_of - self._macro_cache[0]
             if timedelta(0) <= cache_age < timedelta(hours=1):
                 return self._macro_cache[1]
-        bls_text, bls_headers = self._get(
-            "https://www.bls.gov/schedule/news_release/bls.ics"
-        )
+        bls_text, bls_headers = self._get("https://www.bls.gov/schedule/news_release/bls.ics")
         fed_text, fed_headers = self._get(
             "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
         )
@@ -332,11 +330,7 @@ class TrustedEventRiskProvider(EventRiskProvider):
                 source_timestamp = min(window.source_timestamp for window in windows)
                 return EventRisk(
                     symbol=symbol,
-                    status=(
-                        EventRiskStatus.BLOCKED
-                        if active
-                        else EventRiskStatus.CLEAR
-                    ),
+                    status=(EventRiskStatus.BLOCKED if active else EventRiskStatus.CLEAR),
                     earnings_date=None,
                     summary=(
                         "; ".join(window.summary for window in active)

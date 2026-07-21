@@ -120,9 +120,7 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
         self.feed = os.environ.get("ALPACA_FEED", "sip")
         self.stock_feed = self.feed
         self.option_feed = os.environ.get("ALPACA_OPTION_FEED", "opra")
-        self.min_request_interval_seconds = _float_env(
-            "ALPACA_MIN_REQUEST_INTERVAL_SECONDS", 0.45
-        )
+        self.min_request_interval_seconds = _float_env("ALPACA_MIN_REQUEST_INTERVAL_SECONDS", 0.45)
         self.max_retries = _int_env("ALPACA_MAX_RETRIES", 8)
         self.retry_base_seconds = _float_env("ALPACA_RETRY_BASE_SECONDS", 2.0)
         self._last_request_at = 0.0
@@ -198,9 +196,7 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
     def _bars(self, symbol: str, timeframe: str, limit: int) -> list[Candle]:
         now = datetime.now(UTC)
         end = now
-        lookback_days = {"1Day": 520, "30Min": 120, "1Hour": 120, "1Week": 900}.get(
-            timeframe, 240
-        )
+        lookback_days = {"1Day": 520, "30Min": 120, "1Hour": 120, "1Week": 900}.get(timeframe, 240)
         start = end - timedelta(days=lookback_days)
         payload = self._get(
             "/v2/stocks/bars",
@@ -232,24 +228,29 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
             if intraday_duration is not None and timestamp + intraday_duration > now:
                 continue
             if timeframe == "1Day":
-                if not is_trading_day(local_day) or market_close_for(local_day) > now.astimezone(NY):
+                if not is_trading_day(local_day) or market_close_for(local_day) > now.astimezone(
+                    NY
+                ):
                     continue
             if timeframe == "1Week" and timestamp + timedelta(days=7) > now:
                 continue
-            candles.append(
-                Candle(
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    timestamp=timestamp,
-                    open=float(raw["o"]),
-                    high=float(raw["h"]),
-                    low=float(raw["l"]),
-                    close=float(raw["c"]),
-                    volume=int(raw["v"]),
-                    completed=True,
-                    source="alpaca",
+            try:
+                candles.append(
+                    Candle(
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        timestamp=timestamp,
+                        open=float(raw["o"]),
+                        high=float(raw["h"]),
+                        low=float(raw["l"]),
+                        close=float(raw["c"]),
+                        volume=int(raw["v"]),
+                        completed=True,
+                        source="alpaca",
+                    )
                 )
-            )
+            except (KeyError, TypeError, ValueError):
+                continue
         return sorted(candles, key=lambda candle: candle.timestamp)
 
     def daily(self, symbol: str) -> list[Candle]:
@@ -292,9 +293,7 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
                 )
                 raw_contracts = payload.get("option_contracts", [])
                 if not isinstance(raw_contracts, list):
-                    raise RuntimeError(
-                        "Alpaca option-contract metadata must contain a list."
-                    )
+                    raise RuntimeError("Alpaca option-contract metadata must contain a list.")
                 for raw in raw_contracts:
                     if not isinstance(raw, dict):
                         continue
@@ -404,9 +403,7 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
         payload = self._get(
             "/v1beta1/options/quotes/latest",
             {
-                "symbols": ",".join(
-                    contract.contract_symbol for contract in contracts
-                ),
+                "symbols": ",".join(contract.contract_symbol for contract in contracts),
                 "feed": self.option_feed,
             },
         )

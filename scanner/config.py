@@ -47,7 +47,15 @@ def get_env(name: str, default: str | None = None) -> str | None:
 
 def validate_configuration(fixture: bool = False) -> list[str]:
     load_local_env()
-    required = ["strategy", "universe", "events", "schedule", "notifications", "providers", "storage"]
+    required = [
+        "strategy",
+        "universe",
+        "events",
+        "schedule",
+        "notifications",
+        "providers",
+        "storage",
+    ]
     warnings: list[str] = []
     for name in required:
         load_config(name)
@@ -65,9 +73,7 @@ def validate_configuration(fixture: bool = False) -> list[str]:
         "index_weekly",
         "leader_weekly",
     }:
-        raise ConfigurationError(
-            "Strategy must define index_weekly and leader_weekly lanes."
-        )
+        raise ConfigurationError("Strategy must define index_weekly and leader_weekly lanes.")
     for lane_name, raw_lane in lanes.items():
         if not isinstance(raw_lane, dict):
             raise ConfigurationError(f"Lane {lane_name} must be a mapping.")
@@ -75,7 +81,10 @@ def validate_configuration(fixture: bool = False) -> list[str]:
         hard_dte = raw_lane.get("hard_dte")
         preferred_delta = raw_lane.get("preferred_delta")
         hard_delta = raw_lane.get("hard_delta")
-        if not all(isinstance(value, list) and len(value) == 2 for value in (preferred_dte, hard_dte, preferred_delta, hard_delta)):
+        if not all(
+            isinstance(value, list) and len(value) == 2
+            for value in (preferred_dte, hard_dte, preferred_delta, hard_delta)
+        ):
             raise ConfigurationError(f"Lane {lane_name} ranges must contain two values.")
         assert isinstance(preferred_dte, list)
         assert isinstance(hard_dte, list)
@@ -83,8 +92,12 @@ def validate_configuration(fixture: bool = False) -> list[str]:
         assert isinstance(hard_delta, list)
         if int(preferred_dte[0]) < int(hard_dte[0]) or int(preferred_dte[1]) > int(hard_dte[1]):
             raise ConfigurationError(f"Lane {lane_name} preferred DTE must fit inside hard DTE.")
-        if float(preferred_delta[0]) < float(hard_delta[0]) or float(preferred_delta[1]) > float(hard_delta[1]):
-            raise ConfigurationError(f"Lane {lane_name} preferred delta must fit inside hard delta.")
+        if float(preferred_delta[0]) < float(hard_delta[0]) or float(preferred_delta[1]) > float(
+            hard_delta[1]
+        ):
+            raise ConfigurationError(
+                f"Lane {lane_name} preferred delta must fit inside hard delta."
+            )
     patterns = strategy.get("patterns")
     if (
         not isinstance(patterns, dict)
@@ -101,6 +114,16 @@ def validate_configuration(fixture: bool = False) -> list[str]:
     all_patterns = production + context_only
     if len(all_patterns) != len(set(all_patterns)):
         raise ConfigurationError("Strategy pattern lists must not contain duplicates.")
+    storage = load_config("storage")
+    configured_backend = os.environ.get(
+        "STORAGE_BACKEND", str(storage.get("backend", "local_json"))
+    )
+    if configured_backend not in {"local_json", "postgres"}:
+        raise ConfigurationError("STORAGE_BACKEND must be either 'local_json' or 'postgres'.")
+    if configured_backend == "postgres":
+        dsn_env = str(storage.get("postgres_dsn_env", "DATABASE_URL"))
+        if not os.environ.get(dsn_env):
+            raise ConfigurationError(f"{dsn_env} is required when STORAGE_BACKEND=postgres.")
     if not (ROOT / "CLAUDE.md").exists():
         raise ConfigurationError("Root CLAUDE.md is required.")
     if fixture:
