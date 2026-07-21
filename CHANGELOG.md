@@ -7,12 +7,16 @@
 - Removed the Pine Screener and underlying-proxy strategy tester from the active
   repository.
 - Enforced an indicator-only Pine contract that rejects `strategy()`, custom labels,
-  pattern badges, shapes, and tables.
+  pattern badges, and shapes.
+- Added one compact, optional, last-bar quick-insights table to each indicator:
+  Daily state/setup/levels/next step, Hourly timing gates/momentum/risk/next step,
+  and Atlas pattern geometry/context.
 - Replaced full-history decision levels with short current-state line objects and
   made pivot/2R planning levels optional and off by default.
 - Disabled context-only Pattern Atlas geometry by default and moved pattern,
   lifecycle, score, and state evidence into the Data Window.
-- Added automated release checks that reject future custom Pine labels or tables.
+- Added automated release checks that reject future chart markers and enforce
+  exactly one controlled quick-insights table per indicator.
 - Made every indicator history function unconditional so TradingView compiles the
   suite without calculation-consistency warnings.
 - Corrected the Pine v6 one-day timeframe guard to `1D` and aligned same-timeframe

@@ -140,19 +140,22 @@ open reports/intraday/latest.html
 ## Pine v6 Indicators
 
 - `AS_Weekly_Command_1D_v5.pine`: clean daily overlay with trend averages, current
-  trigger/invalidation, optional planning levels, and alerts.
+  trigger/invalidation, optional planning levels, quick insights, and alerts.
 - `AS_Weekly_Timing_1H_v5.pine`: clean completed-hour overlay with EMA9, EMA21,
-  VWAP, current tactical levels, and management alerts.
+  VWAP, current tactical levels, quick insights, and management alerts.
 - `AS_Bullish_Pattern_Atlas_1D_v5.pine`: current trigger/invalidation geometry for
-  all twelve bullish patterns, with context-only patterns disabled by default.
+  all twelve bullish patterns, with context-only patterns disabled by default and
+  a compact pattern-insight panel in the bottom-right corner.
 
 The TradingView package contains indicators only. It has no Pine Screener script
 and no `strategy()` backtest. The separate Python/HTML research screener described
 above is independent of these chart indicators.
 
-The indicators use no custom labels, shapes, or tables. Only current decision levels
-are drawn, and optional pivot/2R planning lines are off by default. Scores, pattern
-codes, lifecycle codes, and timeframe checks remain available in the Data Window.
+The indicators use no custom labels, shapes, or historical badges. Each contains one
+optional last-bar quick-insights table, enabled by default and removable through
+`Settings > Inputs > Show quick insights`. Only current decision levels are drawn,
+and optional pivot/2R planning lines are off by default. Full numeric evidence and
+codes remain available in the Data Window.
 
 Shared constants are checked by:
 

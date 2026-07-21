@@ -146,6 +146,33 @@ def _unchecked_trust(stock_feed: str, option_feed: str) -> DataTrust:
     )
 
 
+def _provider_rejection(
+    record: _TechnicalRecord,
+    *,
+    stage: str,
+    reason: str,
+    error: Exception,
+) -> RejectedRecord:
+    """Create a fail-closed rejection without exposing provider response details."""
+    log.warning(
+        "Rejecting %s at %s because %s failed: %s",
+        record.metadata.symbol,
+        stage,
+        reason,
+        type(error).__name__,
+    )
+    return RejectedRecord(
+        symbol=record.metadata.symbol,
+        stage=stage,
+        reason_codes=(reason,),
+        details={
+            "lane": record.metadata.lane.value,
+            "pattern": record.pattern.pattern_type,
+            "provider_error_type": type(error).__name__,
+        },
+    )
+
+
 def _leader_universe_failures(
     daily: list[Candle],
 ) -> tuple[str, ...]:
@@ -440,7 +467,18 @@ def run_scan(
             )
             continue
 
-        event = events.event_risk(symbol, as_of, record.metadata.lane)
+        try:
+            event = events.event_risk(symbol, as_of, record.metadata.lane)
+        except (OSError, RuntimeError, ValueError) as exc:
+            rejected.append(
+                _provider_rejection(
+                    record,
+                    stage="event",
+                    reason="event_data_unavailable",
+                    error=exc,
+                )
+            )
+            continue
         event_freshness_failures = event_trust_reasons(event, as_of, PROFILE)
         if event_freshness_failures:
             rejected.append(
@@ -498,7 +536,18 @@ def run_scan(
         lane_profile = PROFILE.lane(record.metadata.lane)
         expiry_start = as_of.date() + timedelta(days=lane_profile.hard_dte[0])
         expiry_end = as_of.date() + timedelta(days=lane_profile.hard_dte[1])
-        chain = options.call_chain(symbol, expiry_start, expiry_end, as_of)
+        try:
+            chain = options.call_chain(symbol, expiry_start, expiry_end, as_of)
+        except (OSError, RuntimeError, ValueError) as exc:
+            rejected.append(
+                _provider_rejection(
+                    record,
+                    stage="contract",
+                    reason="option_chain_unavailable",
+                    error=exc,
+                )
+            )
+            continue
         initial = select_contracts(
             chain,
             lane_profile,
@@ -517,7 +566,18 @@ def run_scan(
         previous_quotes = {
             contract.contract_symbol: contract for contract in top_contracts
         }
-        refreshed = options.latest_quotes(top_contracts, as_of)
+        try:
+            refreshed = options.latest_quotes(top_contracts, as_of)
+        except (OSError, RuntimeError, ValueError) as exc:
+            rejected.append(
+                _provider_rejection(
+                    record,
+                    stage="contract",
+                    reason="option_requote_unavailable",
+                    error=exc,
+                )
+            )
+            continue
         contracts = select_contracts(
             refreshed if top_contracts else chain,
             lane_profile,

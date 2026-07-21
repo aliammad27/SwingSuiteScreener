@@ -86,17 +86,28 @@ def test_pine_indicator_suite_is_bullish_v5_and_non_repainting() -> None:
     assert not (ROOT / "AS_Weekly_Underlying_Research_v5.pine").exists()
 
 
-def test_pine_indicator_suite_has_no_custom_chart_labels_tables_or_warnings() -> None:
+def test_pine_indicator_suite_has_compact_tables_without_chart_markers_or_warnings() -> None:
     paths = (
         "AS_Weekly_Command_1D_v5.pine",
         "AS_Weekly_Timing_1H_v5.pine",
         "AS_Bullish_Pattern_Atlas_1D_v5.pine",
     )
-    forbidden = ("plotshape(", "plotchar(", "label.", "table.")
+    insight_contract = {
+        "AS_Weekly_Command_1D_v5.pine": ("position.top_right", 18),
+        "AS_Weekly_Timing_1H_v5.pine": ("position.top_right", 18),
+        "AS_Bullish_Pattern_Atlas_1D_v5.pine": ("position.bottom_right", 16),
+    }
+    forbidden = ("plotshape(", "plotchar(", "label.")
     for relative_path in paths:
         payload = (ROOT / relative_path).read_text(encoding="utf-8")
         for token in forbidden:
             assert token not in payload, f"{relative_path} contains visual clutter: {token}"
+        expected_position, expected_cells = insight_contract[relative_path]
+        assert payload.count("table.new(") == 1
+        assert payload.count("table.cell(") == expected_cells
+        assert expected_position in payload
+        assert 'showInsights = input.bool(true, "Show quick insights"' in payload
+        assert "if barstate.islast and showInsights" in payload
         for line in payload.splitlines():
             if line.strip().startswith("plot("):
                 assert "display =" in line, (

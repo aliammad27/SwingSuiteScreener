@@ -406,7 +406,8 @@ No control, label, table, or detail pane may overlap or clip.
 - market and leadership proxies
 - `Ready - Verify` research state
 - daily alerts
-- no custom labels, shapes, or tables
+- no custom labels, shapes, or historical badges
+- optional nine-row latest-state quick-insights table in the top-right corner
 
 ### AS_Weekly_Timing_1H_v5.pine
 
@@ -418,7 +419,8 @@ No control, label, table, or detail pane may overlap or clip.
 - intraday market confirmation
 - short current tactical warning and failure
 - entry-window and management alerts
-- no custom labels, shapes, or tables
+- no custom labels, shapes, or historical markers
+- optional nine-row latest-state quick-insights table in the top-right corner
 
 ### AS_Bullish_Pattern_Atlas_1D_v5.pine
 
@@ -428,13 +430,15 @@ No control, label, table, or detail pane may overlap or clip.
 - context-only patterns off by default
 - shared lifecycle
 - numeric evidence in the Data Window, without historical badges
+- optional eight-row latest-pattern quick-insights table in the bottom-right corner
 
 ### Indicator-Only Boundary
 
 - every TradingView file uses `indicator()`
 - no TradingView file uses `strategy()`
 - no Pine Screener-specific output exists
-- no custom labels, shapes, or tables exist
+- no custom labels, shapes, or historical badges exist
+- each indicator has exactly one optional table populated only on `barstate.islast`
 - every signal and alert uses completed-bar evidence
 - the separate Python/HTML research screener remains outside the Pine package
 
@@ -604,7 +608,6 @@ No decision function edits `config/strategy.yaml`.
 - no execution endpoints
 
 ### Research
-
 - trigger-aligned quotes
 - minute rows do not count as sessions
 - stale quote rejection
@@ -633,7 +636,8 @@ No decision function edits `config/strategy.yaml`.
 - seven production / twelve atlas patterns
 - exactly three `indicator()` scripts
 - no `strategy()` scripts
-- no custom labels, shapes, or tables
+- no custom labels, shapes, or historical markers
+- exactly one optional last-bar quick-insights table per indicator
 - unconditional history-function calculations
 - exact one-day and 60-minute timeframe guards
 
