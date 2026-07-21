@@ -34,8 +34,14 @@ bool showSma50 = input.bool(true, "Show SMA50", group = GROUP_DISPLAY)
 bool showSma200 = input.bool(true, "Show SMA200", group = GROUP_DISPLAY)
 bool showPrimaryLevels = input.bool(true, "Show current trigger and invalidation", group = GROUP_DISPLAY)
 bool showPlanningLevels = input.bool(false, "Show current pivot and 2R objective", group = GROUP_DISPLAY)
+bool showInsights = input.bool(true, "Show quick insights", group = GROUP_DISPLAY)
 int levelBarsBack = input.int(18, "Current level bars left", minval = 3, maxval = 100, group = GROUP_DISPLAY)
 int levelBarsForward = input.int(8, "Current level bars right", minval = 1, maxval = 50, group = GROUP_DISPLAY)
+
+f_score_color(int value, int minimum) =>
+    value >= minimum ? color.rgb(52, 211, 153) :
+     value >= minimum - 15 ? color.rgb(251, 191, 36) :
+     color.rgb(248, 113, 113)
 
 f_sync_level(line currentLine, bool visible, float level, color levelColor, string levelStyle, int levelWidth) =>
     line result = currentLine
@@ -222,42 +228,50 @@ int triangleQuality = ascending_triangle ? 85 : 0
 
 int selectedQuality = 0
 int selectedPatternCode = 0
+string selectedPattern = "No active setup"
 float selectedTrigger = breakoutLevel
 float selectedInvalidation = support - 0.20 * currentAtr
 
 if controlled_pullback and pullbackQuality > selectedQuality
     selectedQuality := pullbackQuality
     selectedPatternCode := 1
+    selectedPattern := "Controlled pullback"
     selectedTrigger := pullbackTrigger
     selectedInvalidation := pullbackInvalidation
 if breakoutQuality > selectedQuality
     selectedQuality := breakoutQuality
     selectedPatternCode := 2
+    selectedPattern := "Breakout"
     selectedTrigger := breakoutLevel
     selectedInvalidation := breakoutInvalidation
 if bull_flag and flagQuality > selectedQuality
     selectedQuality := flagQuality
     selectedPatternCode := 3
+    selectedPattern := "Bull flag"
     selectedTrigger := flagTrigger
     selectedInvalidation := flagLow
 if breakout_retest and retestQuality > selectedQuality
     selectedQuality := retestQuality
     selectedPatternCode := 4
+    selectedPattern := "Breakout retest"
     selectedTrigger := priorBreakout
     selectedInvalidation := retestInvalidation
 if flat_base and flatQuality > selectedQuality
     selectedQuality := flatQuality
     selectedPatternCode := 5
+    selectedPattern := "Flat base"
     selectedTrigger := flatTrigger
     selectedInvalidation := baseLow
 if vcp_tight_base and vcpQuality > selectedQuality
     selectedQuality := vcpQuality
     selectedPatternCode := 6
+    selectedPattern := "VCP / tight base"
     selectedTrigger := vcpTrigger
     selectedInvalidation := vcpLow
 if ascending_triangle and triangleQuality > selectedQuality
     selectedQuality := triangleQuality
     selectedPatternCode := 7
+    selectedPattern := "Ascending triangle"
     selectedTrigger := triangleTop
     selectedInvalidation := triangleLowRecent
 
@@ -275,6 +289,32 @@ bool developing = trendScore >= 60 and selectedQuality > 0 and marketScore >= 50
 int stateCode = technicalReady ? 2 : developing ? 1 : 0
 int lifecycleCode = patternFailed ? 5 : patternExtended ? 4 : patternConfirmed ? 3 : patternReady ? 2 : selectedQuality > 0 ? 1 : 0
 int laneCode = indexLane ? 1 : 2
+string reviewState = not recommendedTimeframe ? "USE 1D" :
+     patternFailed ? "FAILED" :
+     patternExtended ? "EXTENDED" :
+     technicalReady ? "READY - VERIFY" :
+     developing ? "DEVELOPING" :
+     "NO SETUP"
+string lifecycle = selectedPatternCode == 0 ? "None" :
+     patternFailed ? "Failed" :
+     patternExtended ? "Extended" :
+     patternConfirmed ? "Confirmed" :
+     patternReady ? "Ready" :
+     "Forming"
+string nextInsight = not recommendedTimeframe ? "Switch chart to 1D" :
+     patternFailed ? "Thesis invalidated" :
+     patternExtended ? "Wait for reset" :
+     not trendPass ? "Wait for trend" :
+     not marketPass ? "Wait for market" :
+     not leadershipPass ? "Wait for leadership" :
+     selectedQuality < PARITY_SETUP_MINIMUM ? "Wait for setup" :
+     not (patternReady or patternConfirmed) ? "Wait for trigger" :
+     "Open 60m timing"
+color reviewStateColor = not recommendedTimeframe ? color.rgb(251, 191, 36) :
+     technicalReady ? color.rgb(52, 211, 153) :
+     developing ? color.rgb(96, 165, 250) :
+     patternFailed or patternExtended ? color.rgb(248, 113, 113) :
+     color.rgb(203, 213, 225)
 
 float structuralInvalidation = selectedInvalidation
 float riskPerShare = math.max(selectedTrigger - structuralInvalidation, 0.25 * currentAtr)
@@ -306,6 +346,49 @@ plot(selectedTrigger, "V5 Trigger", display = display.data_window)
 plot(structuralInvalidation, "V5 Structural Invalidation", display = display.data_window)
 plot(nearestConfirmedPivot, "V5 Confirmed Pivot", display = display.data_window)
 plot(planningObjective2R, "V5 2R Planning Objective", display = display.data_window)
+
+color panelHeader = color.new(color.rgb(20, 25, 31), 4)
+color panelBody = color.new(color.rgb(31, 39, 47), 8)
+color panelLabel = color.rgb(181, 191, 201)
+color panelValue = color.rgb(241, 245, 249)
+string distanceText = selectedPatternCode == 0 ? "n/a" : str.tostring(distanceAtr, "#.00") + " ATR"
+string triggerText = selectedPatternCode == 0 ? "n/a" : str.tostring(selectedTrigger, format.mintick)
+string invalidationText = selectedPatternCode == 0 ? "n/a" : str.tostring(structuralInvalidation, format.mintick)
+color trendSetupColor = trendPass and selectedQuality >= PARITY_SETUP_MINIMUM ? color.rgb(52, 211, 153) :
+     trendScore >= 60 and selectedQuality > 0 ? color.rgb(251, 191, 36) :
+     color.rgb(248, 113, 113)
+color marketLeadColor = marketPass and leadershipPass ? color.rgb(52, 211, 153) :
+     marketScore >= 50 ? color.rgb(251, 191, 36) :
+     color.rgb(248, 113, 113)
+
+var table insightsTable = table.new(
+    position.top_right,
+    2,
+    9,
+    frame_color = color.new(color.rgb(148, 163, 184), 45),
+    frame_width = 1,
+    border_color = color.new(color.rgb(148, 163, 184), 78),
+    border_width = 1
+)
+if barstate.islast and showInsights
+    table.cell(insightsTable, 0, 0, "DAILY QUICK VIEW", text_color = color.white, bgcolor = panelHeader, text_size = size.small, text_halign = text.align_left)
+    table.cell(insightsTable, 1, 0, syminfo.ticker + " | " + (indexLane ? "INDEX" : "LEADER"), text_color = color.white, bgcolor = panelHeader, text_size = size.small, text_halign = text.align_right)
+    table.cell(insightsTable, 0, 1, "State", text_color = panelLabel, bgcolor = panelBody, text_size = size.small, text_halign = text.align_left)
+    table.cell(insightsTable, 1, 1, reviewState, text_color = reviewStateColor, bgcolor = panelBody, text_size = size.small, text_halign = text.align_right)
+    table.cell(insightsTable, 0, 2, "Pattern", text_color = panelLabel, bgcolor = panelBody, text_size = size.small, text_halign = text.align_left)
+    table.cell(insightsTable, 1, 2, selectedPattern, text_color = panelValue, bgcolor = panelBody, text_size = size.small, text_halign = text.align_right)
+    table.cell(insightsTable, 0, 3, "Lifecycle", text_color = panelLabel, bgcolor = panelBody, text_size = size.small, text_halign = text.align_left)
+    table.cell(insightsTable, 1, 3, lifecycle + " | " + distanceText, text_color = panelValue, bgcolor = panelBody, text_size = size.small, text_halign = text.align_right)
+    table.cell(insightsTable, 0, 4, "Trend / Setup", text_color = panelLabel, bgcolor = panelBody, text_size = size.small, text_halign = text.align_left)
+    table.cell(insightsTable, 1, 4, str.tostring(trendScore) + " / " + str.tostring(selectedQuality), text_color = trendSetupColor, bgcolor = panelBody, text_size = size.small, text_halign = text.align_right)
+    table.cell(insightsTable, 0, 5, "Market / Lead", text_color = panelLabel, bgcolor = panelBody, text_size = size.small, text_halign = text.align_left)
+    table.cell(insightsTable, 1, 5, str.tostring(marketScore) + " / " + str.tostring(leadershipScore), text_color = marketLeadColor, bgcolor = panelBody, text_size = size.small, text_halign = text.align_right)
+    table.cell(insightsTable, 0, 6, "Trigger", text_color = panelLabel, bgcolor = panelBody, text_size = size.small, text_halign = text.align_left)
+    table.cell(insightsTable, 1, 6, triggerText, text_color = f_score_color(selectedQuality, PARITY_SETUP_MINIMUM), bgcolor = panelBody, text_size = size.small, text_halign = text.align_right)
+    table.cell(insightsTable, 0, 7, "Invalidation", text_color = panelLabel, bgcolor = panelBody, text_size = size.small, text_halign = text.align_left)
+    table.cell(insightsTable, 1, 7, invalidationText, text_color = color.rgb(248, 113, 113), bgcolor = panelBody, text_size = size.small, text_halign = text.align_right)
+    table.cell(insightsTable, 0, 8, "Next", text_color = panelLabel, bgcolor = panelBody, text_size = size.small, text_halign = text.align_left)
+    table.cell(insightsTable, 1, 8, nextInsight, text_color = color.rgb(125, 211, 252), bgcolor = panelBody, text_size = size.small, text_halign = text.align_right)
 
 alertcondition(technicalReady and not technicalReady[1], "V5 daily setup ready for verification", "{{ticker}} has a completed daily Bullish Weekly Participation v5 setup. Verify event, data, and contract evidence.")
 alertcondition(crossedTrigger and setupPass and completedBar, "V5 daily trigger confirmed", "{{ticker}} closed through its selected v5 daily trigger.")

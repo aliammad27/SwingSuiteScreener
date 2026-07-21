@@ -74,6 +74,12 @@ PINE_TIMEFRAMES = {
     "AS_Bullish_Pattern_Atlas_1D_v5.pine": "1D",
 }
 
+PINE_INSIGHT_PANELS = {
+    "AS_Weekly_Command_1D_v5.pine": ("position.top_right", 18),
+    "AS_Weekly_Timing_1H_v5.pine": ("position.top_right", 18),
+    "AS_Bullish_Pattern_Atlas_1D_v5.pine": ("position.bottom_right", 16),
+}
+
 FORBIDDEN_PINE_ARTIFACTS = (
     "AS_Weekly_Screener_v5.pine",
     "AS_Weekly_Underlying_Research_v5.pine",
@@ -239,7 +245,7 @@ def _check_package_version(root: Path, errors: list[str]) -> None:
 
 
 def _check_pine_contract(root: Path, errors: list[str]) -> None:
-    forbidden_visual_tokens = ("plotshape(", "plotchar(", "label.", "table.")
+    forbidden_visual_tokens = ("plotshape(", "plotchar(", "label.")
     for relative in FORBIDDEN_PINE_ARTIFACTS:
         if (root / relative).exists():
             errors.append(
@@ -265,8 +271,31 @@ def _check_pine_contract(root: Path, errors: list[str]) -> None:
         for token in forbidden_visual_tokens:
             if token in text:
                 errors.append(
-                    f"{relative} must remain label-free; found visual token {token!r}"
+                    f"{relative} must remain free of historical chart markers; "
+                    f"found visual token {token!r}"
                 )
+        expected_position, expected_cells = PINE_INSIGHT_PANELS[relative]
+        table_count = len(re.findall(r"\btable\.new\s*\(", text))
+        cell_count = len(re.findall(r"\btable\.cell\s*\(", text))
+        if table_count != 1:
+            errors.append(
+                f"{relative} must contain exactly one optional quick-insights table"
+            )
+        if expected_position not in text:
+            errors.append(
+                f"{relative} quick-insights table must use {expected_position}"
+            )
+        if cell_count != expected_cells:
+            errors.append(
+                f"{relative} quick-insights table must contain {expected_cells} cells"
+            )
+        if (
+            'showInsights = input.bool(true, "Show quick insights"' not in text
+            or "if barstate.islast and showInsights" not in text
+        ):
+            errors.append(
+                f"{relative} quick-insights table must be optional and last-bar only"
+            )
         for line_number, line in enumerate(text.splitlines(), start=1):
             if line.strip().startswith("plot(") and "display =" not in line:
                 errors.append(

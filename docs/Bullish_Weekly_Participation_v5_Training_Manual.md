@@ -1371,10 +1371,11 @@ Installation:
 4. Save.
 5. Add to chart.
 6. Set the chart to one day.
-7. Confirm the chart contains no labels, badges, or status table.
-8. Open the Data Window to inspect trend, leadership, setup, market, and pattern
+7. Confirm the chart contains no labels or historical badges.
+8. Review the optional `DAILY QUICK VIEW` table in the top-right corner.
+9. Open the Data Window to inspect trend, leadership, setup, market, and pattern
    codes without covering price.
-9. Keep `Show current pivot and 2R objective` off unless those planning levels are
+10. Keep `Show current pivot and 2R objective` off unless those planning levels are
    needed for the current review.
 
 Review:
@@ -1384,6 +1385,19 @@ Review:
 - optional current confirmed pivot and 2R objective
 - selected production-pattern code in the Data Window
 - market and leadership scores in the Data Window
+
+Quick-view rows:
+
+- State
+- Pattern
+- Lifecycle and distance from trigger in ATR
+- Trend / Setup scores
+- Market / Leadership scores
+- Trigger
+- Structural invalidation
+- Next step
+
+Disable the panel with `Settings > Inputs > Show quick insights`.
 
 ## 15.2 Hourly Timing
 
@@ -1398,11 +1412,15 @@ Installation:
 1. Add the script to the same symbol.
 2. Set chart to 60 minutes.
 3. Confirm EMA9, EMA21, and VWAP.
-4. Confirm the chart contains no labels or timing table.
-5. Use the Data Window for timing score, RSI, MACD histogram, relative volume, and
+4. Confirm the chart contains no labels or historical markers.
+5. Review the optional `1H QUICK VIEW` table in the top-right corner.
+6. Use the Data Window for timing score, RSI, MACD histogram, relative volume, and
    entry-window state.
-6. Confirm entry alerts appear only inside the entry window.
-7. Confirm the final scheduled hour is management-only.
+7. Confirm entry alerts appear only inside the entry window.
+8. Confirm the final scheduled hour is management-only.
+
+The table summarizes state, timing score, daily/market/window gates, RSI and MACD,
+relative volume, tactical warning, tactical failure, and the next required action.
 
 ## 15.3 Pattern Atlas
 
@@ -1419,6 +1437,8 @@ Use:
 - use Data Window pattern, class, and lifecycle codes instead of chart badges
 - enable context-only patterns only for deliberate study; they are off by default
 - compare chart geometry with the Python report
+- use the optional bottom-right `PATTERN QUICK VIEW` table for selected pattern,
+  class, lifecycle, distance, trigger, invalidation, and current insight
 
 The atlas does not promote context patterns.
 
@@ -1431,8 +1451,9 @@ The active TradingView files are:
 3. Pattern Atlas on the one-day chart when deeper pattern study is useful.
 
 Every file uses `indicator()`. None uses `strategy()`, Pine Screener output, custom
-labels, shapes, or tables. The separate Python/HTML research screener is not part of
-the TradingView package.
+labels, shapes, or historical badges. Each indicator has one optional latest-state
+table populated only on the chart's last bar. The separate Python/HTML research
+screener is not part of the TradingView package.
 
 ---
 
@@ -1902,6 +1923,7 @@ Check:
 - keep Pattern Atlas context-only patterns off
 - use either Daily Command or Pattern Atlas for routine review, not both at once
 - keep the Hourly Timing indicator on a separate 60-minute layout
+- turn off `Show quick insights` on any panel that is not needed
 
 ## 20.10 Dashboard Layout Problem
 

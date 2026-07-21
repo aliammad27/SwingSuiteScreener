@@ -16,6 +16,7 @@ const int PARITY_MAX_CONFIRMED_AGE = 1
 string GROUP_DISPLAY = "Atlas display"
 bool includeContextPatterns = input.bool(false, "Include context-only patterns", group = GROUP_DISPLAY)
 bool showCurrentGeometry = input.bool(true, "Show current trigger and invalidation", group = GROUP_DISPLAY)
+bool showInsights = input.bool(true, "Show quick insights", group = GROUP_DISPLAY)
 int levelBarsBack = input.int(18, "Current level bars left", minval = 3, maxval = 100, group = GROUP_DISPLAY)
 int levelBarsForward = input.int(8, "Current level bars right", minval = 1, maxval = 50, group = GROUP_DISPLAY)
 
@@ -273,6 +274,40 @@ bool ready = distanceAtr >= 0 and distanceAtr <= PARITY_READY_DISTANCE_ATR
 bool confirmed = confirmedAge <= PARITY_MAX_CONFIRMED_AGE
 int lifecycleCode = failed ? 5 : extended ? 4 : confirmed ? 3 : ready ? 2 : selectedPatternCode > 0 ? 1 : 0
 bool recommendedTimeframe = timeframe.period == "1D"
+string selectedPattern = selectedPatternCode == 1 ? "Controlled pullback" :
+     selectedPatternCode == 2 ? "Breakout" :
+     selectedPatternCode == 3 ? "Bull flag" :
+     selectedPatternCode == 4 ? "Breakout retest" :
+     selectedPatternCode == 5 ? "Flat base" :
+     selectedPatternCode == 6 ? "VCP / tight base" :
+     selectedPatternCode == 7 ? "Ascending triangle" :
+     selectedPatternCode == 8 ? "Cup with handle" :
+     selectedPatternCode == 9 ? "Double bottom" :
+     selectedPatternCode == 10 ? "Inverse H&S" :
+     selectedPatternCode == 11 ? "Falling wedge" :
+     selectedPatternCode == 12 ? "Rounding base" :
+     "No active pattern"
+string selectedClass = selectedClassCode == 1 ? "Production" :
+     selectedClassCode == 2 ? "Context only" :
+     "None"
+string lifecycle = selectedPatternCode == 0 ? "None" :
+     failed ? "Failed" :
+     extended ? "Extended" :
+     confirmed ? "Confirmed" :
+     ready ? "Ready" :
+     "Forming"
+string atlasInsight = not recommendedTimeframe ? "Switch chart to 1D" :
+     selectedPatternCode == 0 ? "No active pattern" :
+     failed ? "Pattern failed" :
+     extended ? "Wait for reset" :
+     selectedClassCode == 2 ? "Context only; observe" :
+     ready ? "Near production trigger" :
+     confirmed ? "Fresh confirmation" :
+     "Still forming"
+color lifecycleColor = failed or extended ? color.rgb(248, 113, 113) :
+     confirmed or ready ? color.rgb(52, 211, 153) :
+     selectedPatternCode > 0 ? color.rgb(251, 191, 36) :
+     color.rgb(203, 213, 225)
 
 var line triggerLine = na
 var line invalidationLine = na
@@ -291,6 +326,41 @@ plot(recommendedTimeframe ? 1 : 0, "V5 Recommended Timeframe", display = display
 plot(distanceAtr, "V5 Distance ATR", display = display.data_window)
 plot(selectedTrigger, "V5 Pattern Trigger", display = display.data_window)
 plot(selectedInvalidation, "V5 Pattern Invalidation", display = display.data_window)
+
+color panelHeader = color.new(color.rgb(20, 25, 31), 4)
+color panelBody = color.new(color.rgb(31, 39, 47), 8)
+color panelLabel = color.rgb(181, 191, 201)
+color panelValue = color.rgb(241, 245, 249)
+string distanceText = selectedPatternCode == 0 or na(distanceAtr) ? "n/a" : str.tostring(distanceAtr, "#.00") + " ATR"
+string triggerText = selectedPatternCode == 0 or na(selectedTrigger) ? "n/a" : str.tostring(selectedTrigger, format.mintick)
+string invalidationText = selectedPatternCode == 0 or na(selectedInvalidation) ? "n/a" : str.tostring(selectedInvalidation, format.mintick)
+
+var table insightsTable = table.new(
+    position.bottom_right,
+    2,
+    8,
+    frame_color = color.new(color.rgb(148, 163, 184), 45),
+    frame_width = 1,
+    border_color = color.new(color.rgb(148, 163, 184), 78),
+    border_width = 1
+)
+if barstate.islast and showInsights
+    table.cell(insightsTable, 0, 0, "PATTERN QUICK VIEW", text_color = color.white, bgcolor = panelHeader, text_size = size.small, text_halign = text.align_left)
+    table.cell(insightsTable, 1, 0, syminfo.ticker, text_color = color.white, bgcolor = panelHeader, text_size = size.small, text_halign = text.align_right)
+    table.cell(insightsTable, 0, 1, "Pattern", text_color = panelLabel, bgcolor = panelBody, text_size = size.small, text_halign = text.align_left)
+    table.cell(insightsTable, 1, 1, selectedPattern, text_color = panelValue, bgcolor = panelBody, text_size = size.small, text_halign = text.align_right)
+    table.cell(insightsTable, 0, 2, "Class", text_color = panelLabel, bgcolor = panelBody, text_size = size.small, text_halign = text.align_left)
+    table.cell(insightsTable, 1, 2, selectedClass, text_color = selectedClassCode == 1 ? color.rgb(52, 211, 153) : selectedClassCode == 2 ? color.rgb(251, 191, 36) : panelValue, bgcolor = panelBody, text_size = size.small, text_halign = text.align_right)
+    table.cell(insightsTable, 0, 3, "Lifecycle", text_color = panelLabel, bgcolor = panelBody, text_size = size.small, text_halign = text.align_left)
+    table.cell(insightsTable, 1, 3, lifecycle, text_color = lifecycleColor, bgcolor = panelBody, text_size = size.small, text_halign = text.align_right)
+    table.cell(insightsTable, 0, 4, "Distance", text_color = panelLabel, bgcolor = panelBody, text_size = size.small, text_halign = text.align_left)
+    table.cell(insightsTable, 1, 4, distanceText, text_color = panelValue, bgcolor = panelBody, text_size = size.small, text_halign = text.align_right)
+    table.cell(insightsTable, 0, 5, "Trigger", text_color = panelLabel, bgcolor = panelBody, text_size = size.small, text_halign = text.align_left)
+    table.cell(insightsTable, 1, 5, triggerText, text_color = color.rgb(52, 211, 153), bgcolor = panelBody, text_size = size.small, text_halign = text.align_right)
+    table.cell(insightsTable, 0, 6, "Invalidation", text_color = panelLabel, bgcolor = panelBody, text_size = size.small, text_halign = text.align_left)
+    table.cell(insightsTable, 1, 6, invalidationText, text_color = color.rgb(248, 113, 113), bgcolor = panelBody, text_size = size.small, text_halign = text.align_right)
+    table.cell(insightsTable, 0, 7, "Insight", text_color = panelLabel, bgcolor = panelBody, text_size = size.small, text_halign = text.align_left)
+    table.cell(insightsTable, 1, 7, atlasInsight, text_color = color.rgb(125, 211, 252), bgcolor = panelBody, text_size = size.small, text_halign = text.align_right)
 
 alertcondition(selectedClassCode == 1 and lifecycleCode == 2 and completedBar and recommendedTimeframe, "V5 production pattern ready", "{{ticker}} has a completed-bar production pattern inside the v5 ready distance.")
 alertcondition(selectedClassCode == 2 and lifecycleCode == 2 and completedBar and recommendedTimeframe, "V5 context pattern observed", "{{ticker}} has a context-only bullish pattern. It is not a v5 production entry pattern.")

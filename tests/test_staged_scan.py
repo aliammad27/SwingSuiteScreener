@@ -94,6 +94,24 @@ class UnavailableEligibilityProvider(CountingFixtureProvider):
         raise RuntimeError("contract metadata unavailable")
 
 
+class UnavailableEventProvider(CountingFixtureProvider):
+    def event_risk(self, symbol, as_of, lane):
+        self.event_calls += 1
+        raise RuntimeError("event service unavailable")
+
+
+class UnavailableChainProvider(CountingFixtureProvider):
+    def call_chain(self, symbol, expiration_date_gte, expiration_date_lte, as_of):
+        self.chain_calls += 1
+        raise RuntimeError("option chain unavailable")
+
+
+class UnavailableRequoteProvider(CountingFixtureProvider):
+    def latest_quotes(self, contracts, as_of):
+        self.refresh_calls += 1
+        raise RuntimeError("option quote service unavailable")
+
+
 def _install(monkeypatch, provider: FixtureDataProvider) -> None:
     monkeypatch.setattr(
         scan_module,
@@ -196,3 +214,41 @@ def test_unavailable_leader_eligibility_fails_closed(monkeypatch) -> None:
         "contract metadata unavailable"
     )
     assert provider.chain_calls == 0
+
+
+def test_unavailable_event_service_is_rejected_without_aborting_scan(monkeypatch) -> None:
+    provider = UnavailableEventProvider("ready")
+    _install(monkeypatch, provider)
+
+    result = scan_module.run_scan(ScanType.INTRADAY, fixture=True, scenario="ready")
+
+    assert provider.event_calls == 1
+    assert provider.chain_calls == 0
+    assert result.evaluated_count == 1
+    assert result.rejected[0].stage == "event"
+    assert result.rejected[0].reason_codes == ("event_data_unavailable",)
+    assert result.rejected[0].details["provider_error_type"] == "RuntimeError"
+
+
+def test_unavailable_option_chain_is_rejected_without_aborting_scan(monkeypatch) -> None:
+    provider = UnavailableChainProvider("ready")
+    _install(monkeypatch, provider)
+
+    result = scan_module.run_scan(ScanType.INTRADAY, fixture=True, scenario="ready")
+
+    assert provider.chain_calls == 1
+    assert provider.refresh_calls == 0
+    assert result.rejected[0].stage == "contract"
+    assert result.rejected[0].reason_codes == ("option_chain_unavailable",)
+
+
+def test_unavailable_requote_is_rejected_without_aborting_scan(monkeypatch) -> None:
+    provider = UnavailableRequoteProvider("ready")
+    _install(monkeypatch, provider)
+
+    result = scan_module.run_scan(ScanType.INTRADAY, fixture=True, scenario="ready")
+
+    assert provider.chain_calls == 1
+    assert provider.refresh_calls == 1
+    assert result.rejected[0].stage == "contract"
+    assert result.rejected[0].reason_codes == ("option_requote_unavailable",)
