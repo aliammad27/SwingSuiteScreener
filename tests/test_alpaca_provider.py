@@ -84,6 +84,33 @@ def test_alpaca_get_raises_runtime_error_after_retries(
     assert calls == 3
 
 
+@pytest.mark.parametrize("status_code", [401, 403])
+def test_alpaca_get_fails_fast_for_non_retryable_authorization_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    status_code: int,
+) -> None:
+    provider = _provider(monkeypatch)
+    calls = 0
+    sleeps: list[float] = []
+
+    def fake_get(*args: object, **kwargs: object) -> FakeResponse:
+        nonlocal calls
+        calls += 1
+        return FakeResponse(status_code)
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    monkeypatch.setattr(alpaca_module.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    with pytest.raises(
+        RuntimeError,
+        match=rf"HTTP {status_code} for /test",
+    ):
+        provider._get("/test", {})
+
+    assert calls == 1
+    assert sleeps == []
+
+
 def test_occ_call_symbol_parser_retains_expiry_and_strike() -> None:
     underlying, expiry, strike = parse_occ_call_symbol("AAPL260821C00225000")
     assert underlying == "AAPL"

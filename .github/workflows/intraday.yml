@@ -22,8 +22,8 @@ jobs:
       ALPACA_API_KEY_ID: ${{ secrets.ALPACA_API_KEY_ID }}
       ALPACA_API_SECRET_KEY: ${{ secrets.ALPACA_API_SECRET_KEY }}
       ALPACA_DATA_BASE_URL: https://data.alpaca.markets
-      ALPACA_FEED: sip
-      ALPACA_OPTION_FEED: opra
+      ALPACA_FEED: ${{ vars.ALPACA_FEED || 'iex' }}
+      ALPACA_OPTION_FEED: ${{ vars.ALPACA_OPTION_FEED || 'indicative' }}
       ALPACA_MIN_REQUEST_INTERVAL_SECONDS: "0.45"
       ALPACA_MAX_RETRIES: "8"
       MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}

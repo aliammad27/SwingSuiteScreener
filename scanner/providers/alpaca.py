@@ -180,6 +180,10 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
                     )
                     time.sleep(wait_seconds)
                     continue
+                if 400 <= response.status_code < 500:
+                    raise RuntimeError(
+                        f"Alpaca request failed with HTTP {response.status_code} for {path}."
+                    )
                 response.raise_for_status()
                 payload = response.json()
                 if not isinstance(payload, dict):
