@@ -2,9 +2,11 @@ name: V5 Intraday Scans
 
 on:
   schedule:
-    # Covers 10:35 AM through 3:35 PM ET across EDT and EST. The local-time gate
-    # rejects the extra UTC wakeups and starts later than 30 minutes.
-    - cron: "35 14-21 * * 1-5"
+    # Three decision windows across EDT and EST. The ET gate rejects the extra
+    # daylight-saving wakeup.
+    - cron: "45 14,15 * * 1-5"
+    - cron: "30 16,17 * * 1-5"
+    - cron: "15 18,19 * * 1-5"
   workflow_dispatch:
 
 permissions:
@@ -53,7 +55,7 @@ jobs:
         id: gate
         if: github.event_name == 'schedule'
         run: python -m scanner.intraday_schedule_gate
-      - name: Run completed-hour scan
+      - name: Run decision-window scan
         if: github.event_name == 'workflow_dispatch' || steps.gate.outputs.should_run == 'true'
         run: python -m scanner.run_scan intraday
       - name: Save scanner state

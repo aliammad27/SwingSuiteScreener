@@ -25,6 +25,7 @@ def _contract_lines(candidate: Candidate) -> list[str]:
         ]
     lines = [
         f"Contract feed: {selection.feed}",
+        f"Contract mode: {candidate.contract_mode.label}",
         f"Contract score: {selection.score}",
         f"Re-quoted finalists: {selection.requoted_count}",
         f"Primary call: {primary.contract_symbol}",
@@ -62,7 +63,9 @@ def _contract_lines(candidate: Candidate) -> list[str]:
             [
                 f"Expected move / target move: {_fmt_optional(economics.expected_move)} / "
                 f"${economics.target_move:.2f}",
+                f"Expected move source: {economics.expected_move_source}",
                 f"Target / expected move: {_fmt_optional(economics.target_to_expected_move, 'x')}",
+                f"Target feasibility: {economics.target_feasibility}",
                 f"Long-call breakeven: ${economics.long_call_breakeven:.2f} "
                 f"({economics.breakeven_move_percent:+.2f}%)",
                 f"Theta cost over {economics.theta_cost_sessions} sessions: "
@@ -77,6 +80,12 @@ def _contract_lines(candidate: Candidate) -> list[str]:
                 f"max profit {_fmt_optional(economics.spread_max_profit)}; "
                 f"reward/risk {_fmt_optional(economics.spread_reward_to_risk, 'x')}"
             )
+        lines.extend(
+            [
+                f"Preferred structure: {economics.recommended_structure}",
+                f"Structure rationale: {economics.structure_rationale}",
+            ]
+        )
     return lines
 
 

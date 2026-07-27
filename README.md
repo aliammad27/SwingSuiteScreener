@@ -32,6 +32,12 @@ Asymmetric Research always remains `Developing`. It is never promoted to `Ready`
 | Index Weekly | SPY, QQQ | 10-16 | 7-21 | 0.60-0.75 | 1-4 sessions | 5 DTE |
 | Leader Weekly | Liquid weekly-options leaders | 14-21 | 10-24 | 0.55-0.70 | 1-5 sessions | 7 DTE |
 
+Confirmed S quality breakouts and retests can use the gated Aggressive Weekly mode:
+7 to 12 DTE, 1 to 2 planned sessions, and requalification at 7 DTE. The shorter
+window requires strict technical evidence, SIP and OPRA feeds, a trusted event check,
+and a contract score of at least 85. If the shorter chain cannot satisfy those rules,
+selection falls back to the normal lane window.
+
 Leader candidates require price of at least $20 and 20-session average dollar volume
 of at least $100 million. Zero through six DTE contracts are excluded. A nonstandard
 weekly expiration is preferred unless a standard monthly expiration inside the same
@@ -127,11 +133,14 @@ the digest, so temporary delivery failures remain eligible for retry.
 
 Telegram is the primary actionable research surface. The digest is followed by up to
 five chart-backed contract cards for Ready, Ready - Verify, Verify Contract, and
-Asymmetric Research
-candidates. Each card identifies the trigger, call strike and expiration, refreshed
+Asymmetric Research candidates. Each card identifies the trigger, call strike and
+expiration, refreshed
 quote quality, underlying TP1/TP2 planning levels, tactical and structural risk, hold
 window, opportunity tier, expected move, breakeven, planned theta cost, optional debit
-spread comparison, and DTE requalification boundary. When a fresh, trusted OPRA contract is
+spread comparison, preferred structure, target feasibility, and DTE requalification
+boundary. Expected move uses the nearest at the money call and put midpoint when both
+are available and falls back explicitly to selected-call IV when necessary. When a
+fresh, trusted OPRA contract is
 available, the card also shows an immediate-to-maximum-hold premium scenario range
 using the refreshed bid/ask, delta, optional gamma, and theta. The range assumes stable
 implied volatility and is not a forecast or trade instruction. Developing candidates
@@ -139,6 +148,10 @@ remain in a compact watchlist with their setup, trigger, tier, evidence scores, 
 blockers, and contract economics when they qualify for asymmetric research. The
 post-close GitHub Action sends one digest every market day. A missing or
 failed Telegram digest fails the workflow instead of producing a false green run.
+
+Intraday scans run at 10:45 AM, 12:30 PM, and 2:15 PM ET on trading days. The
+post-close workflow evaluates completed signal outcomes and rebuilds the research
+evidence report after sending the daily digest.
 
 ## Commands
 

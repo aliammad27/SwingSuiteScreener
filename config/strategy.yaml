@@ -43,6 +43,32 @@ catalyst:
   maximum_age_bars: 3
   require_gap_midpoint_hold: true
 
+aggressive_weekly:
+  enabled: true
+  preferred_dte: [7, 10]
+  hard_dte: [7, 12]
+  intended_hold_sessions: [1, 2]
+  requalify_dte: 7
+  no_progress_sessions: 1
+  minimum_trend: 90
+  minimum_leadership: 75
+  minimum_setup: 90
+  minimum_timing: 90
+  minimum_market: 80
+  minimum_risk: 80
+  require_pattern_confirmed: true
+  allowed_patterns:
+    - confirmed_breakout
+    - breakout_retest
+
+trade_economics:
+  minimum_target_to_expected_move: 0.75
+  realistic_target_to_expected_move: 1.50
+  attractive_target_to_expected_move: 2.50
+  maximum_target_to_expected_move: 4.00
+  debit_spread_iv_to_realized_minimum: 1.25
+  minimum_spread_reward_to_risk: 0.50
+
 market:
   supportive_minimum: 70
   mixed_minimum: 45

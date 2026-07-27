@@ -5,7 +5,16 @@ import sys
 from dataclasses import replace
 from datetime import timedelta
 
-from scanner.models import EventRisk, EventRiskStatus, ScanType, StrategyLane
+from scanner.models import (
+    ContractMode,
+    EventRisk,
+    EventRiskStatus,
+    OpportunityTier,
+    PatternStatus,
+    ReviewState,
+    ScanType,
+    StrategyLane,
+)
 from scanner.providers.fixtures import FIXTURE_TIMESTAMP, FixtureDataProvider
 
 scan_module = importlib.import_module("scanner.run_scan")
@@ -36,6 +45,63 @@ class CountingFixtureProvider(FixtureDataProvider):
         self.refresh_calls += 1
         self.refresh_sizes.append(len(contracts))
         return super().latest_quotes(contracts, as_of)
+
+
+class AggressiveFixtureProvider(CountingFixtureProvider):
+    def call_chain(self, symbol, expiration_date_gte, expiration_date_lte, as_of):
+        standard = super().call_chain(
+            symbol,
+            expiration_date_gte,
+            expiration_date_lte,
+            as_of,
+        )
+        aggressive_expiry = as_of.date() + timedelta(days=8)
+        aggressive = [
+            replace(
+                contract,
+                contract_symbol=(
+                    f"{symbol}{aggressive_expiry.strftime('%y%m%d')}"
+                    f"C{int(contract.strike * 1000):08d}"
+                ),
+                expiration_date=aggressive_expiry,
+                dte=8,
+            )
+            for contract in standard
+        ]
+        return standard + aggressive
+
+    def put_chain(self, symbol, expiration_date_gte, expiration_date_lte, as_of):
+        expiry = expiration_date_gte
+        underlying = self.daily(symbol)[-1].close
+        strike = round(underlying / 2.5) * 2.5
+        return [
+            self._contract(
+                symbol,
+                expiry,
+                -0.45,
+                0.40,
+                0.50,
+                1800,
+                400,
+                strike=strike,
+                option_type="put",
+            )
+        ]
+
+
+class UnstableAggressiveFixtureProvider(AggressiveFixtureProvider):
+    def latest_quotes(self, contracts, as_of):
+        refreshed = super().latest_quotes(contracts, as_of)
+        if any(contract.dte == 8 for contract in refreshed):
+            return [
+                replace(
+                    contract,
+                    bid=round(contract.bid * 1.15, 2),
+                    ask=round(contract.ask * 1.15, 2),
+                )
+                for contract in refreshed
+            ]
+        return refreshed
 
 
 class BlockedEventProvider(CountingFixtureProvider):
@@ -112,7 +178,7 @@ def test_asymmetric_research_finalist_fetches_events_and_options(monkeypatch) ->
     )
     assert len(result.developing) == 1
     assert provider.event_calls == 1
-    assert provider.chain_calls == 1
+    assert provider.chain_calls == 2
     assert provider.refresh_calls == 1
     assert result.developing[0].opportunity_tier.value == "asymmetric"
 
@@ -153,10 +219,110 @@ def test_technical_finalist_fetches_chain_then_requotes_top_three(monkeypatch) -
     )
     assert len(result.ready_verify) == 1
     assert provider.event_calls == 1
-    assert provider.chain_calls == 1
+    assert provider.chain_calls == 2
     assert provider.refresh_calls == 1
     assert provider.refresh_sizes == [3]
     assert result.ready_verify[0].contracts.requoted_count == 3
+
+
+def _force_confirmed_breakout(monkeypatch) -> None:
+    original = scan_module.detect_best_pattern
+
+    def confirmed(*args, **kwargs):
+        signal = original(*args, **kwargs)
+        return replace(
+            signal,
+            pattern_type="confirmed_breakout",
+            status=PatternStatus.CONFIRMED,
+            quality=100,
+        )
+
+    monkeypatch.setattr(scan_module, "detect_best_pattern", confirmed)
+
+
+def test_confirmed_s_quality_setup_uses_aggressive_weekly_window(monkeypatch) -> None:
+    provider = AggressiveFixtureProvider("ready")
+    _install(monkeypatch, provider)
+    _force_confirmed_breakout(monkeypatch)
+
+    candidate = scan_module.run_scan(
+        ScanType.INTRADAY,
+        fixture=True,
+        scenario="ready",
+    ).ready_verify[0]
+
+    assert candidate.contract_mode == ContractMode.AGGRESSIVE_WEEKLY
+    assert candidate.contracts.primary is not None
+    assert candidate.contracts.primary.dte == 8
+    assert candidate.opportunity_tier == OpportunityTier.S_TIER
+
+
+def test_aggressive_window_falls_back_when_short_chain_is_not_eligible(
+    monkeypatch,
+) -> None:
+    provider = CountingFixtureProvider("ready")
+    _install(monkeypatch, provider)
+    _force_confirmed_breakout(monkeypatch)
+
+    candidate = scan_module.run_scan(
+        ScanType.INTRADAY,
+        fixture=True,
+        scenario="ready",
+    ).ready_verify[0]
+
+    assert candidate.contract_mode == ContractMode.STANDARD_WEEKLY
+    assert candidate.contracts.primary is not None
+    assert candidate.contracts.primary.dte == 15
+
+
+def test_aggressive_window_falls_back_when_refreshed_quote_loses_trust(
+    monkeypatch,
+) -> None:
+    provider = UnstableAggressiveFixtureProvider("ready")
+    _install(monkeypatch, provider)
+    _force_confirmed_breakout(monkeypatch)
+
+    candidate = scan_module.run_scan(
+        ScanType.INTRADAY,
+        fixture=True,
+        scenario="ready",
+    ).ready_verify[0]
+
+    assert candidate.contract_mode == ContractMode.STANDARD_WEEKLY
+    assert candidate.contracts.primary is not None
+    assert candidate.contracts.primary.dte == 15
+    assert provider.refresh_calls == 2
+
+
+def test_review_only_economics_stays_out_of_actionable_states(monkeypatch) -> None:
+    provider = CountingFixtureProvider("ready")
+    _install(monkeypatch, provider)
+    original = scan_module.contract_economics
+
+    def review_only(*args, **kwargs):
+        economics = original(*args, **kwargs)
+        assert economics is not None
+        return replace(
+            economics,
+            target_feasibility="insufficient",
+            recommended_structure="review_only",
+        )
+
+    monkeypatch.setattr(scan_module, "contract_economics", review_only)
+    result = scan_module.run_scan(
+        ScanType.INTRADAY,
+        fixture=True,
+        scenario="ready",
+    )
+
+    assert not result.ready
+    assert not result.ready_verify
+    assert not result.verify_contract
+    assert len(result.developing) == 1
+    candidate = result.developing[0]
+    assert candidate.state == ReviewState.DEVELOPING
+    assert candidate.opportunity_tier == OpportunityTier.WATCHLIST
+    assert "trade_economics_review_only" in candidate.reasons
 
 
 def test_blocked_event_stops_before_option_chain(monkeypatch) -> None:

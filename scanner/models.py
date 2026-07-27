@@ -57,6 +57,18 @@ class OpportunityTier(StrEnum):
         }[self]
 
 
+class ContractMode(StrEnum):
+    STANDARD_WEEKLY = "standard_weekly"
+    AGGRESSIVE_WEEKLY = "aggressive_weekly"
+
+    @property
+    def label(self) -> str:
+        return {
+            ContractMode.STANDARD_WEEKLY: "Standard Weekly",
+            ContractMode.AGGRESSIVE_WEEKLY: "Aggressive Weekly",
+        }[self]
+
+
 class PatternStatus(StrEnum):
     FORMING = "forming"
     READY = "ready"
@@ -353,8 +365,10 @@ class CatalystSignal:
 @dataclass(frozen=True)
 class ContractEconomics:
     expected_move: float | None
+    expected_move_source: str
     target_move: float
     target_to_expected_move: float | None
+    target_feasibility: str
     long_call_breakeven: float
     breakeven_move_percent: float
     theta_cost_sessions: int
@@ -367,6 +381,8 @@ class ContractEconomics:
     spread_max_profit: float | None
     spread_reward_to_risk: float | None
     spread_breakeven: float | None
+    recommended_structure: str
+    structure_rationale: str
 
 
 @dataclass(frozen=True)
@@ -408,6 +424,7 @@ class Candidate:
     state: ReviewState
     reasons: tuple[str, ...] = ()
     opportunity_tier: OpportunityTier = OpportunityTier.WATCHLIST
+    contract_mode: ContractMode = ContractMode.STANDARD_WEEKLY
     catalyst: CatalystSignal | None = None
     contract_economics: ContractEconomics | None = None
 

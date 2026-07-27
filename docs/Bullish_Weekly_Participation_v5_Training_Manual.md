@@ -40,6 +40,24 @@ same-expiration debit-spread comparison when one is available. A detected high-v
 gap continuation is labeled as price-action evidence unless the event source
 independently identifies the catalyst.
 
+### Weekly Execution Modes
+
+Standard Weekly remains the default. Aggressive Weekly appears only for a confirmed S
+quality breakout or retest with trusted data and a contract score of at least 85. It
+uses 7 to 12 DTE, expects resolution within 1 to 2 sessions, reviews no progress after
+one session, and requalifies at 7 DTE.
+
+The three intraday decision scans occur at 10:45 AM, 12:30 PM, and 2:15 PM ET. The
+first scan evaluates the opening structure, the second checks continuation or a
+midday pullback, and the final scan is the last new-entry review inside the configured
+window.
+
+Expected move comes from the nearest at the money straddle midpoint when possible.
+Targets below 0.75 times expected move are insufficient, up to 1.50 times are
+realistic, up to 2.50 times are attractive, up to 4.00 times are ambitious, and larger
+targets are extreme. Extreme targets produce review-only guidance rather than an
+aggressive recommendation.
+
 ---
 
 ## Quick Reference

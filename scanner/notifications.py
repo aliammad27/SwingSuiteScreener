@@ -14,10 +14,17 @@ from urllib import parse, request
 from scanner.charts import render_candidate_summary
 from scanner.clocks import NY
 from scanner.config import ROOT, load_config, load_local_env
-from scanner.models import Candidate, OpportunityTier, ScanResult, ScanType
+from scanner.models import (
+    Candidate,
+    ContractMode,
+    OpportunityTier,
+    ScanResult,
+    ScanType,
+)
 from scanner.premium_scenarios import premium_target_scenarios
 from scanner.state import NotificationState, completion_snapshot, should_send_completion
 from scanner.storage.factory import configured_storage
+from scanner.strategy_profile import PROFILE
 
 TELEGRAM_TEST_MESSAGE = (
     "ALI'S SCREENER BOT TEST\n\n"
@@ -147,7 +154,8 @@ def _contract_line(candidate: Candidate) -> str:
         return f"Contract: verify live chain ({candidate.contracts.feed})"
     return (
         f"Call: {contract.expiration_date.strftime('%b %d')} ${contract.strike:g} "
-        f"D{contract.delta:.2f} | {contract.dte}DTE | {contract.spread_percent:.1f}% spread"
+        f"D{contract.delta:.2f} | {contract.dte}DTE | "
+        f"{candidate.contract_mode.label} | {contract.spread_percent:.1f}% spread"
     )
 
 
@@ -172,7 +180,9 @@ def _economics_lines(candidate: Candidate) -> list[str]:
         else "unavailable"
     )
     lines = [
-        f"Economics: expected move {expected} | target/expected {ratio}",
+        f"Economics: expected move {expected} "
+        f"({'ATM straddle' if economics.expected_move_source == 'atm_straddle_mid' else 'call IV'}) | "
+        f"target/expected {ratio} | {economics.target_feasibility}",
         f"Call breakeven ${economics.long_call_breakeven:.2f} "
         f"({economics.breakeven_move_percent:+.1f}%) | "
         f"{economics.theta_cost_sessions} session theta {theta}",
@@ -187,6 +197,9 @@ def _economics_lines(candidate: Candidate) -> list[str]:
             f"debit ${economics.spread_debit:.2f} | "
             f"max profit ${economics.spread_max_profit:.2f}"
         )
+    lines.append(
+        f"Preferred structure: {economics.recommended_structure.replace('_', ' ')}"
+    )
     return lines
 
 
@@ -234,7 +247,8 @@ def candidate_caption(
         lines.extend(
             [
                 f"Call {contract.expiration_date.strftime('%b %d')} ${contract.strike:g} | "
-                f"{contract.dte}DTE | delta {contract.delta:.2f}",
+                f"{contract.dte}DTE | delta {contract.delta:.2f} | "
+                f"{candidate.contract_mode.label}",
                 f"Quote ${contract.bid:.2f}/${contract.ask:.2f} | "
                 f"{contract.spread_percent:.1f}% | OI {contract.open_interest:,} | "
                 f"Vol {contract.volume:,}",
@@ -267,12 +281,31 @@ def candidate_caption(
             + ", ".join(_reason_label(reason) for reason in visible_reasons[:3])
         )
     lines.extend(_target_lines(candidate, show_premium_scenarios=show_premium_scenarios))
+    aggressive = candidate.contract_mode == ContractMode.AGGRESSIVE_WEEKLY
+    hold = (
+        PROFILE.aggressive_weekly.intended_hold_sessions
+        if aggressive
+        else entry.intended_hold_sessions
+    )
+    requalify_dte = (
+        PROFILE.aggressive_weekly.requalify_dte
+        if aggressive
+        else entry.requalify_dte
+    )
+    no_progress = (
+        PROFILE.aggressive_weekly.no_progress_sessions
+        if aggressive
+        else entry.no_progress_sessions
+    )
     lines.extend(
         [
             f"Risk: tactical failure ${entry.tactical_failure:.2f} | "
             f"structural ${entry.invalidation:.2f}",
-            f"Hold {entry.intended_hold_sessions[0]}-{entry.intended_hold_sessions[1]} sessions | "
-            f"requalify {entry.requalify_dte}DTE",
+            f"Hold {hold[0]}-{hold[1]} sessions | no-progress review "
+            f"{no_progress} session{'s' if no_progress != 1 else ''} | "
+            f"requalify {requalify_dte}DTE",
+            "Exit boundary: completed hourly close below tactical failure; "
+            "never average down.",
             f"Event {candidate.event_risk.status.value} | data "
             f"{'trusted' if candidate.data_trust.trustworthy else 'verify'}",
         ]
@@ -313,6 +346,7 @@ def _reason_label(reason: str) -> str:
         "event_data_unavailable": "event data",
         "option_chain_unavailable": "option chain",
         "option_requote_unavailable": "option quote",
+        "trade_economics_review_only": "trade economics",
     }
     return labels.get(reason, reason.replace("_", " "))
 

@@ -217,6 +217,47 @@ def test_call_chain_follows_pagination_and_filters_calls(
     assert seen_params[1]["page_token"] == expected_page_token
 
 
+def test_put_chain_requests_and_parses_put_snapshots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = _provider(monkeypatch)
+    seen_params: list[dict[str, str]] = []
+
+    def fake_get(path: str, params: dict[str, str]) -> dict[str, Any]:
+        del path
+        seen_params.append(params.copy())
+        return {
+            "snapshots": {
+                "AAPL260821P00225000": {
+                    "latestQuote": {
+                        "bp": 4.8,
+                        "ap": 5.0,
+                        "bs": 10,
+                        "as": 12,
+                        "t": "2026-07-15T19:59:00Z",
+                    },
+                    "greeks": {"delta": -0.45, "gamma": 0.02, "theta": -0.08},
+                    "impliedVolatility": 0.32,
+                    "openInterest": 900,
+                    "dailyBar": {"v": 250},
+                }
+            }
+        }
+
+    monkeypatch.setattr(provider, "_get", fake_get)
+    chain = provider.put_chain(
+        "AAPL",
+        date(2026, 8, 21),
+        date(2026, 8, 21),
+        datetime(2026, 7, 15, 20, 0, tzinfo=UTC),
+    )
+
+    assert len(chain) == 1
+    assert chain[0].contract_symbol.endswith("P00225000")
+    assert chain[0].delta == -0.45
+    assert seen_params[0]["type"] == "put"
+
+
 def test_latest_quotes_refreshes_top_contracts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 
 from scanner.calendars import is_trading_day
@@ -37,6 +37,7 @@ from scanner.models import (
     Candle,
     CatalystSignal,
     ContractEconomics,
+    ContractMode,
     ContractSelection,
     DataTrust,
     EntryPlan,
@@ -46,6 +47,7 @@ from scanner.models import (
     MarketContext,
     MomentumResult,
     OpportunityTier,
+    OptionContractSnapshot,
     PatternSignal,
     PatternStatus,
     RejectedRecord,
@@ -58,8 +60,10 @@ from scanner.models import (
 )
 from scanner.momentum import calculate_momentum
 from scanner.opportunity import (
+    aggressive_weekly_eligible,
     asymmetric_qualification_failures,
     classify_opportunity_tier,
+    composite_score,
     contract_economics,
     detect_catalyst_signal,
 )
@@ -69,7 +73,7 @@ from scanner.providers.base import EventRiskProvider, MarketDataProvider, Option
 from scanner.providers.cache import CachedMarketDataProvider, CachedOptionDataProvider
 from scanner.providers.events import TrustedEventRiskProvider
 from scanner.providers.fixtures import FIXTURE_TIMESTAMP, FixtureDataProvider
-from scanner.strategy_profile import PROFILE
+from scanner.strategy_profile import PROFILE, LaneProfile
 from scanner.timing import analyze_timing, market_hourly_confirmation
 from scanner.universe import configured_leader_symbols, configured_symbols, metadata_for
 
@@ -302,6 +306,7 @@ def _candidate_from_record(
     reasons: tuple[str, ...],
     opportunity_tier: OpportunityTier = OpportunityTier.WATCHLIST,
     economics: ContractEconomics | None = None,
+    contract_mode: ContractMode = ContractMode.STANDARD_WEEKLY,
 ) -> Candidate:
     return Candidate(
         symbol=record.metadata.symbol,
@@ -323,8 +328,36 @@ def _candidate_from_record(
         state=state,
         reasons=reasons,
         opportunity_tier=opportunity_tier,
+        contract_mode=contract_mode,
         catalyst=record.catalyst,
         contract_economics=economics,
+    )
+
+
+def _requote_contracts(
+    *,
+    options: OptionDataProvider,
+    chain: list[OptionContractSnapshot],
+    initial: ContractSelection,
+    lane: LaneProfile,
+    as_of: datetime,
+    realized_volatility: float | None,
+    underlying_price: float,
+) -> ContractSelection:
+    top = [initial.primary, *initial.alternatives] if initial.primary is not None else []
+    top_contracts = [contract for contract in top if contract is not None]
+    previous_quotes = {contract.contract_symbol: contract for contract in top_contracts}
+    refreshed = options.latest_quotes(top_contracts, as_of)
+    return select_contracts(
+        refreshed if top_contracts else chain,
+        lane,
+        as_of,
+        realized_volatility,
+        underlying_price,
+        maximum_quote_age_minutes=PROFILE.maximum_quote_age_minutes,
+        feed_when_empty=getattr(options, "option_feed", "unknown"),
+        previous_quotes=previous_quotes,
+        requoted_count=len(refreshed),
     )
 
 
@@ -554,7 +587,33 @@ def run_scan(
             continue
 
         lane_profile = PROFILE.lane(record.metadata.lane)
-        expiry_start = as_of.date() + timedelta(days=lane_profile.hard_dte[0])
+        aggressive_eligible = (
+            not asymmetric_path
+            and aggressive_weekly_eligible(
+                lane=record.metadata.lane,
+                scores=pre_contract_scores,
+                pattern=record.pattern,
+                profile=PROFILE,
+            )
+            and getattr(market, "stock_feed", "unknown").lower()
+            == PROFILE.required_stock_feed.lower()
+            and getattr(options, "option_feed", "unknown").lower()
+            == PROFILE.required_option_feed.lower()
+        )
+        aggressive_settings = PROFILE.aggressive_weekly
+        aggressive_lane = replace(
+            lane_profile,
+            preferred_dte=aggressive_settings.preferred_dte,
+            hard_dte=aggressive_settings.hard_dte,
+            intended_hold_sessions=aggressive_settings.intended_hold_sessions,
+            requalify_dte=aggressive_settings.requalify_dte,
+        )
+        expiry_minimum = (
+            min(lane_profile.hard_dte[0], aggressive_lane.hard_dte[0])
+            if aggressive_eligible
+            else lane_profile.hard_dte[0]
+        )
+        expiry_start = as_of.date() + timedelta(days=expiry_minimum)
         expiry_end = as_of.date() + timedelta(days=lane_profile.hard_dte[1])
         try:
             chain = options.call_chain(symbol, expiry_start, expiry_end, as_of)
@@ -568,20 +627,87 @@ def run_scan(
                 )
             )
             continue
+        contract_mode = ContractMode.STANDARD_WEEKLY
         initial = select_contracts(
             chain,
-            lane_profile,
+            aggressive_lane if aggressive_eligible else lane_profile,
             as_of,
             record.daily_realized_volatility,
             record.trend.close,
             maximum_quote_age_minutes=PROFILE.maximum_quote_age_minutes,
             feed_when_empty=getattr(options, "option_feed", "unknown"),
         )
-        top = [initial.primary, *initial.alternatives] if initial.primary is not None else []
-        top_contracts = [contract for contract in top if contract is not None]
-        previous_quotes = {contract.contract_symbol: contract for contract in top_contracts}
+        attempt_aggressive = (
+            aggressive_eligible
+            and initial.primary is not None
+            and initial.score >= PROFILE.opportunity_tiers.s_tier_minimum_contract
+        )
+        if aggressive_eligible and not attempt_aggressive:
+            initial = select_contracts(
+                chain,
+                lane_profile,
+                as_of,
+                record.daily_realized_volatility,
+                record.trend.close,
+                maximum_quote_age_minutes=PROFILE.maximum_quote_age_minutes,
+                feed_when_empty=getattr(options, "option_feed", "unknown"),
+            )
         try:
-            refreshed = options.latest_quotes(top_contracts, as_of)
+            contracts = _requote_contracts(
+                options=options,
+                chain=chain,
+                initial=initial,
+                lane=aggressive_lane if attempt_aggressive else lane_profile,
+                as_of=as_of,
+                realized_volatility=record.daily_realized_volatility,
+                underlying_price=record.trend.close,
+            )
+            if attempt_aggressive:
+                aggressive_scores = EvidenceScores(
+                    trend=pre_contract_scores.trend,
+                    leadership=pre_contract_scores.leadership,
+                    setup=pre_contract_scores.setup,
+                    timing=pre_contract_scores.timing,
+                    market=pre_contract_scores.market,
+                    contract=contracts.score,
+                    risk=pre_contract_scores.risk,
+                )
+                aggressive_trust = assess_data_trust(
+                    stock_feed=getattr(market, "stock_feed", "unknown"),
+                    contracts=contracts,
+                    event=event,
+                    as_of=as_of,
+                    profile=PROFILE,
+                )
+                strict_aggressive_contract = (
+                    contracts.primary is not None
+                    and contracts.score
+                    >= PROFILE.opportunity_tiers.s_tier_minimum_contract
+                    and composite_score(aggressive_scores)
+                    >= PROFILE.opportunity_tiers.s_tier_minimum_composite
+                    and aggressive_trust.trustworthy
+                )
+                if strict_aggressive_contract:
+                    contract_mode = ContractMode.AGGRESSIVE_WEEKLY
+                else:
+                    initial = select_contracts(
+                        chain,
+                        lane_profile,
+                        as_of,
+                        record.daily_realized_volatility,
+                        record.trend.close,
+                        maximum_quote_age_minutes=PROFILE.maximum_quote_age_minutes,
+                        feed_when_empty=getattr(options, "option_feed", "unknown"),
+                    )
+                    contracts = _requote_contracts(
+                        options=options,
+                        chain=chain,
+                        initial=initial,
+                        lane=lane_profile,
+                        as_of=as_of,
+                        realized_volatility=record.daily_realized_volatility,
+                        underlying_price=record.trend.close,
+                    )
         except (OSError, RuntimeError, TypeError, ValueError) as exc:
             rejected.append(
                 _provider_rejection(
@@ -592,17 +718,6 @@ def run_scan(
                 )
             )
             continue
-        contracts = select_contracts(
-            refreshed if top_contracts else chain,
-            lane_profile,
-            as_of,
-            record.daily_realized_volatility,
-            record.trend.close,
-            maximum_quote_age_minutes=PROFILE.maximum_quote_age_minutes,
-            feed_when_empty=getattr(options, "option_feed", "unknown"),
-            previous_quotes=previous_quotes,
-            requoted_count=len(refreshed),
-        )
         data_trust = assess_data_trust(
             stock_feed=getattr(market, "stock_feed", "unknown"),
             contracts=contracts,
@@ -619,11 +734,35 @@ def run_scan(
             contract=contracts.score,
             risk=pre_contract_scores.risk,
         )
+        put_chain = []
+        if contracts.primary is not None:
+            try:
+                primary_expiry = contracts.primary.expiration_date
+                put_chain = options.put_chain(
+                    symbol,
+                    primary_expiry,
+                    primary_expiry,
+                    as_of,
+                )
+            except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                log.warning(
+                    "Falling back to selected-call IV expected move for %s: %s",
+                    symbol,
+                    type(exc).__name__,
+                )
+        active_hold = (
+            aggressive_settings.intended_hold_sessions
+            if contract_mode == ContractMode.AGGRESSIVE_WEEKLY
+            else record.entry.intended_hold_sessions
+        )
         economics = contract_economics(
             contracts,
             underlying_price=record.trend.close,
             target_price=record.entry.target_price,
-            hold_sessions=record.entry.intended_hold_sessions[1],
+            hold_sessions=active_hold[1],
+            profile=PROFILE,
+            call_chain=chain,
+            put_chain=put_chain,
         )
         if asymmetric_path:
             if not data_trust.event_trusted:
@@ -655,6 +794,15 @@ def run_scan(
                 data_trust=data_trust,
                 profile=PROFILE,
             )
+            if (
+                state != ReviewState.REJECTED
+                and economics is not None
+                and economics.recommended_structure == "review_only"
+            ):
+                state = ReviewState.DEVELOPING
+                reasons = tuple(
+                    sorted(set((*reasons, "trade_economics_review_only")))
+                )
         opportunity_tier = classify_opportunity_tier(
             state=state,
             scores=scores,
@@ -674,6 +822,7 @@ def run_scan(
             reasons=reasons,
             opportunity_tier=opportunity_tier,
             economics=economics,
+            contract_mode=contract_mode,
         )
         if state == ReviewState.REJECTED:
             rejected.append(

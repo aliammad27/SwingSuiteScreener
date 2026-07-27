@@ -36,14 +36,17 @@ def test_contract_economics_include_expected_move_and_spread_comparison() -> Non
 
     assert economics is not None
     assert economics.expected_move is not None
+    assert economics.expected_move_source == "atm_straddle_mid"
     assert economics.target_to_expected_move is not None
-    assert economics.target_to_expected_move > 1
+    assert 0.75 <= economics.target_to_expected_move <= 1.50
+    assert economics.target_feasibility == "realistic"
     assert economics.long_call_breakeven > candidate.contracts.primary.strike
     assert economics.theta_cost_percent is not None
     assert economics.spread_short_strike is not None
     assert economics.spread_debit is not None
     assert economics.spread_max_profit is not None
     assert economics.spread_reward_to_risk is not None
+    assert economics.recommended_structure == "call_debit_spread"
 
 
 def test_gap_continuation_uses_completed_price_and_volume_evidence() -> None:

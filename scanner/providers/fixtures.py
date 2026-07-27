@@ -252,9 +252,13 @@ class FixtureDataProvider(MarketDataProvider, OptionDataProvider, EventRiskProvi
         volume: int,
         *,
         strike: float,
+        option_type: str = "call",
     ) -> OptionContractSnapshot:
         encoded_strike = int(strike * 1000)
-        contract_symbol = f"{symbol}{expiry.strftime('%y%m%d')}C{encoded_strike:08d}"
+        marker = "C" if option_type == "call" else "P"
+        contract_symbol = (
+            f"{symbol}{expiry.strftime('%y%m%d')}{marker}{encoded_strike:08d}"
+        )
         return OptionContractSnapshot(
             contract_symbol=contract_symbol,
             underlying_symbol=symbol,
@@ -275,6 +279,44 @@ class FixtureDataProvider(MarketDataProvider, OptionDataProvider, EventRiskProvi
             feed=self.option_feed,
             quote_timestamp=FIXTURE_TIMESTAMP,
         )
+
+    def put_chain(
+        self,
+        symbol: str,
+        expiration_date_gte: date,
+        expiration_date_lte: date,
+        as_of: datetime,
+    ) -> list[OptionContractSnapshot]:
+        if self.scenario == "missing_contracts":
+            return []
+        expiry = as_of.date() + timedelta(days=15)
+        if not expiration_date_gte <= expiry <= expiration_date_lte:
+            return []
+        underlying = self.daily(symbol)[-1].close
+        calls = self.call_chain(
+            symbol,
+            expiration_date_gte,
+            expiration_date_lte,
+            as_of,
+        )
+        strike = (
+            min(calls, key=lambda contract: abs(contract.strike - underlying)).strike
+            if calls
+            else round(underlying / 2.5) * 2.5
+        )
+        return [
+            self._contract(
+                symbol,
+                expiry,
+                -0.45,
+                0.40,
+                0.50,
+                1800,
+                400,
+                strike=strike,
+                option_type="put",
+            )
+        ]
 
     def latest_quotes(
         self,

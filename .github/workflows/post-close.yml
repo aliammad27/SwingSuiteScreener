@@ -51,6 +51,10 @@ jobs:
             swingsuite-state-
       - name: Run post close scan
         run: python -m scanner.run_scan post_close
+      - name: Evaluate completed research outcomes
+        run: python -m scanner.run_scan evaluate-signals
+      - name: Build research evidence report
+        run: python -m scanner.run_scan research-report
       - name: Save scanner state
         if: always()
         uses: actions/cache/save@v5
@@ -69,5 +73,7 @@ jobs:
             reports/post_close/latest.json
             reports/post_close/latest.html
             data/research/research.sqlite3
+            reports/research/latest.md
+            reports/research/latest.json
             logs/notifications.log
           if-no-files-found: ignore

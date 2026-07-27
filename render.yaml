@@ -10,7 +10,17 @@ services:
     schedule: "45 12 * * 1-5"
     dockerCommand: "python -m scanner.schedule_gate --target 08:45 --max-late-minutes 20 && python -m scanner.run_scan premarket"
   - type: cron
-    name: swingsuite-intraday
+    name: swingsuite-intraday-open
     runtime: docker
-    schedule: "35 14-20 * * 1-5"
+    schedule: "45 14,15 * * 1-5"
+    dockerCommand: "python -m scanner.run_scan intraday --scheduled"
+  - type: cron
+    name: swingsuite-intraday-midday
+    runtime: docker
+    schedule: "30 16,17 * * 1-5"
+    dockerCommand: "python -m scanner.run_scan intraday --scheduled"
+  - type: cron
+    name: swingsuite-intraday-final
+    runtime: docker
+    schedule: "15 18,19 * * 1-5"
     dockerCommand: "python -m scanner.run_scan intraday --scheduled"

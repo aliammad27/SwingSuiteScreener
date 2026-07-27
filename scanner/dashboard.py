@@ -78,7 +78,7 @@ def _contract_summary(candidate: Candidate) -> tuple[str, str, str]:
         f"${contract.strike:g} call / {contract.dte} DTE"
     )
     metrics = (
-        f"Delta {contract.delta:.2f} / "
+        f"{candidate.contract_mode.label} / Delta {contract.delta:.2f} / "
         f"${contract.bid:.2f}-${contract.ask:.2f} / "
         f"{contract.spread_percent:.1f}% spread"
     )
@@ -271,6 +271,18 @@ def _candidate_detail(candidate: Candidate) -> str:
         or "<li>No active event window.</li>"
     )
     plan = candidate.entry_plan
+    economics = candidate.contract_economics
+    preferred_structure = (
+        economics.recommended_structure.replace("_", " ").title()
+        if economics is not None
+        else "Unavailable"
+    )
+    expected_move = (
+        _price(economics.expected_move) if economics is not None else "N/A"
+    )
+    target_feasibility = (
+        economics.target_feasibility.title() if economics is not None else "Unavailable"
+    )
     return f"""
     <article class="candidate-detail" id="candidate-{escape(candidate.symbol)}"
              data-symbol="{escape(candidate.symbol)}"
@@ -350,6 +362,10 @@ def _candidate_detail(candidate: Candidate) -> str:
             <div><dt>No-progress review</dt><dd>{plan.no_progress_sessions} sessions</dd></div>
             <div><dt>DTE requalification</dt><dd>{plan.requalify_dte} DTE</dd></div>
             <div><dt>Contract re-quotes</dt><dd>{candidate.contracts.requoted_count}</dd></div>
+            <div><dt>Contract mode</dt><dd>{escape(candidate.contract_mode.label)}</dd></div>
+            <div><dt>Expected move</dt><dd>{expected_move}</dd></div>
+            <div><dt>Target feasibility</dt><dd>{escape(target_feasibility)}</dd></div>
+            <div><dt>Preferred structure</dt><dd>{escape(preferred_structure)}</dd></div>
             <div><dt>Validation state</dt><dd>{escape(PROFILE.validation_state)}</dd></div>
           </dl>
           <ul>{reasons}</ul>

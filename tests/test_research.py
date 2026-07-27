@@ -230,6 +230,10 @@ def test_ledger_migrates_previous_schema_without_dropping_history(tmp_path) -> N
             "primary_dte",
             "primary_delta",
             "iv_to_realized_volatility",
+            "contract_mode",
+            "expected_move_source",
+            "target_feasibility",
+            "recommended_structure",
         }.issubset(signal_columns)
         assert {
             "bid_size",

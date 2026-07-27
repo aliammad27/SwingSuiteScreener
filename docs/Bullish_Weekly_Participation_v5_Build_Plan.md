@@ -27,6 +27,18 @@ The asymmetric path requires configured trend, leadership, setup, timing, market
 risk, contract, target-versus-expected-move, and IV-versus-realized-volatility gates.
 Its purpose is held-out research, not relaxed production eligibility.
 
+### 1.2 Weekly Execution Modes
+
+Standard Weekly preserves the lane-specific 7 to 24 DTE boundaries. Aggressive Weekly
+uses 7 to 12 DTE only for confirmed S quality breakouts and retests with trusted SIP,
+OPRA, and event evidence. It plans a 1 to 2 session hold, reviews no progress after one
+session, and requalifies at 7 DTE. Missing or weak short-window contracts fall back to
+the standard lane.
+
+Expected move uses the nearest at the money call plus put midpoint for the selected
+expiration. Target feasibility determines whether the output prefers a long call, a
+same-expiration call debit spread, or review only.
+
 ## 2. Objectives
 
 1. Prioritize bullish setups capable of resolving within one to five sessions.

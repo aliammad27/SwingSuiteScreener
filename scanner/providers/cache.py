@@ -36,6 +36,9 @@ class CachedOptionDataProvider(OptionDataProvider):
         self._chains: dict[
             tuple[str, date, date, date], list[OptionContractSnapshot]
         ] = {}
+        self._put_chains: dict[
+            tuple[str, date, date, date], list[OptionContractSnapshot]
+        ] = {}
         self.option_feed = getattr(delegate, "option_feed", "unknown")
 
     def call_chain(
@@ -51,6 +54,20 @@ class CachedOptionDataProvider(OptionDataProvider):
                 symbol, expiration_date_gte, expiration_date_lte, as_of
             )
         return self._chains[key]
+
+    def put_chain(
+        self,
+        symbol: str,
+        expiration_date_gte: date,
+        expiration_date_lte: date,
+        as_of: datetime,
+    ) -> list[OptionContractSnapshot]:
+        key = (symbol, expiration_date_gte, expiration_date_lte, as_of.date())
+        if key not in self._put_chains:
+            self._put_chains[key] = self.delegate.put_chain(
+                symbol, expiration_date_gte, expiration_date_lte, as_of
+            )
+        return self._put_chains[key]
 
     def latest_quotes(
         self,

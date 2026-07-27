@@ -70,7 +70,7 @@ materially stronger.
 - a completed 60-minute bar owns timing
 - only completed candles count
 - new entries are eligible from 10:30 AM through 2:45 PM ET
-- the final scheduled hourly scan is management-only
+- scheduled decision scans run at 10:45 AM, 12:30 PM, and 2:15 PM ET
 - SPY and QQQ provide market and intraday confirmation
 - price must remain above SMA200
 - market regime must not be hostile
@@ -171,6 +171,13 @@ extrinsic value, gamma, quote age, and quote stability.
 Contract economics must also report expected move from current IV, target versus
 expected move, long-call breakeven, theta cost across the maximum planned hold, and a
 same-expiration debit-spread comparison when an eligible higher-strike call exists.
+Use the nearest at the money call and put midpoint for expected move when both quotes
+are available. Label the fallback to selected-call IV explicitly.
+
+Aggressive Weekly mode is limited to confirmed S quality breakouts and retests. It
+uses 7 to 12 DTE, a 1 to 2 session hold, one-session no-progress review, and 7 DTE
+requalification. It must fall back to the standard lane when the shorter chain cannot
+produce a contract score of at least 85.
 
 ## Levels And Management Language
 

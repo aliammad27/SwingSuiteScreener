@@ -142,6 +142,11 @@ class ResearchLedger:
                 primary_dte INTEGER,
                 primary_delta REAL,
                 iv_to_realized_volatility REAL,
+                contract_mode TEXT NOT NULL DEFAULT 'standard_weekly',
+                expected_move_source TEXT,
+                target_feasibility TEXT,
+                recommended_structure TEXT,
+                structure_rationale TEXT,
                 UNIQUE(signal_timestamp, symbol, pattern_type, config_hash)
             );
             CREATE TABLE IF NOT EXISTS contract_snapshots (
@@ -226,6 +231,11 @@ class ResearchLedger:
                 ("primary_dte", "INTEGER"),
                 ("primary_delta", "REAL"),
                 ("iv_to_realized_volatility", "REAL"),
+                ("contract_mode", "TEXT NOT NULL DEFAULT 'standard_weekly'"),
+                ("expected_move_source", "TEXT"),
+                ("target_feasibility", "TEXT"),
+                ("recommended_structure", "TEXT"),
+                ("structure_rationale", "TEXT"),
             ),
         )
         self._ensure_columns(
@@ -307,8 +317,9 @@ class ResearchLedger:
                  expected_move, target_to_expected_move, long_call_breakeven,
                  theta_hold_cost_percent, spread_short_strike, spread_debit,
                  spread_max_profit, primary_dte, primary_delta,
-                 iv_to_realized_volatility)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 iv_to_realized_volatility, contract_mode, expected_move_source,
+                 target_feasibility, recommended_structure, structure_rationale)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     signal_id,
@@ -390,6 +401,27 @@ class ResearchLedger:
                         else None
                     ),
                     candidate.contracts.iv_to_realized_volatility,
+                    candidate.contract_mode.value,
+                    (
+                        candidate.contract_economics.expected_move_source
+                        if candidate.contract_economics
+                        else None
+                    ),
+                    (
+                        candidate.contract_economics.target_feasibility
+                        if candidate.contract_economics
+                        else None
+                    ),
+                    (
+                        candidate.contract_economics.recommended_structure
+                        if candidate.contract_economics
+                        else None
+                    ),
+                    (
+                        candidate.contract_economics.structure_rationale
+                        if candidate.contract_economics
+                        else None
+                    ),
                 ),
             )
             contracts_with_risk = []

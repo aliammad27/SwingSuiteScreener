@@ -73,6 +73,34 @@ class CatalystProfile:
 
 
 @dataclass(frozen=True)
+class AggressiveWeeklyProfile:
+    enabled: bool
+    preferred_dte: tuple[int, int]
+    hard_dte: tuple[int, int]
+    intended_hold_sessions: tuple[int, int]
+    requalify_dte: int
+    no_progress_sessions: int
+    minimum_trend: int
+    minimum_leadership: int
+    minimum_setup: int
+    minimum_timing: int
+    minimum_market: int
+    minimum_risk: int
+    require_pattern_confirmed: bool
+    allowed_patterns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TradeEconomicsProfile:
+    minimum_target_to_expected_move: float
+    realistic_target_to_expected_move: float
+    attractive_target_to_expected_move: float
+    maximum_target_to_expected_move: float
+    debit_spread_iv_to_realized_minimum: float
+    minimum_spread_reward_to_risk: float
+
+
+@dataclass(frozen=True)
 class StrategyProfile:
     schema_version: int
     name: str
@@ -82,6 +110,8 @@ class StrategyProfile:
     watchlist_thresholds: WatchlistThresholds
     opportunity_tiers: OpportunityTierProfile
     catalyst: CatalystProfile
+    aggressive_weekly: AggressiveWeeklyProfile
+    trade_economics: TradeEconomicsProfile
     supportive_market_minimum: int
     mixed_market_minimum: int
     production_patterns: tuple[str, ...]
@@ -151,6 +181,8 @@ def load_strategy_profile() -> StrategyProfile:
     raw_watchlist = values["watchlist_thresholds"]
     raw_tiers = values["opportunity_tiers"]
     raw_catalyst = values["catalyst"]
+    raw_aggressive = values["aggressive_weekly"]
+    raw_economics = values["trade_economics"]
     raw_market = values["market"]
     raw_patterns = values["patterns"]
     raw_events = values["event_risk"]
@@ -165,6 +197,8 @@ def load_strategy_profile() -> StrategyProfile:
             raw_watchlist,
             raw_tiers,
             raw_catalyst,
+            raw_aggressive,
+            raw_economics,
             raw_market,
             raw_patterns,
             raw_events,
@@ -218,6 +252,66 @@ def load_strategy_profile() -> StrategyProfile:
         maximum_age_bars=int(raw_catalyst["maximum_age_bars"]),
         require_gap_midpoint_hold=bool(raw_catalyst["require_gap_midpoint_hold"]),
     )
+    aggressive_preferred_dte = _pair(
+        raw_aggressive["preferred_dte"],
+        int,
+        "aggressive_weekly.preferred_dte",
+    )
+    aggressive_hard_dte = _pair(
+        raw_aggressive["hard_dte"],
+        int,
+        "aggressive_weekly.hard_dte",
+    )
+    aggressive_hold = _pair(
+        raw_aggressive["intended_hold_sessions"],
+        int,
+        "aggressive_weekly.intended_hold_sessions",
+    )
+    aggressive_weekly = AggressiveWeeklyProfile(
+        enabled=bool(raw_aggressive["enabled"]),
+        preferred_dte=(
+            int(aggressive_preferred_dte[0]),
+            int(aggressive_preferred_dte[1]),
+        ),
+        hard_dte=(
+            int(aggressive_hard_dte[0]),
+            int(aggressive_hard_dte[1]),
+        ),
+        intended_hold_sessions=(
+            int(aggressive_hold[0]),
+            int(aggressive_hold[1]),
+        ),
+        requalify_dte=int(raw_aggressive["requalify_dte"]),
+        no_progress_sessions=int(raw_aggressive["no_progress_sessions"]),
+        minimum_trend=int(raw_aggressive["minimum_trend"]),
+        minimum_leadership=int(raw_aggressive["minimum_leadership"]),
+        minimum_setup=int(raw_aggressive["minimum_setup"]),
+        minimum_timing=int(raw_aggressive["minimum_timing"]),
+        minimum_market=int(raw_aggressive["minimum_market"]),
+        minimum_risk=int(raw_aggressive["minimum_risk"]),
+        require_pattern_confirmed=bool(raw_aggressive["require_pattern_confirmed"]),
+        allowed_patterns=tuple(str(value) for value in raw_aggressive["allowed_patterns"]),
+    )
+    trade_economics = TradeEconomicsProfile(
+        minimum_target_to_expected_move=float(
+            raw_economics["minimum_target_to_expected_move"]
+        ),
+        realistic_target_to_expected_move=float(
+            raw_economics["realistic_target_to_expected_move"]
+        ),
+        attractive_target_to_expected_move=float(
+            raw_economics["attractive_target_to_expected_move"]
+        ),
+        maximum_target_to_expected_move=float(
+            raw_economics["maximum_target_to_expected_move"]
+        ),
+        debit_spread_iv_to_realized_minimum=float(
+            raw_economics["debit_spread_iv_to_realized_minimum"]
+        ),
+        minimum_spread_reward_to_risk=float(
+            raw_economics["minimum_spread_reward_to_risk"]
+        ),
+    )
     lanes: dict[StrategyLane, LaneProfile] = {}
     for lane in StrategyLane:
         raw_lane = raw_lanes.get(lane.value)
@@ -233,6 +327,8 @@ def load_strategy_profile() -> StrategyProfile:
         watchlist_thresholds=watchlist_thresholds,
         opportunity_tiers=opportunity_tiers,
         catalyst=catalyst,
+        aggressive_weekly=aggressive_weekly,
+        trade_economics=trade_economics,
         supportive_market_minimum=int(raw_market["supportive_minimum"]),
         mixed_market_minimum=int(raw_market["mixed_minimum"]),
         production_patterns=tuple(str(name) for name in raw_patterns["production"]),

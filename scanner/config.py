@@ -116,6 +116,8 @@ def validate_configuration(fixture: bool = False) -> list[str]:
         raise ConfigurationError("Strategy pattern lists must not contain duplicates.")
     opportunity_tiers = strategy.get("opportunity_tiers")
     catalyst = strategy.get("catalyst")
+    aggressive = strategy.get("aggressive_weekly")
+    economics = strategy.get("trade_economics")
     if not isinstance(opportunity_tiers, dict) or set(opportunity_tiers) != {
         "s_tier",
         "a_plus",
@@ -126,6 +128,10 @@ def validate_configuration(fixture: bool = False) -> list[str]:
         )
     if not isinstance(catalyst, dict):
         raise ConfigurationError("Strategy catalyst settings must be a mapping.")
+    if not isinstance(aggressive, dict):
+        raise ConfigurationError("Strategy aggressive_weekly settings must be a mapping.")
+    if not isinstance(economics, dict):
+        raise ConfigurationError("Strategy trade_economics settings must be a mapping.")
     for tier_name in ("s_tier", "a_plus", "asymmetric"):
         if not isinstance(opportunity_tiers[tier_name], dict):
             raise ConfigurationError(
@@ -135,6 +141,24 @@ def validate_configuration(fixture: bool = False) -> list[str]:
         raise ConfigurationError("catalyst.gap_minimum_atr must be positive.")
     if int(catalyst.get("maximum_age_bars", 0)) < 1:
         raise ConfigurationError("catalyst.maximum_age_bars must be at least one.")
+    for key in ("preferred_dte", "hard_dte", "intended_hold_sessions"):
+        values = aggressive.get(key)
+        if not isinstance(values, list) or len(values) != 2:
+            raise ConfigurationError(
+                f"aggressive_weekly.{key} must contain exactly two values."
+            )
+    if int(aggressive.get("requalify_dte", 0)) < 7:
+        raise ConfigurationError("aggressive_weekly.requalify_dte must be at least seven.")
+    economic_bounds = [
+        float(economics.get("minimum_target_to_expected_move", 0)),
+        float(economics.get("realistic_target_to_expected_move", 0)),
+        float(economics.get("attractive_target_to_expected_move", 0)),
+        float(economics.get("maximum_target_to_expected_move", 0)),
+    ]
+    if economic_bounds != sorted(economic_bounds) or economic_bounds[0] <= 0:
+        raise ConfigurationError(
+            "trade_economics target-to-expected-move bounds must be positive and ordered."
+        )
     storage = load_config("storage")
     notifications = load_config("notifications")
     for key in ("maximum_candidates_per_message", "maximum_candidate_cards"):

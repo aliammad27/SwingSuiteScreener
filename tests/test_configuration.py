@@ -42,6 +42,12 @@ def test_bullish_weekly_v5_lanes_are_authoritative() -> None:
     assert leader.intended_hold_sessions == (1, 5)
     assert leader.requalify_dte == 7
     assert PROFILE.maximum_quote_age_minutes == 2
+    assert PROFILE.aggressive_weekly.enabled
+    assert PROFILE.aggressive_weekly.preferred_dte == (7, 10)
+    assert PROFILE.aggressive_weekly.hard_dte == (7, 12)
+    assert PROFILE.aggressive_weekly.intended_hold_sessions == (1, 2)
+    assert PROFILE.aggressive_weekly.no_progress_sessions == 1
+    assert PROFILE.trade_economics.maximum_target_to_expected_move == 4.0
     assert len(PROFILE.production_patterns) == 7
     assert len(PROFILE.context_patterns) == 5
 

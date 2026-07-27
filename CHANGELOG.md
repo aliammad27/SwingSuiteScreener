@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Replaced six hourly intraday wakeups with three decision scans at 10:45 AM,
+  12:30 PM, and 2:15 PM ET.
+- Added a gated Aggressive Weekly contract mode for confirmed S quality breakouts and
+  retests, with 7 to 12 DTE, a 1 to 2 session hold, and standard-window fallback.
+- Replaced the primary expected-move estimate with the nearest at the money straddle
+  midpoint when available, retaining an explicitly labeled selected-call IV fallback.
+- Added target feasibility and preferred long-call, call-debit-spread, or review-only
+  structure guidance to Telegram, reports, dashboard, and research persistence.
+- Made the post-close workflow evaluate completed outcomes and publish the refreshed
+  research evidence report automatically.
 - Added explicit S Tier, A Plus, Asymmetric Research, and Watchlist opportunity tiers
   without changing the two strategy lanes or bypassing the research validation gate.
 - Added a separate asymmetric finalist path with trusted event checks, refreshed OPRA
@@ -88,8 +98,7 @@
   baseline comparison, stability checks, and shadow gates.
 - Migrated the research ledger in place to store hourly timing, trust provenance,
   level separation, depth, theta/ask, quote age, expiration style, and re-quote data.
-- Replaced hosted refresh jobs with six daylight-saving-safe intraday windows,
-  including a management-only final scan.
+- Replaced hosted refresh jobs with daylight-saving-safe intraday windows.
 - Replaced the build plan, training manual, engineering contract, CI, release audit,
   and active documentation with v5 material. Earlier releases remain available in
   Git history.

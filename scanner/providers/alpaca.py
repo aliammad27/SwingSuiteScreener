@@ -45,16 +45,24 @@ def _parse_datetime(value: object) -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
-_OCC_CALL_SYMBOL = re.compile(r"^([A-Z0-9.]+)(\d{6})C(\d{8})$")
+_OCC_OPTION_SYMBOL = re.compile(r"^([A-Z0-9.]+)(\d{6})([CP])(\d{8})$")
+
+
+def parse_occ_option_symbol(contract_symbol: str) -> tuple[str, date, str, float]:
+    match = _OCC_OPTION_SYMBOL.match(contract_symbol)
+    if match is None:
+        raise ValueError(f"Unsupported OCC option symbol: {contract_symbol}")
+    expiry = datetime.strptime(match.group(2), "%y%m%d").date()
+    strike = int(match.group(4)) / 1000
+    option_type = "call" if match.group(3) == "C" else "put"
+    return match.group(1), expiry, option_type, strike
 
 
 def parse_occ_call_symbol(contract_symbol: str) -> tuple[str, date, float]:
-    match = _OCC_CALL_SYMBOL.match(contract_symbol)
-    if match is None:
+    underlying, expiry, option_type, strike = parse_occ_option_symbol(contract_symbol)
+    if option_type != "call":
         raise ValueError(f"Unsupported OCC call symbol: {contract_symbol}")
-    expiry = datetime.strptime(match.group(2), "%y%m%d").date()
-    strike = int(match.group(3)) / 1000
-    return match.group(1), expiry, strike
+    return underlying, expiry, strike
 
 
 def _aggregate_regular_session_hours(
@@ -263,19 +271,21 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
     def weekly(self, symbol: str) -> list[Candle]:
         return self._bars(symbol, "1Week", 100)
 
-    def call_chain(
+    def _option_chain(
         self,
         symbol: str,
         expiration_date_gte: date,
         expiration_date_lte: date,
         as_of: datetime,
+        *,
+        contract_type: str,
     ) -> list[OptionContractSnapshot]:
         snapshots: dict[str, OptionContractSnapshot] = {}
         page_token = ""
         for _ in range(20):
             params = {
                 "feed": self.option_feed,
-                "type": "call",
+                "type": contract_type,
                 "expiration_date_gte": expiration_date_gte.isoformat(),
                 "expiration_date_lte": expiration_date_lte.isoformat(),
                 "limit": "1000",
@@ -290,8 +300,12 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
                 if not isinstance(raw_snapshot, dict):
                     continue
                 try:
-                    underlying, expiry, strike = parse_occ_call_symbol(str(contract_symbol))
+                    underlying, expiry, parsed_type, strike = parse_occ_option_symbol(
+                        str(contract_symbol)
+                    )
                 except ValueError:
+                    continue
+                if parsed_type != contract_type:
                     continue
                 quote = raw_snapshot.get("latestQuote") or {}
                 greeks = raw_snapshot.get("greeks") or {}
@@ -332,6 +346,36 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
         else:
             raise RuntimeError("Alpaca option-chain pagination exceeded the safety limit.")
         return sorted(snapshots.values(), key=lambda item: (item.expiration_date, item.strike))
+
+    def call_chain(
+        self,
+        symbol: str,
+        expiration_date_gte: date,
+        expiration_date_lte: date,
+        as_of: datetime,
+    ) -> list[OptionContractSnapshot]:
+        return self._option_chain(
+            symbol,
+            expiration_date_gte,
+            expiration_date_lte,
+            as_of,
+            contract_type="call",
+        )
+
+    def put_chain(
+        self,
+        symbol: str,
+        expiration_date_gte: date,
+        expiration_date_lte: date,
+        as_of: datetime,
+    ) -> list[OptionContractSnapshot]:
+        return self._option_chain(
+            symbol,
+            expiration_date_gte,
+            expiration_date_lte,
+            as_of,
+            contract_type="put",
+        )
 
     def latest_quotes(
         self,
