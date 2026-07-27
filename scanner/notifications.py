@@ -467,8 +467,19 @@ def _decision_line(result: ScanResult) -> str:
     if result.verify_contract:
         return "Decision: chart passed, contract still needs live verification."
     if result.developing:
-        return "Decision: no clean entry right now, use this as watchlist only."
+        return "Decision: no clean entry right now, watchlist only."
     return "Decision: no bullish setup is ready, cash is a valid state."
+
+
+def _market_context_line(result: ScanResult) -> str:
+    regime = result.market.regime
+    if regime.lower() == "supportive" or result.market.score >= 75:
+        tone = "permission open"
+    elif regime.lower() == "mixed" or result.market.score >= 45:
+        tone = "be selective"
+    else:
+        tone = "protect cash"
+    return f"Market: {regime}, {tone}"
 
 
 def _append_symbol_overflow(
@@ -494,21 +505,14 @@ def completion_message(result: ScanResult, report_path: Path) -> str:
     header_lines = [
         f"{fixture_label}⚡ BULLISH WEEKLY V5, {result.scan_type.value.replace('_', ' ').title()}",
         f"Time: {now_et}",
-        f"Market: {result.market.regime}, {result.market.score}/100",
-        (
-            "Breadth: "
-            f"{result.market.breadth_above_sma50:.0f}% above 50D, "
-            f"{result.market.breadth_above_ema21:.0f}% above 21D"
-        ),
-        f"Scanned: {result.evaluated_count}/{result.universe_count}",
+        _decision_line(result),
+        _market_context_line(result),
         "",
         "Summary:",
         f"Ready: {len(result.ready)}",
         f"Ready Check: {len(result.ready_verify)}",
         f"Contract Check: {len(result.verify_contract)}",
         f"Watchlist: {len(result.developing)}",
-        "",
-        _decision_line(result),
     ]
     header = "\n".join(header_lines)
     if not candidates:
