@@ -18,6 +18,7 @@ from scanner.models import (
     Candidate,
     ContractMode,
     OpportunityTier,
+    ReviewState,
     ScanResult,
     ScanType,
 )
@@ -363,74 +364,203 @@ def _top_rejection_summary(result: ScanResult, maximum: int = 3) -> str:
     )
 
 
+def _format_money(value: float) -> str:
+    return f"${value:.2f}"
+
+
+def _format_reward_to_risk(value: float | None) -> str:
+    return "review" if value is None else f"{value:.1f}R"
+
+
+def _clean_state_label(candidate: Candidate) -> str:
+    if candidate.state.value == "ready_verify":
+        return "Ready Check"
+    if candidate.state.value == "verify_contract":
+        return "Contract Check"
+    return candidate.state.label.replace(" - ", " ")
+
+
+def _pattern_label(candidate: Candidate) -> str:
+    return (
+        f"{candidate.pattern.pattern_type.replace('_', ' ')}, "
+        f"{candidate.pattern.status.value}, q{candidate.pattern.quality}"
+    )
+
+
+def _score_summary(candidate: Candidate) -> str:
+    leadership = "NA" if candidate.scores.leadership is None else str(candidate.scores.leadership)
+    return (
+        f"T{candidate.scores.trend}, L{leadership}, S{candidate.scores.setup}, "
+        f"H{candidate.scores.timing}, Mk{candidate.scores.market}"
+    )
+
+
+def _candidate_blockers(candidate: Candidate) -> str:
+    visible = tuple(
+        _reason_label(reason)
+        for reason in candidate.reasons
+        if reason != "asymmetric_research_only"
+    )
+    return ", ".join(visible[:3]) if visible else "none"
+
+
+def _action_label(candidate: Candidate) -> str:
+    if candidate.state == ReviewState.READY:
+        action = "entry review now"
+    elif candidate.state == ReviewState.READY_VERIFY:
+        action = "verify live quote, then entry review"
+    elif candidate.state == ReviewState.VERIFY_CONTRACT:
+        action = "verify contract first"
+    elif candidate.entry_plan.status == "approaching":
+        action = "set alert near trigger"
+    elif candidate.entry_plan.status == "valid now":
+        action = "watch only, entry is not confirmed"
+    else:
+        action = "wait for trigger"
+    if candidate.timing.management_only:
+        return f"{action}, management only right now"
+    return action
+
+
+def _option_summary(candidate: Candidate) -> str:
+    contract = candidate.contracts.primary
+    if contract is None:
+        return f"Option: verify live chain, feed {candidate.contracts.feed}"
+    return (
+        f"Option: {contract.expiration_date.strftime('%b %d')} "
+        f"{_format_money(contract.strike)}C, {contract.dte}DTE, "
+        f"delta {contract.delta:.2f}, spread {contract.spread_percent:.1f}%"
+    )
+
+
+def _candidate_digest_card(candidate: Candidate, index: int) -> list[str]:
+    entry = candidate.entry_plan
+    lines = [
+        f"{index}) {candidate.symbol}, {candidate.opportunity_tier.label}, "
+        f"{candidate.lane.label}, {_clean_state_label(candidate)}",
+        f"   Action: {_action_label(candidate)}",
+        f"   Setup: {_pattern_label(candidate)}",
+        f"   Entry: price {_format_money(candidate.trend.close)}, "
+        f"trigger {_format_money(entry.trigger)}, status {entry.status}",
+        f"   Risk: warning {_format_money(entry.tactical_warning)}, "
+        f"failure {_format_money(entry.tactical_failure)}, "
+        f"target {_format_money(entry.target_price)}, R:R {_format_reward_to_risk(entry.reward_to_risk)}",
+        f"   Scores: {_score_summary(candidate)}",
+    ]
+    if candidate.state in {
+        ReviewState.READY,
+        ReviewState.READY_VERIFY,
+        ReviewState.VERIFY_CONTRACT,
+    } or candidate.contracts.primary is not None:
+        lines.append(f"   {_option_summary(candidate)}")
+    blockers = _candidate_blockers(candidate)
+    if blockers != "none":
+        lines.append(f"   Needs: {blockers}")
+    return lines
+
+
+def _decision_line(result: ScanResult) -> str:
+    if result.ready:
+        return "Decision: ready setups exist, review chart plus contract before any order."
+    if result.ready_verify:
+        return "Decision: close, but verify live data and option chain before entry."
+    if result.verify_contract:
+        return "Decision: chart passed, contract still needs live verification."
+    if result.developing:
+        return "Decision: no clean entry right now, use this as watchlist only."
+    return "Decision: no bullish setup is ready, cash is a valid state."
+
+
+def _append_symbol_overflow(
+    lines: list[str],
+    *,
+    label: str,
+    candidates: tuple[Candidate, ...],
+    shown_count: int,
+) -> None:
+    remaining = candidates[shown_count:]
+    if not remaining:
+        return
+    symbols = ", ".join(candidate.symbol for candidate in remaining)
+    lines.append(f"More {label}: {symbols}")
+
+
 def completion_message(result: ScanResult, report_path: Path) -> str:
     now_et = result.generated_at.astimezone(NY).strftime("%-I:%M %p ET")
     candidates = result.candidates
     fixture_label = (
-        "SIMULATED FIXTURE - NOT CURRENT MARKET DATA\n" if result.fixture else ""
+        "SIMULATED FIXTURE, NOT CURRENT MARKET DATA\n" if result.fixture else ""
     )
-    header = fixture_label + (
-        f"{result.scan_type.value.replace('_', ' ').upper()} - BULLISH WEEKLY V5\n"
-        f"Market {result.market.regime} {result.market.score}/100 | "
-        f"Breadth {result.market.breadth_above_sma50:.0f}% >50D / "
-        f"{result.market.breadth_above_ema21:.0f}% >21D | {now_et}\n\n"
-        f"Ready {len(result.ready)} | Ready-check {len(result.ready_verify)} | "
-        f"Verify {len(result.verify_contract)} | Watchlist {len(result.developing)}\n"
-        f"Coverage {result.evaluated_count}/{result.universe_count} | "
-        f"Rejected {len(result.rejected)}"
-    )
+    header_lines = [
+        f"{fixture_label}⚡ BULLISH WEEKLY V5, {result.scan_type.value.replace('_', ' ').title()}",
+        f"Time: {now_et}",
+        f"Market: {result.market.regime}, {result.market.score}/100",
+        (
+            "Breadth: "
+            f"{result.market.breadth_above_sma50:.0f}% above 50D, "
+            f"{result.market.breadth_above_ema21:.0f}% above 21D"
+        ),
+        f"Scanned: {result.evaluated_count}/{result.universe_count}",
+        "",
+        "Summary:",
+        f"Ready: {len(result.ready)}",
+        f"Ready Check: {len(result.ready_verify)}",
+        f"Contract Check: {len(result.verify_contract)}",
+        f"Watchlist: {len(result.developing)}",
+        "",
+        _decision_line(result),
+    ]
+    header = "\n".join(header_lines)
     if not candidates:
         blockers = _top_rejection_summary(result)
         detail = f"\nTop blockers: {blockers}" if blockers else ""
-        return (
-            header
-            + "\n\nNo bullish setup is ready for review. Cash is a valid state."
-            + detail
-        )
+        return header + detail
     configured = load_config("notifications")
     maximum_summary_candidates = max(
         int(configured.get("maximum_candidates_per_message", 5)), 0
     )
     include_developing = bool(configured.get("include_developing_watchlist", True))
     lines: list[str] = [header, ""]
-    for candidate in _actionable_candidates(result)[:maximum_summary_candidates]:
-        lines.extend(
-            [
-                f"{candidate.symbol} | {candidate.opportunity_tier.label} | "
-                f"{candidate.lane.label} | {candidate.state.label}",
-                f"{candidate.pattern.pattern_type.replace('_', ' ')} | "
-                f"${candidate.trend.close:.2f} -> trigger ${candidate.entry_plan.trigger:.2f}",
-                _contract_line(candidate),
-                "",
-            ]
+    actionable = _actionable_candidates(result)
+    if actionable:
+        lines.append("Actionable setups:")
+        for index, candidate in enumerate(
+            actionable[:maximum_summary_candidates],
+            start=1,
+        ):
+            lines.extend(_candidate_digest_card(candidate, index))
+            lines.append("")
+        _append_symbol_overflow(
+            lines,
+            label="actionable",
+            candidates=actionable,
+            shown_count=maximum_summary_candidates,
         )
+        lines.append("")
     if include_developing and result.developing:
-        lines.append("WATCHLIST - NOT ENTRY READY")
-        for candidate in result.developing[:maximum_summary_candidates]:
-            leadership = (
-                "-"
-                if candidate.scores.leadership is None
-                else str(candidate.scores.leadership)
-            )
-            blockers = ", ".join(_reason_label(reason) for reason in candidate.reasons[:3])
+        lines.append("Watchlist, not entry ready:")
+        for index, candidate in enumerate(
+            result.developing[:maximum_summary_candidates],
+            start=1,
+        ):
             lines.extend(
-                [
-                    f"{candidate.symbol} | "
-                    f"{candidate.opportunity_tier.label} | "
-                    f"{candidate.lane.label} | "
-                    f"{candidate.pattern.pattern_type.replace('_', ' ')} | "
-                    f"${candidate.trend.close:.2f} -> ${candidate.entry_plan.trigger:.2f}",
-                    f"T{candidate.scores.trend} L{leadership} "
-                    f"S{candidate.scores.setup} H{candidate.scores.timing} | "
-                    f"Needs: {blockers}",
-                ]
+                _candidate_digest_card(
+                    candidate,
+                    index,
+                )
             )
-            lines.extend(_economics_lines(candidate)[:1])
+            lines.append("")
+        _append_symbol_overflow(
+            lines,
+            label="watchlist",
+            candidates=result.developing,
+            shown_count=maximum_summary_candidates,
+        )
         lines.append("")
     rejection_summary = _top_rejection_summary(result)
     if rejection_summary:
         lines.extend([f"Top scan blockers: {rejection_summary}", ""])
-    lines.append(f"Audit report: {report_path}")
+    lines.append(f"Full report: {report_path}")
     return "\n".join(lines)[:4096]
 
 
