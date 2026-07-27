@@ -68,7 +68,9 @@ def test_digest_is_compact_and_contains_required_context() -> None:
     result = run_scan(ScanType.INTRADAY, fixture=True)
     message = completion_message(result, Path("reports/intraday/latest.md"))
     assert len(message) <= 4096
-    assert "Market: Supportive" in message
+    assert "Market: Supportive, permission open" in message
+    assert "Breadth:" not in message
+    assert "Scanned:" not in message
     assert "Summary:" in message
     assert "Decision:" in message
     assert "Actionable setups:" in message
@@ -133,7 +135,7 @@ def test_developing_candidates_stay_in_compact_watchlist() -> None:
     result = run_scan(ScanType.INTRADAY, fixture=True, scenario="developing")
     message = completion_message(result, Path("report.md"))
     assert "Watchlist, not entry ready:" in message
-    assert "Decision: no clean entry right now" in message
+    assert "Decision: no clean entry right now, watchlist only." in message
     assert result.developing[0].symbol in message
     assert "Asymmetric Research" in message
     assert "Needs:" in message
@@ -160,6 +162,7 @@ def test_no_setups_message_treats_cash_as_a_valid_state() -> None:
     result = run_scan(ScanType.INTRADAY, fixture=True, scenario="zero")
     message = completion_message(result, Path("report.md"))
     assert "cash is a valid state" in message
+    assert "Market: Hostile, protect cash" in message
 
 
 def test_failed_digest_is_retried_before_snapshot_is_recorded(
