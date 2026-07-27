@@ -2,25 +2,15 @@ services:
   - type: cron
     name: swingsuite-post-close
     runtime: docker
-    schedule: "20 20 * * 1-5"
-    dockerCommand: "python -m scanner.schedule_gate --target 16:20 --max-late-minutes 20 && python -m scanner.run_scan post_close"
+    schedule: "55 21,22 * * 1-5"
+    dockerCommand: "python -m scanner.schedule_gate --target 18:00 --max-late-minutes 90 && python -m scanner.run_scan post_close"
   - type: cron
     name: swingsuite-premarket
     runtime: docker
     schedule: "45 12 * * 1-5"
     dockerCommand: "python -m scanner.schedule_gate --target 08:45 --max-late-minutes 20 && python -m scanner.run_scan premarket"
   - type: cron
-    name: swingsuite-intraday-open
-    runtime: docker
-    schedule: "45 14,15 * * 1-5"
-    dockerCommand: "python -m scanner.run_scan intraday --scheduled"
-  - type: cron
     name: swingsuite-intraday-midday
     runtime: docker
     schedule: "30 16,17 * * 1-5"
-    dockerCommand: "python -m scanner.run_scan intraday --scheduled"
-  - type: cron
-    name: swingsuite-intraday-final
-    runtime: docker
-    schedule: "15 18,19 * * 1-5"
     dockerCommand: "python -m scanner.run_scan intraday --scheduled"

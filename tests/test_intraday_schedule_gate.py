@@ -3,40 +3,33 @@ from datetime import datetime
 from scanner.clocks import NY
 from scanner.intraday_schedule_gate import intraday_schedule_decision
 
-TARGETS = ("10:45", "12:30", "14:15")
+TARGETS = ("12:30",)
 
 
-def test_intraday_gate_matches_all_three_entry_windows() -> None:
-    entry = intraday_schedule_decision(
-        datetime(2026, 7, 16, 10, 50, tzinfo=NY),
-        TARGETS,
-    )
+def test_intraday_gate_matches_midday_entry_window() -> None:
     midday = intraday_schedule_decision(
         datetime(2026, 7, 16, 12, 35, tzinfo=NY),
         TARGETS,
     )
-    final = intraday_schedule_decision(
+    assert midday.should_run and midday.target == "12:30"
+    assert not midday.management_only
+
+
+def test_intraday_gate_skips_removed_windows_and_late_start() -> None:
+    old_open = intraday_schedule_decision(
+        datetime(2026, 7, 16, 10, 50, tzinfo=NY),
+        TARGETS,
+    )
+    old_final = intraday_schedule_decision(
         datetime(2026, 7, 16, 14, 20, tzinfo=NY),
         TARGETS,
     )
-    assert entry.should_run and entry.target == "10:45"
-    assert not entry.management_only
-    assert midday.should_run and midday.target == "12:30"
-    assert not midday.management_only
-    assert final.should_run and final.target == "14:15"
-    assert not final.management_only
-
-
-def test_intraday_gate_skips_extra_dst_cron_and_late_start() -> None:
-    extra = intraday_schedule_decision(
-        datetime(2026, 7, 16, 9, 35, tzinfo=NY),
-        TARGETS,
-    )
     late = intraday_schedule_decision(
-        datetime(2026, 7, 16, 11, 31, tzinfo=NY),
+        datetime(2026, 7, 16, 13, 16, tzinfo=NY),
         TARGETS,
     )
-    assert not extra.should_run
+    assert not old_open.should_run
+    assert not old_final.should_run
     assert not late.should_run
 
 

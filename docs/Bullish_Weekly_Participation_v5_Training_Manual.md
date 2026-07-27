@@ -47,10 +47,10 @@ quality breakout or retest with trusted data and a contract score of at least 85
 uses 7 to 12 DTE, expects resolution within 1 to 2 sessions, reviews no progress after
 one session, and requalifies at 7 DTE.
 
-The three intraday decision scans occur at 10:45 AM, 12:30 PM, and 2:15 PM ET. The
-first scan evaluates the opening structure, the second checks continuation or a
-midday pullback, and the final scan is the last new-entry review inside the configured
-window.
+The daily delivery schedule is 8:45 AM ET premarket validation, one 12:30 PM ET
+intraday decision scan, and a 6:00 PM ET post-close digest. The midday scan checks
+continuation or a pullback inside the live entry window; the 6:00 PM digest is not a
+new-entry scan.
 
 Expected move comes from the nearest at the money straddle midpoint when possible.
 Targets below 0.75 times expected move are insufficient, up to 1.50 times are
@@ -862,7 +862,7 @@ New-entry eligibility:
 
 The 2:45 PM boundary is inclusive. At 2:46 PM, timing becomes management-only.
 
-The scheduled 3:35 PM scan exists for:
+The scheduled 6:00 PM post-close digest exists for:
 
 - warning review
 - failure review
@@ -1953,7 +1953,7 @@ Expected causes:
 - scan before 10:30 AM ET
 - scan after 2:45 PM ET
 - post-close or premarket command
-- final 3:35 PM scan
+- 6:00 PM post-close digest
 
 ## 20.7 Pattern Shows In Atlas But Not Daily Command
 

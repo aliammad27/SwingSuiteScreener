@@ -257,7 +257,8 @@ Entry timing requires:
 - market confirmation
 - 10:30 AM-2:45 PM ET entry window
 
-The final 3:35 PM ET scan is management-only.
+The 12:30 PM ET scan is the only live intraday entry check. The 6:00 PM ET
+post-close digest is management, review, and next-session preparation only.
 
 ## 10. Event Controls
 

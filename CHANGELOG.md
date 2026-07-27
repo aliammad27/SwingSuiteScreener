@@ -5,10 +5,9 @@
 - Replaced the paid Massive earnings dependency with a free Alpha Vantage earnings
   calendar adapter that caches the calendar across ticker checks.
 - Removed the unused Massive historical options adapter and secret wiring.
-- Retimed scheduled workflows around 8:45 AM ET premarket and 4:20 PM ET
-  post-close targets with backup dedupe.
-- Replaced six hourly intraday wakeups with three decision scans at 10:45 AM,
-  12:30 PM, and 2:15 PM ET.
+- Simplified scheduled delivery to 8:45 AM ET premarket, one 12:30 PM ET intraday
+  check, and a 6:00 PM ET post-close digest.
+- Replaced six hourly intraday wakeups with one midday decision scan.
 - Added a gated Aggressive Weekly contract mode for confirmed S quality breakouts and
   retests, with 7 to 12 DTE, a 1 to 2 session hold, and standard-window fallback.
 - Replaced the primary expected-move estimate with the nearest at the money straddle

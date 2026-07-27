@@ -66,8 +66,9 @@ planning objective. A completed 60-minute bar owns EMA9/EMA21, session VWAP, RSI
 MACD histogram, relative volume, higher-low/reclaim structure, tactical levels, and
 intraday SPY/QQQ confirmation.
 
-New-entry timing is open from 10:30 AM through 2:45 PM ET. The scheduled 3:35 PM ET
-scan is management-only.
+New-entry timing is open from 10:30 AM through 2:45 PM ET. The scheduled 12:30 PM ET
+scan is the only live intraday entry check; the 6:00 PM ET post-close digest is
+management, review, and next-session preparation only.
 
 ## Production Patterns
 
@@ -152,10 +153,10 @@ post-close GitHub Action sends one digest every market day. A missing or
 failed Telegram digest fails the workflow instead of producing a false green run.
 
 Premarket validation targets 8:45 AM ET on market days with backup GitHub wakeups
-that are deduped before Telegram sends. Intraday scans run at 10:45 AM, 12:30 PM,
-and 2:15 PM ET on trading days. The post-close digest targets 4:20 PM ET year-round,
-then evaluates completed signal outcomes and rebuilds the research evidence report
-after sending the daily digest.
+that are deduped before Telegram sends. The only intraday scan runs at 12:30 PM ET
+on trading days. The post-close digest targets 6:00 PM ET year-round, then evaluates
+completed signal outcomes and rebuilds the research evidence report after sending
+the daily digest.
 
 ## Commands
 

@@ -2,9 +2,9 @@ name: Post Close Scan
 
 on:
   schedule:
-    # ET-first backups around 4:20 PM ET across daylight and standard time.
-    # The schedule gate waits when early and rejects stale starts after 5:50 PM ET.
-    - cron: "15 20,21 * * 1-5"
+    # ET-first backups around 6:00 PM ET across daylight and standard time.
+    # The schedule gate waits when early and rejects stale starts after 7:30 PM ET.
+    - cron: "55 21,22 * * 1-5"
   workflow_dispatch:
 
 permissions:
@@ -68,9 +68,9 @@ jobs:
             echo "No prior success in the current window; proceeding to the schedule gate."
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Wait until 4:20 PM ET
+      - name: Wait until 6:00 PM ET
         if: github.event_name == 'schedule' && steps.dedupe.outputs.skip != 'true'
-        run: python -m scanner.schedule_gate --target 16:20 --max-late-minutes 90
+        run: python -m scanner.schedule_gate --target 18:00 --max-late-minutes 90
       - name: Run post close scan
         if: steps.dedupe.outputs.skip != 'true'
         run: python -m scanner.run_scan post_close

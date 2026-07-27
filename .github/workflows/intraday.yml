@@ -2,11 +2,9 @@ name: V5 Intraday Scans
 
 on:
   schedule:
-    # Three decision windows across EDT and EST. The ET gate rejects the extra
-    # daylight-saving wakeup.
-    - cron: "45 14,15 * * 1-5"
+    # Single midday decision window across EDT and EST. The ET gate rejects the
+    # extra daylight-saving wakeup.
     - cron: "30 16,17 * * 1-5"
-    - cron: "15 18,19 * * 1-5"
   workflow_dispatch:
 
 permissions:

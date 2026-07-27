@@ -1,10 +1,8 @@
 timezone: America/New_York
-post_close_time: "16:20"
+post_close_time: "18:00"
 premarket_time: "08:45"
 intraday_scan_times:
-  - "10:45"
   - "12:30"
-  - "14:15"
 github_schedule_tolerance:
   premarket_max_late_minutes: 90
   post_close_max_late_minutes: 90

@@ -271,7 +271,7 @@ def _check_deployment_contract(root: Path, errors: list[str]) -> None:
     render_path = root / "render.yaml"
     if render_path.is_file():
         text = render_path.read_text(encoding="utf-8")
-        if "scanner.schedule_gate --target 16:20" not in text:
+        if "scanner.schedule_gate --target 18:00" not in text:
             errors.append("Render post-close cron must use the Eastern-time schedule gate")
         if "scanner.schedule_gate --target 08:45" not in text:
             errors.append("Render premarket cron must use the Eastern-time schedule gate")
