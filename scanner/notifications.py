@@ -5,6 +5,7 @@ import json
 import os
 import ssl
 import time
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -233,8 +234,38 @@ def _actionable_candidates(result: ScanResult) -> tuple[Candidate, ...]:
     return result.ready + result.ready_verify + result.verify_contract
 
 
+def _reason_label(reason: str) -> str:
+    labels = {
+        "hostile_market_regime": "market regime",
+        "hourly_timing_not_confirmed": "hourly confirmation",
+        "timing_below_ready_threshold": "hourly timing",
+        "market_below_ready_threshold": "market score",
+        "risk_below_ready_threshold": "risk geometry",
+        "trend_below_ready_threshold": "trend score",
+        "setup_below_ready_threshold": "setup quality",
+        "leadership_below_ready_threshold": "relative strength",
+        "pattern_not_ready": "pattern trigger",
+        "event_data_unavailable": "event data",
+        "option_chain_unavailable": "option chain",
+        "option_requote_unavailable": "option quote",
+    }
+    return labels.get(reason, reason.replace("_", " "))
+
+
+def _top_rejection_summary(result: ScanResult, maximum: int = 3) -> str:
+    counts = Counter(
+        reason
+        for rejected in result.rejected
+        for reason in rejected.reason_codes
+    )
+    return ", ".join(
+        f"{_reason_label(reason)} {count}"
+        for reason, count in counts.most_common(maximum)
+    )
+
+
 def completion_message(result: ScanResult, report_path: Path) -> str:
-    now_et = datetime.now(NY).strftime("%-I:%M %p ET")
+    now_et = result.generated_at.astimezone(NY).strftime("%-I:%M %p ET")
     candidates = result.candidates
     fixture_label = (
         "SIMULATED FIXTURE - NOT CURRENT MARKET DATA\n" if result.fixture else ""
@@ -245,10 +276,18 @@ def completion_message(result: ScanResult, report_path: Path) -> str:
         f"Breadth {result.market.breadth_above_sma50:.0f}% >50D / "
         f"{result.market.breadth_above_ema21:.0f}% >21D | {now_et}\n\n"
         f"Ready {len(result.ready)} | Ready-check {len(result.ready_verify)} | "
-        f"Verify {len(result.verify_contract)} | Developing {len(result.developing)}"
+        f"Verify {len(result.verify_contract)} | Watchlist {len(result.developing)}\n"
+        f"Coverage {result.evaluated_count}/{result.universe_count} | "
+        f"Rejected {len(result.rejected)}"
     )
     if not candidates:
-        return header + "\n\nNo bullish setup is ready for review. Cash is a valid state."
+        blockers = _top_rejection_summary(result)
+        detail = f"\nTop blockers: {blockers}" if blockers else ""
+        return (
+            header
+            + "\n\nNo bullish setup is ready for review. Cash is a valid state."
+            + detail
+        )
     configured = load_config("notifications")
     maximum_summary_candidates = max(
         int(configured.get("maximum_candidates_per_message", 5)), 0
@@ -266,13 +305,29 @@ def completion_message(result: ScanResult, report_path: Path) -> str:
             ]
         )
     if include_developing and result.developing:
-        watchlist = ", ".join(
-            f"{candidate.symbol} ({candidate.lane.label}) "
-            f"{candidate.pattern.pattern_type.replace('_', ' ')} "
-            f"-> ${candidate.entry_plan.trigger:.2f}"
-            for candidate in result.developing[:maximum_summary_candidates]
-        )
-        lines.extend([f"Developing watchlist: {watchlist}", ""])
+        lines.append("WATCHLIST - NOT ENTRY READY")
+        for candidate in result.developing[:maximum_summary_candidates]:
+            leadership = (
+                "-"
+                if candidate.scores.leadership is None
+                else str(candidate.scores.leadership)
+            )
+            blockers = ", ".join(_reason_label(reason) for reason in candidate.reasons[:3])
+            lines.extend(
+                [
+                    f"{candidate.symbol} | "
+                    f"{candidate.lane.label} | "
+                    f"{candidate.pattern.pattern_type.replace('_', ' ')} | "
+                    f"${candidate.trend.close:.2f} -> ${candidate.entry_plan.trigger:.2f}",
+                    f"T{candidate.scores.trend} L{leadership} "
+                    f"S{candidate.scores.setup} H{candidate.scores.timing} | "
+                    f"Needs: {blockers}",
+                ]
+            )
+        lines.append("")
+    rejection_summary = _top_rejection_summary(result)
+    if rejection_summary:
+        lines.extend([f"Top scan blockers: {rejection_summary}", ""])
     lines.append(f"Audit report: {report_path}")
     return "\n".join(lines)[:4096]
 
@@ -301,7 +356,12 @@ def log_delivery(
         handle.write(line + "\n")
 
 
-def notify_scan(result: ScanResult, report_path: Path, *, fixture: bool) -> None:
+def notify_scan(
+    result: ScanResult,
+    report_path: Path,
+    *,
+    fixture: bool,
+) -> DeliveryResult:
     message = completion_message(result, report_path)
     configured = load_config("notifications")
     maximum_cards = max(int(configured.get("maximum_candidate_cards", 5)), 0)
@@ -312,14 +372,14 @@ def notify_scan(result: ScanResult, report_path: Path, *, fixture: bool) -> None
         for candidate in card_candidates:
             print("\n--- TELEGRAM RESEARCH CARD ---\n")
             print(candidate_caption(candidate, show_premium_scenarios=show_scenarios))
-        return
+        return DeliveryResult(True, "fixture_preview")
     notifier = TelegramNotifier()
     if not notifier.available():
         delivery = notifier.send(message, silent=result.scan_type != ScanType.POST_CLOSE)
         log_delivery(
             "digest", delivery.status, event_type="digest", error=delivery.safe_error or ""
         )
-        return
+        return delivery
     state = NotificationState(configured_storage())
     snapshot = completion_snapshot(result)
     only_on_change = result.scan_type in {ScanType.PREMARKET, ScanType.INTRADAY}
@@ -334,11 +394,11 @@ def notify_scan(result: ScanResult, report_path: Path, *, fixture: bool) -> None
     previous = state.last_completion_snapshot(result.scan_type.value)
     if not should_send_completion(previous, snapshot, only_on_change):
         log_delivery("digest", "suppressed_unchanged", event_type="digest")
-        return
+        return DeliveryResult(True, "suppressed_unchanged")
     delivery = notifier.send(message, silent=result.scan_type != ScanType.POST_CLOSE)
     log_delivery("digest", delivery.status, event_type="digest", error=delivery.safe_error or "")
     if not delivery.delivered:
-        return
+        return delivery
     state.record_completion_snapshot(result.scan_type.value, snapshot)
     for candidate in card_candidates:
         caption = candidate_caption(candidate, show_premium_scenarios=show_scenarios)
@@ -364,6 +424,7 @@ def notify_scan(result: ScanResult, report_path: Path, *, fixture: bool) -> None
             event_type="candidate_text_fallback",
             error=fallback.safe_error or "",
         )
+    return delivery
 
 
 def main() -> int:

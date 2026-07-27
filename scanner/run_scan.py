@@ -44,6 +44,7 @@ from scanner.models import (
     MarketContext,
     MomentumResult,
     PatternSignal,
+    PatternStatus,
     RejectedRecord,
     ReviewState,
     ScanResult,
@@ -319,7 +320,7 @@ def _candidate_rank(candidate: Candidate) -> tuple[int, int]:
         ReviewState.DEVELOPING: 1,
         ReviewState.REJECTED: 0,
     }[candidate.state]
-    score_total = sum(
+    available_scores = [
         score
         for score in (
             candidate.scores.trend,
@@ -331,8 +332,38 @@ def _candidate_rank(candidate: Candidate) -> tuple[int, int]:
             candidate.scores.risk,
         )
         if score is not None
+    ]
+    average_score = round(sum(available_scores) / len(available_scores))
+    return state_rank, average_score
+
+
+def _watchlist_eligible(
+    record: _TechnicalRecord,
+    chart_failures: tuple[str, ...],
+) -> bool:
+    disqualifying = {
+        "below_sma200",
+        "extended_beyond_configured_atr_limit",
+        "pattern_failed",
+        "pattern_stale",
+        "pattern_not_promoted_for_production",
+    }
+    thresholds = PROFILE.watchlist_thresholds
+    leadership_passed = (
+        record.metadata.lane == StrategyLane.INDEX_WEEKLY
+        or (
+            record.leadership is not None
+            and record.leadership >= thresholds.leadership
+        )
     )
-    return state_rank, score_total
+    return (
+        not disqualifying.intersection(chart_failures)
+        and record.trend.score >= thresholds.trend
+        and record.pattern.quality >= thresholds.setup
+        and leadership_passed
+        and record.pattern.status
+        in {PatternStatus.FORMING, PatternStatus.READY, PatternStatus.CONFIRMED}
+    )
 
 
 def run_scan(
@@ -353,47 +384,8 @@ def run_scan(
     symbols = _fixture_symbols(scenario) if fixture else configured_symbols()
     candidates: list[Candidate] = []
     rejected: list[RejectedRecord] = []
-    leader_symbols = [
-        symbol for symbol in symbols if metadata_for(symbol).lane == StrategyLane.LEADER_WEEKLY
-    ]
-    eligible_leaders = set(leader_symbols)
-    eligibility_error_type: str | None = None
-    if PROFILE.options_required and leader_symbols:
-        leader_lane = PROFILE.lane(StrategyLane.LEADER_WEEKLY)
-        try:
-            eligible_leaders = options.eligible_underlyings(
-                leader_symbols,
-                as_of.date() + timedelta(days=leader_lane.hard_dte[0]),
-                as_of.date() + timedelta(days=leader_lane.hard_dte[1]),
-            )
-        except (OSError, RuntimeError, TypeError, ValueError) as exc:
-            eligible_leaders = set()
-            eligibility_error_type = type(exc).__name__
-            log.warning(
-                "Rejecting leader universe because option eligibility failed: %s",
-                eligibility_error_type,
-            )
 
     for symbol in symbols:
-        metadata = metadata_for(symbol)
-        if metadata.lane == StrategyLane.LEADER_WEEKLY and symbol not in eligible_leaders:
-            reason = (
-                "leader_options_eligibility_unavailable"
-                if eligibility_error_type is not None
-                else "leader_no_eligible_weekly_expiration"
-            )
-            rejected.append(
-                RejectedRecord(
-                    symbol=symbol,
-                    stage="universe",
-                    reason_codes=(reason,),
-                    details={
-                        "lane": metadata.lane.value,
-                        "provider_error_type": eligibility_error_type or "",
-                    },
-                )
-            )
-            continue
         try:
             record = _technical_record(
                 symbol,
@@ -424,16 +416,8 @@ def run_scan(
             market=market_context,
             profile=PROFILE,
         )
-        hard_chart_failures = {
-            "below_sma200",
-            "extended_beyond_configured_atr_limit",
-            "hostile_market_regime",
-            "pattern_failed",
-            "pattern_stale",
-            "pattern_not_promoted_for_production",
-        }
         if chart_failures:
-            if any(reason in hard_chart_failures for reason in chart_failures):
+            if not _watchlist_eligible(record, chart_failures):
                 rejected.append(
                     RejectedRecord(
                         symbol=symbol,
@@ -635,6 +619,12 @@ def run_scan(
             candidates.append(candidate)
 
     candidates.sort(key=_candidate_rank, reverse=True)
+    maximum_watchlist = PROFILE.watchlist_thresholds.maximum_candidates
+    developing = tuple(
+        candidate
+        for candidate in candidates
+        if candidate.state == ReviewState.DEVELOPING
+    )[:maximum_watchlist]
     market_timestamp = (
         max(candle.timestamp for candle in market.one_hour("SPY")) + timedelta(hours=1)
         if scan_type == ScanType.INTRADAY
@@ -649,7 +639,7 @@ def run_scan(
         evaluated_count=len(candidates) + len(rejected),
         ready=tuple(c for c in candidates if c.state == ReviewState.READY),
         ready_verify=tuple(c for c in candidates if c.state == ReviewState.READY_VERIFY),
-        developing=tuple(c for c in candidates if c.state == ReviewState.DEVELOPING),
+        developing=developing,
         verify_contract=tuple(c for c in candidates if c.state == ReviewState.VERIFY_CONTRACT),
         rejected=tuple(rejected),
         fixture=fixture,
@@ -681,8 +671,6 @@ def main() -> int:
             "post_close",
             "premarket",
             "intraday",
-            "daily_prep",
-            "weekly_radar",
             "test_notification",
             "evaluate-signals",
             "replay",
@@ -778,11 +766,7 @@ def main() -> int:
             print(f"Markdown replay report: {markdown_path}")
             print(f"JSON replay report: {json_path}")
             return 0
-        scan_type = (
-            ScanType.POST_CLOSE
-            if args.command in {"daily_prep", "weekly_radar"}
-            else ScanType(args.command)
-        )
+        scan_type = ScanType(args.command)
         if (
             not args.fixture
             and scan_type in {ScanType.POST_CLOSE, ScanType.PREMARKET, ScanType.INTRADAY}
@@ -813,7 +797,12 @@ def main() -> int:
 
             with ResearchLedger() as ledger:
                 ledger.record_scan(result)
-        notify_scan(result, markdown_path, fixture=args.fixture)
+        notification = notify_scan(result, markdown_path, fixture=args.fixture)
+        print(f"Telegram digest: {notification.status}")
+        if not args.fixture and not notification.delivered:
+            raise RuntimeError(
+                f"Telegram digest delivery failed safely: {notification.status}"
+            )
         print(f"Markdown report: {markdown_path}")
         print(f"JSON report: {json_path}")
         print(f"HTML dashboard: {dashboard_path}")

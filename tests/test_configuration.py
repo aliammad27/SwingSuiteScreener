@@ -25,6 +25,10 @@ def test_bullish_weekly_v5_lanes_are_authoritative() -> None:
     assert PROFILE.name == "Bullish Weekly Participation v5"
     assert PROFILE.direction == "bullish_only"
     assert PROFILE.validation_state == "research_default"
+    assert PROFILE.watchlist_thresholds.trend == 70
+    assert PROFILE.watchlist_thresholds.leadership == 20
+    assert PROFILE.watchlist_thresholds.setup == 60
+    assert PROFILE.watchlist_thresholds.maximum_candidates == 10
     index = PROFILE.lane(StrategyLane.INDEX_WEEKLY)
     leader = PROFILE.lane(StrategyLane.LEADER_WEEKLY)
     assert index.preferred_dte == (10, 16)

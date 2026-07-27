@@ -40,12 +40,21 @@ class ReviewThresholds:
 
 
 @dataclass(frozen=True)
+class WatchlistThresholds:
+    trend: int
+    leadership: int
+    setup: int
+    maximum_candidates: int
+
+
+@dataclass(frozen=True)
 class StrategyProfile:
     schema_version: int
     name: str
     direction: str
     validation_state: str
     thresholds: ReviewThresholds
+    watchlist_thresholds: WatchlistThresholds
     supportive_market_minimum: int
     mixed_market_minimum: int
     production_patterns: tuple[str, ...]
@@ -112,6 +121,7 @@ def _lane_profile(lane: StrategyLane, values: dict[str, Any]) -> LaneProfile:
 def load_strategy_profile() -> StrategyProfile:
     values = load_config("strategy")
     raw_thresholds = values["review_thresholds"]
+    raw_watchlist = values["watchlist_thresholds"]
     raw_market = values["market"]
     raw_patterns = values["patterns"]
     raw_events = values["event_risk"]
@@ -123,6 +133,7 @@ def load_strategy_profile() -> StrategyProfile:
         isinstance(item, dict)
         for item in (
             raw_thresholds,
+            raw_watchlist,
             raw_market,
             raw_patterns,
             raw_events,
@@ -145,6 +156,12 @@ def load_strategy_profile() -> StrategyProfile:
             raw_thresholds["ready_verify_contract_minimum"]
         ),
     )
+    watchlist_thresholds = WatchlistThresholds(
+        trend=int(raw_watchlist["trend"]),
+        leadership=int(raw_watchlist["leadership"]),
+        setup=int(raw_watchlist["setup"]),
+        maximum_candidates=int(raw_watchlist["maximum_candidates"]),
+    )
     lanes: dict[StrategyLane, LaneProfile] = {}
     for lane in StrategyLane:
         raw_lane = raw_lanes.get(lane.value)
@@ -157,6 +174,7 @@ def load_strategy_profile() -> StrategyProfile:
         direction=str(values["direction"]),
         validation_state=str(values["validation_state"]),
         thresholds=thresholds,
+        watchlist_thresholds=watchlist_thresholds,
         supportive_market_minimum=int(raw_market["supportive_minimum"]),
         mixed_market_minimum=int(raw_market["mixed_minimum"]),
         production_patterns=tuple(str(name) for name in raw_patterns["production"]),

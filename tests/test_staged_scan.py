@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import sys
+from dataclasses import replace
 from datetime import timedelta
 
 from scanner.models import EventRisk, EventRiskStatus, ScanType, StrategyLane
@@ -75,26 +76,6 @@ class StaleEventProvider(CountingFixtureProvider):
         )
 
 
-class IneligibleLeaderProvider(CountingFixtureProvider):
-    def eligible_underlyings(
-        self,
-        symbols,
-        expiration_date_gte,
-        expiration_date_lte,
-    ):
-        return set()
-
-
-class UnavailableEligibilityProvider(CountingFixtureProvider):
-    def eligible_underlyings(
-        self,
-        symbols,
-        expiration_date_gte,
-        expiration_date_lte,
-    ):
-        raise RuntimeError("contract metadata unavailable SECRET_RESPONSE_BODY")
-
-
 class UnavailableEventProvider(CountingFixtureProvider):
     def event_risk(self, symbol, as_of, lane):
         self.event_calls += 1
@@ -133,6 +114,32 @@ def test_developing_chart_does_not_fetch_events_or_options(monkeypatch) -> None:
     assert provider.event_calls == 0
     assert provider.chain_calls == 0
     assert provider.refresh_calls == 0
+
+
+def test_hostile_market_keeps_strong_setup_on_watchlist(monkeypatch) -> None:
+    provider = CountingFixtureProvider("ready")
+    _install(monkeypatch, provider)
+    baseline = scan_module.calculate_market_context(
+        provider,
+        ["SSTR", "APLUS", "BTIER", "ZERO"],
+        scan_module.PROFILE,
+    )
+    monkeypatch.setattr(
+        scan_module,
+        "calculate_market_context",
+        lambda *args, **kwargs: replace(baseline, score=40, regime="Hostile"),
+    )
+
+    result = scan_module.run_scan(
+        ScanType.INTRADAY,
+        fixture=True,
+        scenario="ready",
+    )
+
+    assert [candidate.symbol for candidate in result.developing] == ["SSTR"]
+    assert "hostile_market_regime" in result.developing[0].reasons
+    assert provider.event_calls == 0
+    assert provider.chain_calls == 0
 
 
 def test_technical_finalist_fetches_chain_then_requotes_top_three(monkeypatch) -> None:
@@ -178,38 +185,6 @@ def test_stale_event_source_stops_before_option_chain(monkeypatch) -> None:
     assert result.rejected[0].stage == "event"
     assert result.rejected[0].reason_codes == ("event_source_stale",)
     assert result.generated_at == FIXTURE_TIMESTAMP
-
-
-def test_ineligible_leader_stops_before_chart_and_chain_fetch(monkeypatch) -> None:
-    provider = IneligibleLeaderProvider("ready")
-    _install(monkeypatch, provider)
-
-    result = scan_module.run_scan(
-        ScanType.INTRADAY,
-        fixture=True,
-        scenario="ready",
-    )
-
-    assert result.rejected[0].stage == "universe"
-    assert result.rejected[0].reason_codes == ("leader_no_eligible_weekly_expiration",)
-    assert provider.event_calls == 0
-    assert provider.chain_calls == 0
-
-
-def test_unavailable_leader_eligibility_fails_closed(monkeypatch) -> None:
-    provider = UnavailableEligibilityProvider("ready")
-    _install(monkeypatch, provider)
-
-    result = scan_module.run_scan(
-        ScanType.INTRADAY,
-        fixture=True,
-        scenario="ready",
-    )
-
-    assert result.rejected[0].reason_codes == ("leader_options_eligibility_unavailable",)
-    assert result.rejected[0].details["provider_error_type"] == "RuntimeError"
-    assert "SECRET_RESPONSE_BODY" not in str(result.rejected[0].details)
-    assert provider.chain_calls == 0
 
 
 def test_unavailable_event_service_is_rejected_without_aborting_scan(monkeypatch) -> None:

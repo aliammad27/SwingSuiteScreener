@@ -33,28 +33,10 @@ class CachedMarketDataProvider(MarketDataProvider):
 class CachedOptionDataProvider(OptionDataProvider):
     def __init__(self, delegate: OptionDataProvider) -> None:
         self.delegate = delegate
-        self._eligible_underlyings: dict[
-            tuple[tuple[str, ...], date, date], set[str]
-        ] = {}
         self._chains: dict[
             tuple[str, date, date, date], list[OptionContractSnapshot]
         ] = {}
         self.option_feed = getattr(delegate, "option_feed", "unknown")
-
-    def eligible_underlyings(
-        self,
-        symbols: list[str],
-        expiration_date_gte: date,
-        expiration_date_lte: date,
-    ) -> set[str]:
-        key = (tuple(sorted(symbols)), expiration_date_gte, expiration_date_lte)
-        if key not in self._eligible_underlyings:
-            self._eligible_underlyings[key] = self.delegate.eligible_underlyings(
-                symbols,
-                expiration_date_gte,
-                expiration_date_lte,
-            )
-        return set(self._eligible_underlyings[key])
 
     def call_chain(
         self,

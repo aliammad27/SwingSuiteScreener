@@ -35,6 +35,11 @@ The scanner is deliberately staged:
 3. Fetch option chains only for event-clear finalists.
 4. Rank eligible contracts, re-quote the top three, and classify from refreshed data.
 
+The chart stage never depends on a separate option-metadata universe request. This
+keeps a temporary contract endpoint failure from erasing the entire leader watchlist.
+Option availability still fails closed when a technical finalist reaches contract
+research.
+
 The daily chart owns trend, pattern, structural invalidation, confirmed pivot, and 2R
 planning objective. A completed 60-minute bar owns EMA9/EMA21, session VWAP, RSI,
 MACD histogram, relative volume, higher-low/reclaim structure, tactical levels, and
@@ -113,7 +118,9 @@ window, and DTE requalification boundary. When a fresh, trusted OPRA contract is
 available, the card also shows an immediate-to-maximum-hold premium scenario range
 using the refreshed bid/ask, delta, optional gamma, and theta. The range assumes stable
 implied volatility and is not a forecast or trade instruction. Developing candidates
-remain in a compact watchlist.
+remain in a compact watchlist with their setup, trigger, evidence scores, and exact
+blockers. The post-close GitHub Action sends one digest every market day. A missing or
+failed Telegram digest fails the workflow instead of producing a false green run.
 
 ## Commands
 

@@ -47,15 +47,6 @@ class OptionDataProvider(ABC):
     option_feed: str = "unknown"
 
     @abstractmethod
-    def eligible_underlyings(
-        self,
-        symbols: list[str],
-        expiration_date_gte: date,
-        expiration_date_lte: date,
-    ) -> set[str]:
-        raise NotImplementedError
-
-    @abstractmethod
     def call_chain(
         self,
         symbol: str,

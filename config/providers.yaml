@@ -5,7 +5,6 @@ notifications: telegram
 persistence: local_json
 alpaca:
   data_base_url: https://data.alpaca.markets
-  metadata_base_url: https://paper-api.alpaca.markets
   feed: sip
   option_feed: opra
 research:

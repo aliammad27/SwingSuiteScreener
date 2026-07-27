@@ -188,19 +188,6 @@ class FixtureDataProvider(MarketDataProvider, OptionDataProvider, EventRiskProvi
         base, drift, amplitude = self._profile(symbol)
         return _series(symbol, "1W", 100, base, drift * 4.2, amplitude * 2)
 
-    def eligible_underlyings(
-        self,
-        symbols: list[str],
-        expiration_date_gte: date,
-        expiration_date_lte: date,
-    ) -> set[str]:
-        if self.scenario == "missing_contracts":
-            return set()
-        expiry = FIXTURE_TIMESTAMP.date() + timedelta(days=15)
-        if not expiration_date_gte <= expiry <= expiration_date_lte:
-            return set()
-        return set(symbols)
-
     def call_chain(
         self,
         symbol: str,

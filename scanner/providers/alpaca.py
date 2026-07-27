@@ -113,10 +113,6 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
         self.key = os.environ.get("ALPACA_API_KEY_ID")
         self.secret = os.environ.get("ALPACA_API_SECRET_KEY")
         self.base_url = os.environ.get("ALPACA_DATA_BASE_URL", "https://data.alpaca.markets")
-        self.metadata_base_url = os.environ.get(
-            "ALPACA_METADATA_BASE_URL",
-            "https://paper-api.alpaca.markets",
-        )
         self.feed = os.environ.get("ALPACA_FEED", "sip")
         self.stock_feed = self.feed
         self.option_feed = os.environ.get("ALPACA_OPTION_FEED", "opra")
@@ -266,66 +262,6 @@ class AlpacaDataProvider(MarketDataProvider, OptionDataProvider):
 
     def weekly(self, symbol: str) -> list[Candle]:
         return self._bars(symbol, "1Week", 100)
-
-    def eligible_underlyings(
-        self,
-        symbols: list[str],
-        expiration_date_gte: date,
-        expiration_date_lte: date,
-    ) -> set[str]:
-        requested = set(symbols)
-        eligible: set[str] = set()
-        ordered = sorted(requested)
-        for batch_start in range(0, len(ordered), 25):
-            batch = ordered[batch_start : batch_start + 25]
-            page_token = ""
-            for _ in range(20):
-                params = {
-                    "underlying_symbols": ",".join(batch),
-                    "expiration_date_gte": expiration_date_gte.isoformat(),
-                    "expiration_date_lte": expiration_date_lte.isoformat(),
-                    "type": "call",
-                    "status": "active",
-                    "limit": "10000",
-                }
-                if page_token:
-                    params["page_token"] = page_token
-                payload = self._get(
-                    "/v2/options/contracts",
-                    params,
-                    base_url=self.metadata_base_url,
-                )
-                raw_contracts = payload.get("option_contracts", [])
-                if not isinstance(raw_contracts, list):
-                    raise RuntimeError("Alpaca option-contract metadata must contain a list.")
-                for raw in raw_contracts:
-                    if not isinstance(raw, dict):
-                        continue
-                    underlying = str(raw.get("underlying_symbol", ""))
-                    raw_expiration = raw.get("expiration_date")
-                    try:
-                        expiration = date.fromisoformat(str(raw_expiration))
-                    except ValueError:
-                        continue
-                    if (
-                        underlying in requested
-                        and raw.get("status", "active") == "active"
-                        and raw.get("type", "call") == "call"
-                        and bool(raw.get("tradable", True))
-                        and expiration_date_gte <= expiration <= expiration_date_lte
-                    ):
-                        eligible.add(underlying)
-                if set(batch).issubset(eligible):
-                    break
-                raw_next = payload.get("next_page_token")
-                page_token = str(raw_next) if raw_next else ""
-                if not page_token:
-                    break
-            else:
-                raise RuntimeError(
-                    "Alpaca option-contract metadata pagination exceeded the safety limit."
-                )
-        return eligible
 
     def call_chain(
         self,

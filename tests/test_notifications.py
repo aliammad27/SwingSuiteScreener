@@ -125,8 +125,9 @@ def test_premium_scenarios_can_be_hidden_without_hiding_underlying_tp() -> None:
 def test_developing_candidates_stay_in_compact_watchlist() -> None:
     result = run_scan(ScanType.INTRADAY, fixture=True, scenario="developing")
     message = completion_message(result, Path("report.md"))
-    assert "Developing watchlist:" in message
+    assert "WATCHLIST - NOT ENTRY READY" in message
     assert result.developing[0].symbol in message
+    assert "Needs:" in message
 
 
 def test_fixture_digest_is_labeled_simulated() -> None:
@@ -154,10 +155,12 @@ def test_failed_digest_is_retried_before_snapshot_is_recorded(
     monkeypatch.setattr(notifications, "configured_storage", lambda: storage)
     monkeypatch.setattr(notifications, "log_delivery", lambda *args, **kwargs: None)
 
-    notify_scan(result, Path("report.md"), fixture=False)
+    first = notify_scan(result, Path("report.md"), fixture=False)
+    assert not first.delivered
     assert storage.values == {}
 
-    notify_scan(result, Path("report.md"), fixture=False)
+    second = notify_scan(result, Path("report.md"), fixture=False)
+    assert second.delivered
     assert notifier.send_calls == 2
     assert "completion_snapshots" in storage.values["notification_state"]
 
@@ -183,8 +186,9 @@ def test_failed_photo_falls_back_to_text_card(monkeypatch) -> None:
         lambda *args, **kwargs: deliveries.append((args, kwargs)),
     )
 
-    notify_scan(result, Path("report.md"), fixture=False)
+    delivery = notify_scan(result, Path("report.md"), fixture=False)
 
+    assert delivery.delivered
     assert notifier.photo_calls == 1
     assert len(notifier.messages) == 2
     assert "est call $" in notifier.messages[1]

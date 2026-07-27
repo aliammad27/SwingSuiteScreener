@@ -82,6 +82,11 @@ materially stronger.
 Controlled pullbacks receive a ranking advantage because they usually provide clearer
 underlying invalidation and less volatility inflation than a late breakout.
 
+The daily watchlist may retain structurally valid production patterns during a hostile
+market or before hourly confirmation. Watchlist thresholds live in
+`config/strategy.yaml`. These names remain `Developing`, include their blockers, and
+must never be presented as entry-ready or sent through contract research.
+
 ## Pattern Registry
 
 Production patterns:

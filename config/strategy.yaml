@@ -13,6 +13,12 @@ review_thresholds:
   risk: 70
   ready_verify_contract_minimum: 65
 
+watchlist_thresholds:
+  trend: 70
+  leadership: 20
+  setup: 60
+  maximum_candidates: 10
+
 market:
   supportive_minimum: 70
   mixed_minimum: 45

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Rebuilt the daily Telegram digest around ranked ticker setups, triggers, scores,
+  blockers, scan coverage, and delivery status.
+- Removed the fragile leader-wide option metadata precheck so a provider-side metadata
+  failure cannot erase chart analysis for the full stock universe.
+- Added configured watchlist thresholds that retain strong daily structures as clearly
+  labeled, non-entry-ready research when market or hourly gates still block them.
+- Made missing or failed Telegram digest delivery fail scheduled scan jobs instead of
+  reporting a false green workflow.
+- Simplified post-close delivery to one market-day GitHub schedule and removed the
+  redundant nightly prep, weekly radar, readiness, duplicate wakeup, and sleep jobs.
 - Added Telegram contract research cards with the selected call strike, expiration,
   refreshed quote quality, underlying objectives, risk levels, and holding constraints.
 - Added typed, quote-anchored premium scenarios that use delta, optional gamma, and
@@ -18,8 +28,6 @@
   fresh evidence.
 - Corrected FOMC protection to remain active through the first fully completed
   regular-session hour after the statement.
-- Sanitized leader option-eligibility failures so provider response details cannot
-  enter reports.
 - Made hosted cron schedules DST-safe through Eastern-time gates, skipped live scans
   on non-NYSE sessions, and hardened the Docker image with a non-root runtime.
 - Upgraded official GitHub workflow actions to their Node 24 generations.

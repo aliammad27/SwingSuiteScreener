@@ -155,69 +155,6 @@ def test_regular_session_hours_are_anchored_at_0930_and_require_two_parts() -> N
     assert result[1].timestamp.astimezone(NY).strftime("%H:%M") == "10:30"
 
 
-def test_eligible_underlyings_uses_active_calls_in_lane_window(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    provider = _provider(monkeypatch)
-    pagination_cursor = "cursor-page-2"
-    pages = [
-        {
-            "option_contracts": [
-                {
-                    "underlying_symbol": "AAPL",
-                    "expiration_date": "2026-07-31",
-                    "type": "call",
-                    "status": "active",
-                    "tradable": True,
-                },
-                {
-                    "underlying_symbol": "MSFT",
-                    "expiration_date": "2026-07-31",
-                    "type": "put",
-                    "status": "active",
-                    "tradable": True,
-                },
-            ],
-            "next_page_token": pagination_cursor,
-        },
-        {
-            "option_contracts": [
-                {
-                    "underlying_symbol": "MSFT",
-                    "expiration_date": "2026-08-07",
-                    "type": "call",
-                    "status": "active",
-                    "tradable": True,
-                }
-            ]
-        },
-    ]
-    seen: list[tuple[str, dict[str, str], str | None]] = []
-
-    def fake_get(
-        path: str,
-        params: dict[str, str],
-        *,
-        base_url: str | None = None,
-    ) -> dict[str, Any]:
-        seen.append((path, params.copy(), base_url))
-        return pages.pop(0)
-
-    monkeypatch.setattr(provider, "_get", fake_get)
-
-    eligible = provider.eligible_underlyings(
-        ["AAPL", "MSFT", "NOPE"],
-        date(2026, 7, 27),
-        date(2026, 8, 9),
-    )
-
-    assert eligible == {"AAPL", "MSFT"}
-    assert seen[0][0] == "/v2/options/contracts"
-    assert seen[0][1]["type"] == "call"
-    assert seen[1][1]["page_token"] == pagination_cursor
-    assert seen[0][2] == provider.metadata_base_url
-
-
 def test_call_chain_follows_pagination_and_filters_calls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
