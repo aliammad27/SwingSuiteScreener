@@ -85,7 +85,19 @@ underlying invalidation and less volatility inflation than a late breakout.
 The daily watchlist may retain structurally valid production patterns during a hostile
 market or before hourly confirmation. Watchlist thresholds live in
 `config/strategy.yaml`. These names remain `Developing`, include their blockers, and
-must never be presented as entry-ready or sent through contract research.
+must never be presented as entry-ready. A separate `Asymmetric Research` tier may
+perform event and contract research when its configured thresholds pass, but it must
+remain `Developing` and include `asymmetric_research_only`.
+
+Opportunity tiers are research overlays, not new strategy lanes:
+
+1. `S Tier` requires a core-qualified setup, trusted data, contract score at least 85,
+   and composite evidence at least 88.
+2. `A Plus` requires a core-qualified setup, contract score at least 65, and composite
+   evidence at least 80.
+3. `Asymmetric Research` uses its own configured technical, event, contract, expected
+   move, and IV controls and can never become entry-ready.
+4. `Watchlist` is the fallback tier.
 
 ## Pattern Registry
 
@@ -149,12 +161,16 @@ cannot repair a failed daily thesis.
 The scanner operates in two stages:
 
 1. Evaluate market, trend, leadership, production pattern, and hourly timing.
-2. For technical finalists only, check events, fetch the option chain, rank contracts,
-   and re-quote the top three before classification.
+2. For core and asymmetric research finalists only, check events, fetch the option
+   chain, rank contracts, and re-quote the top three before classification.
 
 The live chain is authoritative. Contract scoring includes DTE, delta, spread, open
 interest, volume, depth, theta as a percentage of ask, IV versus realized volatility,
 extrinsic value, gamma, quote age, and quote stability.
+
+Contract economics must also report expected move from current IV, target versus
+expected move, long-call breakeven, theta cost across the maximum planned hold, and a
+same-expiration debit-spread comparison when an eligible higher-strike call exists.
 
 ## Levels And Management Language
 

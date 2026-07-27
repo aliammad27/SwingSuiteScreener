@@ -16,6 +16,17 @@ continuation setups expressed through short-duration long calls. It combines:
 V5 begins in `research_default`. No score, fixture, replay, Pine backtest, or
 historical sample can automatically change that state.
 
+### 1.1 Opportunity Research Overlay
+
+The Python screener assigns S Tier, A Plus, Asymmetric Research, or Watchlist after
+the existing lane and review-state logic runs. S Tier and A Plus describe core
+qualification quality. Asymmetric Research is a separate discovery path that remains
+Developing even after event and contract checks pass.
+
+The asymmetric path requires configured trend, leadership, setup, timing, market,
+risk, contract, target-versus-expected-move, and IV-versus-realized-volatility gates.
+Its purpose is held-out research, not relaxed production eligibility.
+
 ## 2. Objectives
 
 1. Prioritize bullish setups capable of resolving within one to five sessions.
@@ -400,8 +411,8 @@ No control, label, table, or detail pane may overlap or clip.
 
 Telegram is the primary actionable notification surface. The market digest is sent
 first. It is followed by no more than the configured number of chart-backed cards for
-Ready, Ready - Verify, and Verify Contract candidates. Developing candidates remain in
-a compact watchlist.
+Ready, Ready - Verify, Verify Contract, and contract-qualified Asymmetric Research
+candidates. Other Developing candidates remain in a compact watchlist.
 
 Each card includes:
 

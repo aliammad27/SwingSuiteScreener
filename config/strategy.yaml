@@ -19,6 +19,30 @@ watchlist_thresholds:
   setup: 60
   maximum_candidates: 10
 
+opportunity_tiers:
+  s_tier:
+    minimum_composite: 88
+    minimum_contract: 85
+  a_plus:
+    minimum_composite: 80
+    minimum_contract: 65
+  asymmetric:
+    trend: 75
+    leadership: 20
+    setup: 70
+    timing: 70
+    market: 45
+    risk: 65
+    contract: 65
+    minimum_target_to_expected_move: 1.0
+    maximum_iv_to_realized_volatility: 1.75
+
+catalyst:
+  gap_minimum_atr: 0.75
+  relative_volume_minimum: 1.50
+  maximum_age_bars: 3
+  require_gap_midpoint_hold: true
+
 market:
   supportive_minimum: 70
   mixed_minimum: 45

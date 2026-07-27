@@ -41,6 +41,22 @@ class ReviewState(StrEnum):
         }[self]
 
 
+class OpportunityTier(StrEnum):
+    S_TIER = "s_tier"
+    A_PLUS = "a_plus"
+    ASYMMETRIC = "asymmetric"
+    WATCHLIST = "watchlist"
+
+    @property
+    def label(self) -> str:
+        return {
+            OpportunityTier.S_TIER: "S Tier",
+            OpportunityTier.A_PLUS: "A Plus",
+            OpportunityTier.ASYMMETRIC: "Asymmetric Research",
+            OpportunityTier.WATCHLIST: "Watchlist",
+        }[self]
+
+
 class PatternStatus(StrEnum):
     FORMING = "forming"
     READY = "ready"
@@ -324,6 +340,36 @@ class PremiumTargetScenario:
 
 
 @dataclass(frozen=True)
+class CatalystSignal:
+    kind: str
+    age_bars: int
+    gap_atr: float
+    relative_volume: float
+    held_gap_midpoint: bool
+    event_verified: bool
+    summary: str
+
+
+@dataclass(frozen=True)
+class ContractEconomics:
+    expected_move: float | None
+    target_move: float
+    target_to_expected_move: float | None
+    long_call_breakeven: float
+    breakeven_move_percent: float
+    theta_cost_sessions: int
+    theta_cost: float | None
+    theta_cost_percent: float | None
+    iv_to_realized_volatility: float | None
+    spread_short_contract: str | None
+    spread_short_strike: float | None
+    spread_debit: float | None
+    spread_max_profit: float | None
+    spread_reward_to_risk: float | None
+    spread_breakeven: float | None
+
+
+@dataclass(frozen=True)
 class ContractSelection:
     score: int
     primary: OptionContractSnapshot | None
@@ -361,6 +407,9 @@ class Candidate:
     scores: EvidenceScores
     state: ReviewState
     reasons: tuple[str, ...] = ()
+    opportunity_tier: OpportunityTier = OpportunityTier.WATCHLIST
+    catalyst: CatalystSignal | None = None
+    contract_economics: ContractEconomics | None = None
 
 
 @dataclass(frozen=True)

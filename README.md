@@ -10,6 +10,21 @@ V5 launches in `research_default`. A technically complete candidate remains
 Review states rank evidence; they are not recommendations, probabilities, or
 performance forecasts.
 
+## Opportunity Tiers
+
+Opportunity tiers rank research candidates without replacing the existing review
+states or weakening any core gate.
+
+| Tier | Meaning |
+|---|---|
+| S Tier | Core setup, trusted data, contract score at least 85, composite evidence at least 88 |
+| A Plus | Core technical setup with composite evidence at least 80 and contract score at least 65 |
+| Asymmetric Research | Developing setup that passes separate research thresholds plus event, contract, target versus expected move, and IV controls |
+| Watchlist | Visible research that does not pass one of the tier contracts |
+
+Asymmetric Research always remains `Developing`. It is never promoted to `Ready` or
+`Ready - Verify` through the asymmetric thresholds.
+
 ## Strategy Lanes
 
 | Lane | Universe | Preferred DTE | Hard DTE | Preferred Delta | Intended Hold | Requalify |
@@ -32,7 +47,7 @@ The scanner is deliberately staged:
 1. Evaluate market regime, daily trend, leadership, production pattern, and completed
    hourly timing across the universe.
 2. Check trusted event data for technical finalists.
-3. Fetch option chains only for event-clear finalists.
+3. Fetch option chains for event-clear core and asymmetric research finalists.
 4. Rank eligible contracts, re-quote the top three, and classify from refreshed data.
 
 The chart stage never depends on a separate option-metadata universe request. This
@@ -111,15 +126,18 @@ Supabase-backed state. A completion snapshot is persisted only after Telegram ac
 the digest, so temporary delivery failures remain eligible for retry.
 
 Telegram is the primary actionable research surface. The digest is followed by up to
-five chart-backed contract cards for Ready, Ready - Verify, and Verify Contract
+five chart-backed contract cards for Ready, Ready - Verify, Verify Contract, and
+Asymmetric Research
 candidates. Each card identifies the trigger, call strike and expiration, refreshed
 quote quality, underlying TP1/TP2 planning levels, tactical and structural risk, hold
-window, and DTE requalification boundary. When a fresh, trusted OPRA contract is
+window, opportunity tier, expected move, breakeven, planned theta cost, optional debit
+spread comparison, and DTE requalification boundary. When a fresh, trusted OPRA contract is
 available, the card also shows an immediate-to-maximum-hold premium scenario range
 using the refreshed bid/ask, delta, optional gamma, and theta. The range assumes stable
 implied volatility and is not a forecast or trade instruction. Developing candidates
-remain in a compact watchlist with their setup, trigger, evidence scores, and exact
-blockers. The post-close GitHub Action sends one digest every market day. A missing or
+remain in a compact watchlist with their setup, trigger, tier, evidence scores, exact
+blockers, and contract economics when they qualify for asymmetric research. The
+post-close GitHub Action sends one digest every market day. A missing or
 failed Telegram digest fails the workflow instead of producing a false green run.
 
 ## Commands

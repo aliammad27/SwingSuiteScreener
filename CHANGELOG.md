@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Added explicit S Tier, A Plus, Asymmetric Research, and Watchlist opportunity tiers
+  without changing the two strategy lanes or bypassing the research validation gate.
+- Added a separate asymmetric finalist path with trusted event checks, refreshed OPRA
+  contract research, expected move and IV controls, and a permanent Developing state.
+- Added contract economics for expected move, target versus expected move, long-call
+  breakeven, planned hold theta cost, and same-expiration debit-spread comparisons.
+- Added completed-bar high-volume gap continuation detection with an explicit
+  unverified-event label.
+- Extended Telegram, JSON, Markdown, HTML, and SQLite research output with tier,
+  catalyst, and contract economics fields, including outcome summaries by tier.
 - Rebuilt the daily Telegram digest around ranked ticker setups, triggers, scores,
   blockers, scan coverage, and delivery status.
 - Removed the fragile leader-wide option metadata precheck so a provider-side metadata

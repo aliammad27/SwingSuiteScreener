@@ -22,6 +22,24 @@ changes in delta. Before trading exchange-listed options, review the current
 The software is intentionally read-only. It does not connect to a brokerage account,
 inspect positions, place orders, exercise contracts, or manage money.
 
+### Opportunity Tiers
+
+S Tier marks the rare core candidate with the strongest composite evidence, a strong
+contract, and trusted data. A Plus marks a core technical setup whose composite and
+contract evidence pass the configured secondary tier.
+
+Asymmetric Research is deliberately different. It looks for strong trend, setup,
+timing, risk geometry, and option economics even when a core requirement such as
+relative leadership or pattern readiness is still developing. It always remains
+Developing, carries its blockers, and must be evaluated from forward outcomes before
+any threshold is considered for promotion.
+
+The contract card includes expected move, target versus expected move, long-call
+breakeven, maximum planned-hold theta cost, IV versus realized volatility, and a
+same-expiration debit-spread comparison when one is available. A detected high-volume
+gap continuation is labeled as price-action evidence unless the event source
+independently identifies the catalyst.
+
 ---
 
 ## Quick Reference
@@ -1510,9 +1528,10 @@ Before relying on an alert:
 
 ## 16.5 Telegram Contract Research Cards
 
-Telegram receives the market digest first. Ready, Ready - Verify, and Verify Contract
-candidates can then receive chart-backed research cards, up to the configured card
-limit. Developing candidates remain in a compact watchlist.
+Telegram receives the market digest first. Ready, Ready - Verify, Verify Contract, and
+contract-qualified Asymmetric Research candidates can then receive chart-backed
+research cards, up to the configured card limit. Other Developing candidates remain
+in a compact watchlist.
 
 A full card identifies:
 

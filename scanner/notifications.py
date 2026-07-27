@@ -14,7 +14,7 @@ from urllib import parse, request
 from scanner.charts import render_candidate_summary
 from scanner.clocks import NY
 from scanner.config import ROOT, load_config, load_local_env
-from scanner.models import Candidate, ScanResult, ScanType
+from scanner.models import Candidate, OpportunityTier, ScanResult, ScanType
 from scanner.premium_scenarios import premium_target_scenarios
 from scanner.state import NotificationState, completion_snapshot, should_send_completion
 from scanner.storage.factory import configured_storage
@@ -151,6 +151,45 @@ def _contract_line(candidate: Candidate) -> str:
     )
 
 
+def _economics_lines(candidate: Candidate) -> list[str]:
+    economics = candidate.contract_economics
+    if economics is None:
+        return []
+    expected = (
+        f"${economics.expected_move:.2f}"
+        if economics.expected_move is not None
+        else "unavailable"
+    )
+    ratio = (
+        f"{economics.target_to_expected_move:.2f}x"
+        if economics.target_to_expected_move is not None
+        else "unavailable"
+    )
+    theta = (
+        f"${economics.theta_cost:.2f}, {economics.theta_cost_percent:.1f}% of ask"
+        if economics.theta_cost is not None
+        and economics.theta_cost_percent is not None
+        else "unavailable"
+    )
+    lines = [
+        f"Economics: expected move {expected} | target/expected {ratio}",
+        f"Call breakeven ${economics.long_call_breakeven:.2f} "
+        f"({economics.breakeven_move_percent:+.1f}%) | "
+        f"{economics.theta_cost_sessions} session theta {theta}",
+    ]
+    if (
+        economics.spread_short_strike is not None
+        and economics.spread_debit is not None
+        and economics.spread_max_profit is not None
+    ):
+        lines.append(
+            f"Debit spread comparison: short ${economics.spread_short_strike:g} | "
+            f"debit ${economics.spread_debit:.2f} | "
+            f"max profit ${economics.spread_max_profit:.2f}"
+        )
+    return lines
+
+
 def _short_target_basis(value: str) -> str:
     return "confirmed pivot" if value == "nearest confirmed daily pivot" else "2R plan"
 
@@ -182,7 +221,8 @@ def candidate_caption(
     entry = candidate.entry_plan
     contract = candidate.contracts.primary
     lines = [
-        f"{candidate.symbol} | {candidate.lane.label} | {candidate.state.label}",
+        f"{candidate.symbol} | {candidate.opportunity_tier.label} | "
+        f"{candidate.lane.label} | {candidate.state.label}",
         f"{candidate.pattern.pattern_type.replace('_', ' ')} / "
         f"{candidate.pattern.status.value} / age {candidate.pattern.age_bars}",
         f"Underlying ${candidate.trend.close:.2f} | trigger ${entry.trigger:.2f}",
@@ -211,6 +251,21 @@ def candidate_caption(
                 for item in candidate.contracts.alternatives[:2]
             )
             lines.append(f"Alternatives: {alternatives}")
+        lines.extend(_economics_lines(candidate))
+    if candidate.catalyst is not None:
+        lines.append(
+            f"Catalyst style: {candidate.catalyst.kind.replace('_', ' ')} | "
+            f"{candidate.catalyst.gap_atr:.2f} ATR gap | "
+            f"{candidate.catalyst.relative_volume:.2f}x volume | event unverified"
+        )
+    visible_reasons = tuple(
+        reason for reason in candidate.reasons if reason != "asymmetric_research_only"
+    )
+    if visible_reasons:
+        lines.append(
+            "Why not core: "
+            + ", ".join(_reason_label(reason) for reason in visible_reasons[:3])
+        )
     lines.extend(_target_lines(candidate, show_premium_scenarios=show_premium_scenarios))
     lines.extend(
         [
@@ -232,6 +287,16 @@ def candidate_caption(
 
 def _actionable_candidates(result: ScanResult) -> tuple[Candidate, ...]:
     return result.ready + result.ready_verify + result.verify_contract
+
+
+def _card_candidates(result: ScanResult) -> tuple[Candidate, ...]:
+    asymmetric = tuple(
+        candidate
+        for candidate in result.developing
+        if candidate.opportunity_tier == OpportunityTier.ASYMMETRIC
+        and candidate.contracts.primary is not None
+    )
+    return _actionable_candidates(result) + asymmetric
 
 
 def _reason_label(reason: str) -> str:
@@ -297,7 +362,8 @@ def completion_message(result: ScanResult, report_path: Path) -> str:
     for candidate in _actionable_candidates(result)[:maximum_summary_candidates]:
         lines.extend(
             [
-                f"{candidate.symbol} | {candidate.lane.label} | {candidate.state.label}",
+                f"{candidate.symbol} | {candidate.opportunity_tier.label} | "
+                f"{candidate.lane.label} | {candidate.state.label}",
                 f"{candidate.pattern.pattern_type.replace('_', ' ')} | "
                 f"${candidate.trend.close:.2f} -> trigger ${candidate.entry_plan.trigger:.2f}",
                 _contract_line(candidate),
@@ -316,6 +382,7 @@ def completion_message(result: ScanResult, report_path: Path) -> str:
             lines.extend(
                 [
                     f"{candidate.symbol} | "
+                    f"{candidate.opportunity_tier.label} | "
                     f"{candidate.lane.label} | "
                     f"{candidate.pattern.pattern_type.replace('_', ' ')} | "
                     f"${candidate.trend.close:.2f} -> ${candidate.entry_plan.trigger:.2f}",
@@ -324,6 +391,7 @@ def completion_message(result: ScanResult, report_path: Path) -> str:
                     f"Needs: {blockers}",
                 ]
             )
+            lines.extend(_economics_lines(candidate)[:1])
         lines.append("")
     rejection_summary = _top_rejection_summary(result)
     if rejection_summary:
@@ -366,7 +434,7 @@ def notify_scan(
     configured = load_config("notifications")
     maximum_cards = max(int(configured.get("maximum_candidate_cards", 5)), 0)
     show_scenarios = bool(configured.get("show_premium_scenarios", True))
-    card_candidates = _actionable_candidates(result)[:maximum_cards]
+    card_candidates = _card_candidates(result)[:maximum_cards]
     if fixture:
         print(message)
         for candidate in card_candidates:

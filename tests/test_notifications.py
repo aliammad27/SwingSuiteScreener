@@ -90,6 +90,10 @@ def test_candidate_caption_has_tactical_structural_levels_and_risk() -> None:
     assert "Feed OPRA | quote " in caption
     assert "| stable" in caption
     assert "Alternatives:" in caption
+    assert "S Tier" in caption
+    assert "Economics: expected move $" in caption
+    assert "Call breakeven $" in caption
+    assert "Debit spread comparison:" in caption
     assert "long call can lose the full premium" in caption.lower()
 
 
@@ -127,7 +131,18 @@ def test_developing_candidates_stay_in_compact_watchlist() -> None:
     message = completion_message(result, Path("report.md"))
     assert "WATCHLIST - NOT ENTRY READY" in message
     assert result.developing[0].symbol in message
+    assert "Asymmetric Research" in message
+    assert "Economics: expected move $" in message
     assert "Needs:" in message
+
+
+def test_asymmetric_research_candidate_receives_a_full_card() -> None:
+    result = run_scan(ScanType.INTRADAY, fixture=True, scenario="developing")
+    caption = candidate_caption(result.developing[0])
+
+    assert "Asymmetric Research" in caption
+    assert "Debit spread comparison:" in caption
+    assert "Why not core:" in caption
 
 
 def test_fixture_digest_is_labeled_simulated() -> None:

@@ -223,6 +223,13 @@ def test_ledger_migrates_previous_schema_without_dropping_history(tmp_path) -> N
             "structural_invalidation",
             "planning_objective_2r",
             "event_source_timestamp",
+            "opportunity_tier",
+            "expected_move",
+            "target_to_expected_move",
+            "spread_debit",
+            "primary_dte",
+            "primary_delta",
+            "iv_to_realized_volatility",
         }.issubset(signal_columns)
         assert {
             "bid_size",

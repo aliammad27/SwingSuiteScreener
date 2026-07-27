@@ -158,7 +158,7 @@ class FixtureDataProvider(MarketDataProvider, OptionDataProvider, EventRiskProvi
         if symbol == "APLUS":
             drift = 0.08
         candles = _series(symbol, "1H", 240, base, drift * 0.35, amplitude * 0.60)
-        if symbol not in {"BTIER", "ZERO"}:
+        if symbol != "ZERO":
             anchor = candles[-9].close
             for offset, index in enumerate(range(len(candles) - 8, len(candles)), 1):
                 close = anchor + offset * 0.22
@@ -186,6 +186,8 @@ class FixtureDataProvider(MarketDataProvider, OptionDataProvider, EventRiskProvi
 
     def weekly(self, symbol: str) -> list[Candle]:
         base, drift, amplitude = self._profile(symbol)
+        if symbol == "BTIER":
+            drift = 0.10
         return _series(symbol, "1W", 100, base, drift * 4.2, amplitude * 2)
 
     def call_chain(
@@ -230,8 +232,8 @@ class FixtureDataProvider(MarketDataProvider, OptionDataProvider, EventRiskProvi
                 symbol,
                 expiry,
                 base_delta + offset,
-                4.10 + index * 0.35,
-                4.15 + index * 0.35,
+                4.10 - index * 0.35,
+                4.15 - index * 0.35,
                 minimum_oi - index * 100,
                 minimum_volume - index * 20,
                 strike=strike_anchor + index * 2.5,

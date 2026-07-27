@@ -120,6 +120,7 @@ def _candidate_row(candidate: Candidate) -> str:
             candidate.sector,
             candidate.lane.value,
             candidate.state.value,
+            candidate.opportunity_tier.value,
             candidate.pattern.pattern_type,
             contract_headline,
         )
@@ -166,7 +167,7 @@ def _candidate_row(candidate: Candidate) -> str:
         </td>
         <td>
           <span class="state state-{_state_class(candidate)}">{escape(candidate.state.label)}</span>
-          <span class="subtle">{escape(candidate.timing.state)}</span>
+          <span class="subtle">{escape(candidate.opportunity_tier.label)} / {escape(candidate.timing.state)}</span>
         </td>
         <td>{escape(candidate.lane.label)}</td>
         <td>
@@ -284,7 +285,7 @@ def _candidate_detail(candidate: Candidate) -> str:
           <div class="eyebrow">{escape(candidate.lane.label)} / {escape(candidate.sector)} / {escape(candidate.peer_etf)}</div>
           <h2>{escape(candidate.symbol)} <span>{escape(candidate.company)}</span></h2>
         </div>
-        <span class="state state-{_state_class(candidate)}">{escape(candidate.state.label)}</span>
+        <span class="state state-{_state_class(candidate)}">{escape(candidate.opportunity_tier.label)} / {escape(candidate.state.label)}</span>
       </header>
 
       <div class="level-strip" aria-label="Planning levels">
@@ -305,6 +306,7 @@ def _candidate_detail(candidate: Candidate) -> str:
           <div class="score-grid">{_score_cells(candidate)}</div>
           <dl>
             <div><dt>Pattern</dt><dd>{escape(candidate.pattern.pattern_type.replace("_", " ").title())}</dd></div>
+            <div><dt>Opportunity tier</dt><dd>{escape(candidate.opportunity_tier.label)}</dd></div>
             <div><dt>Lifecycle</dt><dd>{escape(candidate.pattern.status.value.title())} / age {candidate.pattern.age_bars}</dd></div>
             <div><dt>Target basis</dt><dd>{escape(plan.target_basis)}</dd></div>
             <div><dt>Reward / risk</dt><dd>{_fmt(plan.reward_to_risk)}</dd></div>

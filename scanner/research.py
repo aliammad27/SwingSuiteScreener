@@ -42,8 +42,12 @@ def evidence_maturity(observation_count: int) -> EvidenceMaturity:
 @dataclass(frozen=True)
 class ResearchSummaryRow:
     lane: str
+    opportunity_tier: str
     pattern_type: str
     market_regime: str
+    dte_bucket: str
+    delta_bucket: str
+    volatility_bucket: str
     horizon_sessions: int
     observation_count: int
     maturity: EvidenceMaturity
@@ -125,6 +129,19 @@ class ResearchLedger:
                 event_source_timestamp TEXT,
                 event_checked_at TEXT,
                 quote_age_minutes REAL,
+                opportunity_tier TEXT NOT NULL DEFAULT 'watchlist',
+                catalyst_kind TEXT,
+                catalyst_age_bars INTEGER,
+                expected_move REAL,
+                target_to_expected_move REAL,
+                long_call_breakeven REAL,
+                theta_hold_cost_percent REAL,
+                spread_short_strike REAL,
+                spread_debit REAL,
+                spread_max_profit REAL,
+                primary_dte INTEGER,
+                primary_delta REAL,
+                iv_to_realized_volatility REAL,
                 UNIQUE(signal_timestamp, symbol, pattern_type, config_hash)
             );
             CREATE TABLE IF NOT EXISTS contract_snapshots (
@@ -196,6 +213,19 @@ class ResearchLedger:
                 ("event_source_timestamp", "TEXT"),
                 ("event_checked_at", "TEXT"),
                 ("quote_age_minutes", "REAL"),
+                ("opportunity_tier", "TEXT NOT NULL DEFAULT 'watchlist'"),
+                ("catalyst_kind", "TEXT"),
+                ("catalyst_age_bars", "INTEGER"),
+                ("expected_move", "REAL"),
+                ("target_to_expected_move", "REAL"),
+                ("long_call_breakeven", "REAL"),
+                ("theta_hold_cost_percent", "REAL"),
+                ("spread_short_strike", "REAL"),
+                ("spread_debit", "REAL"),
+                ("spread_max_profit", "REAL"),
+                ("primary_dte", "INTEGER"),
+                ("primary_delta", "REAL"),
+                ("iv_to_realized_volatility", "REAL"),
             ),
         )
         self._ensure_columns(
@@ -273,8 +303,12 @@ class ResearchLedger:
                  config_hash, timing_timestamp, tactical_warning, tactical_failure,
                  structural_invalidation, confirmed_pivot, planning_objective_2r, stock_feed,
                  option_feed, event_source, event_source_timestamp, event_checked_at,
-                 quote_age_minutes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 quote_age_minutes, opportunity_tier, catalyst_kind, catalyst_age_bars,
+                 expected_move, target_to_expected_move, long_call_breakeven,
+                 theta_hold_cost_percent, spread_short_strike, spread_debit,
+                 spread_max_profit, primary_dte, primary_delta,
+                 iv_to_realized_volatility)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     signal_id,
@@ -307,6 +341,55 @@ class ResearchLedger:
                     ),
                     candidate.event_risk.checked_at.isoformat(),
                     candidate.data_trust.quote_age_minutes,
+                    candidate.opportunity_tier.value,
+                    candidate.catalyst.kind if candidate.catalyst else None,
+                    candidate.catalyst.age_bars if candidate.catalyst else None,
+                    (
+                        candidate.contract_economics.expected_move
+                        if candidate.contract_economics
+                        else None
+                    ),
+                    (
+                        candidate.contract_economics.target_to_expected_move
+                        if candidate.contract_economics
+                        else None
+                    ),
+                    (
+                        candidate.contract_economics.long_call_breakeven
+                        if candidate.contract_economics
+                        else None
+                    ),
+                    (
+                        candidate.contract_economics.theta_cost_percent
+                        if candidate.contract_economics
+                        else None
+                    ),
+                    (
+                        candidate.contract_economics.spread_short_strike
+                        if candidate.contract_economics
+                        else None
+                    ),
+                    (
+                        candidate.contract_economics.spread_debit
+                        if candidate.contract_economics
+                        else None
+                    ),
+                    (
+                        candidate.contract_economics.spread_max_profit
+                        if candidate.contract_economics
+                        else None
+                    ),
+                    (
+                        candidate.contracts.primary.dte
+                        if candidate.contracts.primary
+                        else None
+                    ),
+                    (
+                        candidate.contracts.primary.delta
+                        if candidate.contracts.primary
+                        else None
+                    ),
+                    candidate.contracts.iv_to_realized_volatility,
                 ),
             )
             contracts_with_risk = []
@@ -441,30 +524,82 @@ class ResearchLedger:
     def summary(self, horizon_sessions: int = 5) -> tuple[ResearchSummaryRow, ...]:
         rows = self.connection.execute(
             """
-            SELECT s.lane, s.pattern_type, s.market_regime, o.forward_return,
+            SELECT s.lane, s.opportunity_tier, s.pattern_type, s.market_regime,
+                   s.primary_dte, s.primary_delta, s.iv_to_realized_volatility,
+                   o.forward_return,
                    o.maximum_favorable_excursion, o.maximum_adverse_excursion, o.outcome
             FROM observations o
             JOIN signals s ON s.id = o.signal_id
             WHERE o.horizon_sessions = ?
-            ORDER BY s.lane, s.pattern_type, s.market_regime
+            ORDER BY s.lane, s.opportunity_tier, s.pattern_type, s.market_regime
             """,
             (horizon_sessions,),
         )
-        grouped: dict[tuple[str, str, str], list[sqlite3.Row]] = {}
+        grouped: dict[tuple[str, str, str, str, str, str, str], list[sqlite3.Row]] = {}
         for row in rows:
+            raw_dte = row["primary_dte"]
+            raw_delta = row["primary_delta"]
+            raw_iv_ratio = row["iv_to_realized_volatility"]
+            dte_bucket = (
+                "unavailable"
+                if raw_dte is None
+                else "7-13"
+                if int(raw_dte) <= 13
+                else "14-17"
+                if int(raw_dte) <= 17
+                else "18-24"
+            )
+            delta_bucket = (
+                "unavailable"
+                if raw_delta is None
+                else "below 0.55"
+                if float(raw_delta) < 0.55
+                else "0.55-0.69"
+                if float(raw_delta) < 0.70
+                else "0.70 plus"
+            )
+            volatility_bucket = (
+                "unavailable"
+                if raw_iv_ratio is None
+                else "IV at or below RV"
+                if float(raw_iv_ratio) <= 1
+                else "IV 1.01-1.50x RV"
+                if float(raw_iv_ratio) <= 1.5
+                else "IV above 1.50x RV"
+            )
             grouped.setdefault(
-                (str(row["lane"]), str(row["pattern_type"]), str(row["market_regime"])),
+                (
+                    str(row["lane"]),
+                    str(row["opportunity_tier"]),
+                    str(row["pattern_type"]),
+                    str(row["market_regime"]),
+                    dte_bucket,
+                    delta_bucket,
+                    volatility_bucket,
+                ),
                 [],
             ).append(row)
         output: list[ResearchSummaryRow] = []
-        for (lane, pattern, regime), values in grouped.items():
+        for (
+            lane,
+            opportunity_tier,
+            pattern,
+            regime,
+            dte_bucket,
+            delta_bucket,
+            volatility_bucket,
+        ), values in grouped.items():
             count = len(values)
             outcomes = [str(value["outcome"]) for value in values]
             output.append(
                 ResearchSummaryRow(
                     lane=lane,
+                    opportunity_tier=opportunity_tier,
                     pattern_type=pattern,
                     market_regime=regime,
+                    dte_bucket=dte_bucket,
+                    delta_bucket=delta_bucket,
+                    volatility_bucket=volatility_bucket,
                     horizon_sessions=horizon_sessions,
                     observation_count=count,
                     maturity=evidence_maturity(count),
@@ -495,18 +630,20 @@ class ResearchLedger:
             "",
             "Outcomes are descriptive evidence, not a profit claim or automatic threshold update.",
             "",
-            "| Lane | Pattern | Regime | N | Maturity | Median 5D | MFE | MAE | Confirmed | Invalidated | Unresolved |",
-            "|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|",
+            "| Lane | Tier | Pattern | Regime | DTE | Delta | IV/RV | N | Maturity | Median 5D | MFE | MAE | Confirmed | Invalidated | Unresolved |",
+            "|---|---|---|---|---|---|---|---:|---|---:|---:|---:|---:|---:|---:|",
         ]
         for row in rows:
             lines.append(
-                f"| {row.lane} | {row.pattern_type} | {row.market_regime} | {row.observation_count} | "
+                f"| {row.lane} | {row.opportunity_tier} | {row.pattern_type} | "
+                f"{row.market_regime} | {row.dte_bucket} | {row.delta_bucket} | "
+                f"{row.volatility_bucket} | {row.observation_count} | "
                 f"{row.maturity.value} | {row.median_forward_return or 0:.2f}% | "
                 f"{row.median_mfe or 0:.2f}% | {row.median_mae or 0:.2f}% | "
                 f"{row.confirmed_count} | {row.invalidated_count} | {row.unresolved_count} |"
             )
         if not rows:
-            lines.append("| No completed observations | - | - | 0 | exploratory | 0 | 0 | 0 | 0 | 0 | 0 |")
+            lines.append("| No completed observations | - | - | - | - | - | - | 0 | exploratory | 0 | 0 | 0 | 0 | 0 | 0 |")
         markdown_path.write_text("\n".join(lines), encoding="utf-8")
         json_path.write_text(
             json.dumps([asdict(row) for row in rows], indent=2, default=str), encoding="utf-8"

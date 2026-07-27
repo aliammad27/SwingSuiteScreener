@@ -35,6 +35,8 @@ from scanner.models import (
     AssetMetadata,
     Candidate,
     Candle,
+    CatalystSignal,
+    ContractEconomics,
     ContractSelection,
     DataTrust,
     EntryPlan,
@@ -43,6 +45,7 @@ from scanner.models import (
     EvidenceScores,
     MarketContext,
     MomentumResult,
+    OpportunityTier,
     PatternSignal,
     PatternStatus,
     RejectedRecord,
@@ -54,6 +57,12 @@ from scanner.models import (
     TrendAnalysis,
 )
 from scanner.momentum import calculate_momentum
+from scanner.opportunity import (
+    asymmetric_qualification_failures,
+    classify_opportunity_tier,
+    contract_economics,
+    detect_catalyst_signal,
+)
 from scanner.patterns import detect_best_pattern
 from scanner.providers.alpaca import AlpacaDataProvider
 from scanner.providers.base import EventRiskProvider, MarketDataProvider, OptionDataProvider
@@ -78,6 +87,7 @@ class _TechnicalRecord:
     entry: EntryPlan
     daily_realized_volatility: float | None
     provisional_scores: EvidenceScores
+    catalyst: CatalystSignal | None
 
 
 def _configure_logging() -> None:
@@ -276,6 +286,7 @@ def _technical_record(
         entry=entry,
         daily_realized_volatility=annualized_realized_volatility(daily),
         provisional_scores=scores,
+        catalyst=detect_catalyst_signal(daily, trend.atr, PROFILE),
     )
 
 
@@ -289,6 +300,8 @@ def _candidate_from_record(
     scores: EvidenceScores,
     state: ReviewState,
     reasons: tuple[str, ...],
+    opportunity_tier: OpportunityTier = OpportunityTier.WATCHLIST,
+    economics: ContractEconomics | None = None,
 ) -> Candidate:
     return Candidate(
         symbol=record.metadata.symbol,
@@ -309,10 +322,13 @@ def _candidate_from_record(
         scores=scores,
         state=state,
         reasons=reasons,
+        opportunity_tier=opportunity_tier,
+        catalyst=record.catalyst,
+        contract_economics=economics,
     )
 
 
-def _candidate_rank(candidate: Candidate) -> tuple[int, int]:
+def _candidate_rank(candidate: Candidate) -> tuple[int, int, int]:
     state_rank = {
         ReviewState.READY: 4,
         ReviewState.READY_VERIFY: 3,
@@ -320,6 +336,12 @@ def _candidate_rank(candidate: Candidate) -> tuple[int, int]:
         ReviewState.DEVELOPING: 1,
         ReviewState.REJECTED: 0,
     }[candidate.state]
+    tier_rank = {
+        OpportunityTier.S_TIER: 4,
+        OpportunityTier.A_PLUS: 3,
+        OpportunityTier.ASYMMETRIC: 2,
+        OpportunityTier.WATCHLIST: 1,
+    }[candidate.opportunity_tier]
     available_scores = [
         score
         for score in (
@@ -334,7 +356,7 @@ def _candidate_rank(candidate: Candidate) -> tuple[int, int]:
         if score is not None
     ]
     average_score = round(sum(available_scores) / len(available_scores))
-    return state_rank, average_score
+    return tier_rank, state_rank, average_score
 
 
 def _watchlist_eligible(
@@ -416,8 +438,19 @@ def run_scan(
             market=market_context,
             profile=PROFILE,
         )
+        asymmetric_path = (
+            bool(chart_failures)
+            and scan_type == ScanType.INTRADAY
+            and record.timing.entry_window_open
+            and record.timing.bullish_confirmation
+            and not asymmetric_qualification_failures(
+                record.metadata.lane,
+                record.provisional_scores,
+                PROFILE,
+            )
+        )
         if chart_failures:
-            if not _watchlist_eligible(record, chart_failures):
+            if not asymmetric_path and not _watchlist_eligible(record, chart_failures):
                 rejected.append(
                     RejectedRecord(
                         symbol=symbol,
@@ -430,24 +463,25 @@ def run_scan(
                     )
                 )
                 continue
-            event = _unchecked_event(symbol, as_of)
-            contracts = _empty_contracts(getattr(options, "option_feed", "unknown"))
-            candidates.append(
-                _candidate_from_record(
-                    record,
-                    market_context=market_context,
-                    event=event,
-                    contracts=contracts,
-                    data_trust=_unchecked_trust(
-                        getattr(market, "stock_feed", "unknown"),
-                        getattr(options, "option_feed", "unknown"),
-                    ),
-                    scores=record.provisional_scores,
-                    state=ReviewState.DEVELOPING,
-                    reasons=chart_failures,
+            if not asymmetric_path:
+                event = _unchecked_event(symbol, as_of)
+                contracts = _empty_contracts(getattr(options, "option_feed", "unknown"))
+                candidates.append(
+                    _candidate_from_record(
+                        record,
+                        market_context=market_context,
+                        event=event,
+                        contracts=contracts,
+                        data_trust=_unchecked_trust(
+                            getattr(market, "stock_feed", "unknown"),
+                            getattr(options, "option_feed", "unknown"),
+                        ),
+                        scores=record.provisional_scores,
+                        state=ReviewState.DEVELOPING,
+                        reasons=chart_failures,
+                    )
                 )
-            )
-            continue
+                continue
 
         try:
             event = events.event_risk(symbol, as_of, record.metadata.lane)
@@ -491,15 +525,19 @@ def run_scan(
             contract=0,
             risk=risk_score,
         )
-        event_failures = technical_qualification_failures(
-            lane=record.metadata.lane,
-            scores=pre_contract_scores,
-            trend=record.trend,
-            pattern=record.pattern,
-            timing=record.timing,
-            market=market_context,
-            event=event,
-            profile=PROFILE,
+        event_failures = (
+            ()
+            if asymmetric_path and event.status == EventRiskStatus.CLEAR
+            else technical_qualification_failures(
+                lane=record.metadata.lane,
+                scores=pre_contract_scores,
+                trend=record.trend,
+                pattern=record.pattern,
+                timing=record.timing,
+                market=market_context,
+                event=event,
+                profile=PROFILE,
+            )
         )
         if event_failures:
             rejected.append(
@@ -581,16 +619,48 @@ def run_scan(
             contract=contracts.score,
             risk=pre_contract_scores.risk,
         )
-        state, reasons = classify_candidate(
-            lane=record.metadata.lane,
+        economics = contract_economics(
+            contracts,
+            underlying_price=record.trend.close,
+            target_price=record.entry.target_price,
+            hold_sessions=record.entry.intended_hold_sessions[1],
+        )
+        if asymmetric_path:
+            if not data_trust.event_trusted:
+                state = ReviewState.REJECTED
+                reasons = data_trust.reasons
+            else:
+                state = ReviewState.DEVELOPING
+                reasons = tuple(
+                    sorted(
+                        set(
+                            (
+                                *chart_failures,
+                                *contracts.rejection_reasons,
+                                "asymmetric_research_only",
+                            )
+                        )
+                    )
+                )
+        else:
+            state, reasons = classify_candidate(
+                lane=record.metadata.lane,
+                scores=scores,
+                trend=record.trend,
+                pattern=record.pattern,
+                timing=record.timing,
+                market=market_context,
+                event=event,
+                contracts=contracts,
+                data_trust=data_trust,
+                profile=PROFILE,
+            )
+        opportunity_tier = classify_opportunity_tier(
+            state=state,
             scores=scores,
-            trend=record.trend,
-            pattern=record.pattern,
-            timing=record.timing,
-            market=market_context,
-            event=event,
-            contracts=contracts,
             data_trust=data_trust,
+            economics=economics,
+            asymmetric_path=asymmetric_path,
             profile=PROFILE,
         )
         candidate = _candidate_from_record(
@@ -602,6 +672,8 @@ def run_scan(
             scores=scores,
             state=state,
             reasons=reasons,
+            opportunity_tier=opportunity_tier,
+            economics=economics,
         )
         if state == ReviewState.REJECTED:
             rejected.append(

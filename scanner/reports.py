@@ -56,6 +56,27 @@ def _contract_lines(candidate: Candidate) -> list[str]:
         lines.append(
             "Alternatives: " + ", ".join(item.contract_symbol for item in selection.alternatives)
         )
+    economics = candidate.contract_economics
+    if economics is not None:
+        lines.extend(
+            [
+                f"Expected move / target move: {_fmt_optional(economics.expected_move)} / "
+                f"${economics.target_move:.2f}",
+                f"Target / expected move: {_fmt_optional(economics.target_to_expected_move, 'x')}",
+                f"Long-call breakeven: ${economics.long_call_breakeven:.2f} "
+                f"({economics.breakeven_move_percent:+.2f}%)",
+                f"Theta cost over {economics.theta_cost_sessions} sessions: "
+                f"{_fmt_optional(economics.theta_cost)} / "
+                f"{_fmt_optional(economics.theta_cost_percent, '%')} of ask",
+            ]
+        )
+        if economics.spread_short_strike is not None:
+            lines.append(
+                f"Debit-spread comparison: short ${economics.spread_short_strike:.2f}; "
+                f"debit {_fmt_optional(economics.spread_debit)}; "
+                f"max profit {_fmt_optional(economics.spread_max_profit)}; "
+                f"reward/risk {_fmt_optional(economics.spread_reward_to_risk, 'x')}"
+            )
     return lines
 
 
@@ -68,7 +89,8 @@ def _candidate_block(candidate: Candidate, index: int) -> list[str]:
     plan = candidate.entry_plan
     leadership = "N/A" if scores.leadership is None else str(scores.leadership)
     lines = [
-        f"{index}. {candidate.symbol} - {candidate.state.label}",
+        f"{index}. {candidate.symbol} - {candidate.opportunity_tier.label} - "
+        f"{candidate.state.label}",
         "",
         f"Lane: {candidate.lane.label}",
         f"Sector / peer: {candidate.sector} / {candidate.peer_etf}",
@@ -94,6 +116,8 @@ def _candidate_block(candidate: Candidate, index: int) -> list[str]:
         f"Data trust: {'trusted' if candidate.data_trust.trustworthy else 'verification required'} / "
         + (", ".join(candidate.data_trust.reasons) or "SIP, OPRA, event, and quote checks passed"),
     ]
+    if candidate.catalyst is not None:
+        lines.append(f"Catalyst style: {candidate.catalyst.summary}")
     lines.extend(_contract_lines(candidate))
     if candidate.reasons:
         lines.append("Pending checks: " + ", ".join(candidate.reasons))

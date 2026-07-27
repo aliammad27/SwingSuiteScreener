@@ -48,6 +48,31 @@ class WatchlistThresholds:
 
 
 @dataclass(frozen=True)
+class OpportunityTierProfile:
+    s_tier_minimum_composite: int
+    s_tier_minimum_contract: int
+    a_plus_minimum_composite: int
+    a_plus_minimum_contract: int
+    asymmetric_trend: int
+    asymmetric_leadership: int
+    asymmetric_setup: int
+    asymmetric_timing: int
+    asymmetric_market: int
+    asymmetric_risk: int
+    asymmetric_contract: int
+    asymmetric_minimum_target_to_expected_move: float
+    asymmetric_maximum_iv_to_realized_volatility: float
+
+
+@dataclass(frozen=True)
+class CatalystProfile:
+    gap_minimum_atr: float
+    relative_volume_minimum: float
+    maximum_age_bars: int
+    require_gap_midpoint_hold: bool
+
+
+@dataclass(frozen=True)
 class StrategyProfile:
     schema_version: int
     name: str
@@ -55,6 +80,8 @@ class StrategyProfile:
     validation_state: str
     thresholds: ReviewThresholds
     watchlist_thresholds: WatchlistThresholds
+    opportunity_tiers: OpportunityTierProfile
+    catalyst: CatalystProfile
     supportive_market_minimum: int
     mixed_market_minimum: int
     production_patterns: tuple[str, ...]
@@ -122,6 +149,8 @@ def load_strategy_profile() -> StrategyProfile:
     values = load_config("strategy")
     raw_thresholds = values["review_thresholds"]
     raw_watchlist = values["watchlist_thresholds"]
+    raw_tiers = values["opportunity_tiers"]
+    raw_catalyst = values["catalyst"]
     raw_market = values["market"]
     raw_patterns = values["patterns"]
     raw_events = values["event_risk"]
@@ -134,6 +163,8 @@ def load_strategy_profile() -> StrategyProfile:
         for item in (
             raw_thresholds,
             raw_watchlist,
+            raw_tiers,
+            raw_catalyst,
             raw_market,
             raw_patterns,
             raw_events,
@@ -162,6 +193,31 @@ def load_strategy_profile() -> StrategyProfile:
         setup=int(raw_watchlist["setup"]),
         maximum_candidates=int(raw_watchlist["maximum_candidates"]),
     )
+    opportunity_tiers = OpportunityTierProfile(
+        s_tier_minimum_composite=int(raw_tiers["s_tier"]["minimum_composite"]),
+        s_tier_minimum_contract=int(raw_tiers["s_tier"]["minimum_contract"]),
+        a_plus_minimum_composite=int(raw_tiers["a_plus"]["minimum_composite"]),
+        a_plus_minimum_contract=int(raw_tiers["a_plus"]["minimum_contract"]),
+        asymmetric_trend=int(raw_tiers["asymmetric"]["trend"]),
+        asymmetric_leadership=int(raw_tiers["asymmetric"]["leadership"]),
+        asymmetric_setup=int(raw_tiers["asymmetric"]["setup"]),
+        asymmetric_timing=int(raw_tiers["asymmetric"]["timing"]),
+        asymmetric_market=int(raw_tiers["asymmetric"]["market"]),
+        asymmetric_risk=int(raw_tiers["asymmetric"]["risk"]),
+        asymmetric_contract=int(raw_tiers["asymmetric"]["contract"]),
+        asymmetric_minimum_target_to_expected_move=float(
+            raw_tiers["asymmetric"]["minimum_target_to_expected_move"]
+        ),
+        asymmetric_maximum_iv_to_realized_volatility=float(
+            raw_tiers["asymmetric"]["maximum_iv_to_realized_volatility"]
+        ),
+    )
+    catalyst = CatalystProfile(
+        gap_minimum_atr=float(raw_catalyst["gap_minimum_atr"]),
+        relative_volume_minimum=float(raw_catalyst["relative_volume_minimum"]),
+        maximum_age_bars=int(raw_catalyst["maximum_age_bars"]),
+        require_gap_midpoint_hold=bool(raw_catalyst["require_gap_midpoint_hold"]),
+    )
     lanes: dict[StrategyLane, LaneProfile] = {}
     for lane in StrategyLane:
         raw_lane = raw_lanes.get(lane.value)
@@ -175,6 +231,8 @@ def load_strategy_profile() -> StrategyProfile:
         validation_state=str(values["validation_state"]),
         thresholds=thresholds,
         watchlist_thresholds=watchlist_thresholds,
+        opportunity_tiers=opportunity_tiers,
+        catalyst=catalyst,
         supportive_market_minimum=int(raw_market["supportive_minimum"]),
         mixed_market_minimum=int(raw_market["mixed_minimum"]),
         production_patterns=tuple(str(name) for name in raw_patterns["production"]),

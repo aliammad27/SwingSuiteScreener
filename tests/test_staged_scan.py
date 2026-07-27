@@ -102,7 +102,7 @@ def _install(monkeypatch, provider: FixtureDataProvider) -> None:
     )
 
 
-def test_developing_chart_does_not_fetch_events_or_options(monkeypatch) -> None:
+def test_asymmetric_research_finalist_fetches_events_and_options(monkeypatch) -> None:
     provider = CountingFixtureProvider("developing")
     _install(monkeypatch, provider)
     result = scan_module.run_scan(
@@ -111,9 +111,10 @@ def test_developing_chart_does_not_fetch_events_or_options(monkeypatch) -> None:
         scenario="developing",
     )
     assert len(result.developing) == 1
-    assert provider.event_calls == 0
-    assert provider.chain_calls == 0
-    assert provider.refresh_calls == 0
+    assert provider.event_calls == 1
+    assert provider.chain_calls == 1
+    assert provider.refresh_calls == 1
+    assert result.developing[0].opportunity_tier.value == "asymmetric"
 
 
 def test_hostile_market_keeps_strong_setup_on_watchlist(monkeypatch) -> None:

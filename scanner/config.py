@@ -114,6 +114,27 @@ def validate_configuration(fixture: bool = False) -> list[str]:
     all_patterns = production + context_only
     if len(all_patterns) != len(set(all_patterns)):
         raise ConfigurationError("Strategy pattern lists must not contain duplicates.")
+    opportunity_tiers = strategy.get("opportunity_tiers")
+    catalyst = strategy.get("catalyst")
+    if not isinstance(opportunity_tiers, dict) or set(opportunity_tiers) != {
+        "s_tier",
+        "a_plus",
+        "asymmetric",
+    }:
+        raise ConfigurationError(
+            "Strategy opportunity_tiers must define s_tier, a_plus, and asymmetric."
+        )
+    if not isinstance(catalyst, dict):
+        raise ConfigurationError("Strategy catalyst settings must be a mapping.")
+    for tier_name in ("s_tier", "a_plus", "asymmetric"):
+        if not isinstance(opportunity_tiers[tier_name], dict):
+            raise ConfigurationError(
+                f"Strategy opportunity_tiers.{tier_name} must be a mapping."
+            )
+    if float(catalyst.get("gap_minimum_atr", 0)) <= 0:
+        raise ConfigurationError("catalyst.gap_minimum_atr must be positive.")
+    if int(catalyst.get("maximum_age_bars", 0)) < 1:
+        raise ConfigurationError("catalyst.maximum_age_bars must be at least one.")
     storage = load_config("storage")
     notifications = load_config("notifications")
     for key in ("maximum_candidates_per_message", "maximum_candidate_cards"):

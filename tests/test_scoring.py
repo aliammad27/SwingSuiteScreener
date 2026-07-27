@@ -39,16 +39,16 @@ def test_indicative_feed_forces_verify_contract() -> None:
     assert "option_feed_not_opra" in candidate.reasons
 
 
-def test_developing_fixture_stops_before_option_fetch() -> None:
+def test_developing_fixture_is_an_asymmetric_research_candidate() -> None:
     result = run_scan(ScanType.INTRADAY, fixture=True, scenario="developing")
     assert len(result.developing) == 1
     candidate = result.developing[0]
     assert candidate.state == ReviewState.DEVELOPING
-    assert candidate.contracts.primary is None
-    assert candidate.contracts.requoted_count == 0
-    assert candidate.contracts.rejection_reasons == (
-        "not_fetched_until_technical_finalist",
-    )
+    assert candidate.contracts.primary is not None
+    assert candidate.contracts.requoted_count == 3
+    assert candidate.opportunity_tier.value == "asymmetric"
+    assert candidate.contract_economics is not None
+    assert "asymmetric_research_only" in candidate.reasons
 
 
 def test_post_close_is_management_only_and_does_not_fetch_contracts() -> None:
