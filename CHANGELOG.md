@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Replaced the paid Massive earnings dependency with a free Alpha Vantage earnings
+  calendar adapter that caches the calendar across ticker checks.
+- Removed the unused Massive historical options adapter and secret wiring.
+- Retimed scheduled workflows around 8:45 AM ET premarket and 4:20 PM ET
+  post-close targets with backup dedupe.
 - Replaced six hourly intraday wakeups with three decision scans at 10:45 AM,
   12:30 PM, and 2:15 PM ET.
 - Added a gated Aggressive Weekly contract mode for confirmed S quality breakouts and
@@ -85,8 +90,8 @@
   in the visual atlas.
 - Added a two-stage scanner that fetches chains only for technical and event-clear
   finalists, then re-quotes the top three contracts.
-- Added SIP, OPRA, quote-stability, event-source freshness, Massive earnings, and
-  official Fed/BLS macro-event trust gates.
+- Added SIP, OPRA, quote-stability, event-source freshness, free earnings-calendar,
+  and official Fed/BLS macro-event trust gates.
 - Added separate tactical warning, tactical failure, structural invalidation,
   confirmed pivot, and 2R planning-objective fields.
 - Rebuilt the HTML screener as a dense sortable, filterable, comparable operational

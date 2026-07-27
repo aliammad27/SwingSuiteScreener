@@ -2,17 +2,18 @@ name: Post Close Scan
 
 on:
   schedule:
-    # 4:20 PM EST or 5:20 PM EDT. One dependable market-day digest avoids
-    # duplicate backup runs while still using completed regular-session bars.
-    - cron: "20 21 * * 1-5"
+    # ET-first backups around 4:20 PM ET across daylight and standard time.
+    # The schedule gate waits when early and rejects stale starts after 5:50 PM ET.
+    - cron: "15 20,21 * * 1-5"
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: swingsuite-post-close
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   post-close:
@@ -26,7 +27,7 @@ jobs:
       ALPACA_OPTION_FEED: ${{ vars.ALPACA_OPTION_FEED || 'indicative' }}
       ALPACA_MIN_REQUEST_INTERVAL_SECONDS: "0.45"
       ALPACA_MAX_RETRIES: "8"
-      MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
+      ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY || secrets.ALPHAVANTAGE_API_KEY || secrets.ALPHA_VANTAGE_KEY || secrets.ALPHAVANTAGE_APIKEY || '' }}
       TELEGRAM_BOT_USERNAME: AlisScreenerBot
       TELEGRAM_BOT_URL: https://t.me/AlisScreenerBot
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -46,14 +47,38 @@ jobs:
           path: |
             data/state
             data/research
+            data/raw
           key: swingsuite-state-${{ github.run_id }}
           restore-keys: |
             swingsuite-state-
+      - name: Skip backup wakeup if already delivered
+        if: github.event_name == 'schedule'
+        id: dedupe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cutoff=$(date -u -d '6 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          count=$(gh run list --workflow "${{ github.workflow }}" --event schedule --status success --limit 10 \
+            --json createdAt --jq "[.[] | select(.createdAt >= \"$cutoff\")] | length" 2>/dev/null || echo 0)
+          if [ "${count:-0}" -gt 0 ]; then
+            echo "A scheduled run of this workflow already succeeded in the current window."
+            echo "Skipping duplicate backup wakeup cleanly (no stale alert, no red failure)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No prior success in the current window; proceeding to the schedule gate."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Wait until 4:20 PM ET
+        if: github.event_name == 'schedule' && steps.dedupe.outputs.skip != 'true'
+        run: python -m scanner.schedule_gate --target 16:20 --max-late-minutes 90
       - name: Run post close scan
+        if: steps.dedupe.outputs.skip != 'true'
         run: python -m scanner.run_scan post_close
       - name: Evaluate completed research outcomes
+        if: steps.dedupe.outputs.skip != 'true'
         run: python -m scanner.run_scan evaluate-signals
       - name: Build research evidence report
+        if: steps.dedupe.outputs.skip != 'true'
         run: python -m scanner.run_scan research-report
       - name: Save scanner state
         if: always()
@@ -62,6 +87,7 @@ jobs:
           path: |
             data/state
             data/research
+            data/raw
           key: swingsuite-state-${{ github.run_id }}
       - name: Upload report artifact
         if: always()

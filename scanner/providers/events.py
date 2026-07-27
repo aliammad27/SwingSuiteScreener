@@ -3,16 +3,19 @@ from __future__ import annotations
 import math
 import os
 import re
+from csv import DictReader
 from datetime import UTC, date, datetime, time, timedelta
 from email.utils import parsedate_to_datetime
 from html import unescape
+from io import StringIO
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import requests
 
 from scanner.calendars import next_trading_day
-from scanner.config import load_config
+from scanner.config import ROOT, load_config
 from scanner.models import (
     EventRisk,
     EventRiskStatus,
@@ -112,11 +115,38 @@ class ConfiguredEventRiskProvider(EventRiskProvider):
 class TrustedEventRiskProvider(EventRiskProvider):
     """Read-only earnings and macro-event adapter with fail-closed fallbacks."""
 
-    def __init__(self) -> None:
-        self.massive_key = os.environ.get("MASSIVE_API_KEY")
-        self.massive_base_url = os.environ.get("MASSIVE_BASE_URL", "https://api.massive.com")
+    def __init__(self, earnings_cache_path: Path | None = None) -> None:
+        self.alpha_vantage_key = self._alpha_vantage_key()
+        self.alpha_vantage_base_url = os.environ.get(
+            "ALPHA_VANTAGE_BASE_URL",
+            "https://www.alphavantage.co/query",
+        )
+        self.alpha_vantage_horizon = os.environ.get(
+            "ALPHA_VANTAGE_EARNINGS_HORIZON",
+            "3month",
+        )
+        raw_cache_path = os.environ.get("ALPHA_VANTAGE_EARNINGS_CACHE_PATH")
+        self.earnings_cache_path = (
+            earnings_cache_path
+            if earnings_cache_path is not None
+            else Path(raw_cache_path or ROOT / "data/raw/alpha_vantage_earnings_calendar.csv")
+        )
         self.fallback = ConfiguredEventRiskProvider()
         self._macro_cache: tuple[datetime, tuple[EventWindow, ...]] | None = None
+        self._earnings_cache: tuple[datetime, dict[str, tuple[date, ...]]] | None = None
+
+    @staticmethod
+    def _alpha_vantage_key() -> str | None:
+        for name in (
+            "ALPHA_VANTAGE_API_KEY",
+            "ALPHAVANTAGE_API_KEY",
+            "ALPHA_VANTAGE_KEY",
+            "ALPHAVANTAGE_APIKEY",
+        ):
+            value = os.environ.get(name)
+            if value:
+                return value
+        return None
 
     def _get(
         self,
@@ -133,64 +163,124 @@ class TrustedEventRiskProvider(EventRiskProvider):
         response.raise_for_status()
         return response.text, response.headers
 
-    def _earnings(self, symbol: str, as_of: datetime) -> EventRisk | None:
-        if not self.massive_key:
+    @staticmethod
+    def _parse_alpha_vantage_earnings_csv(text: str) -> dict[str, tuple[date, ...]]:
+        reader = DictReader(StringIO(text))
+        fields = {str(field).lower(): str(field) for field in (reader.fieldnames or [])}
+        symbol_field = fields.get("symbol")
+        report_date_field = fields.get("reportdate") or fields.get("report_date")
+        if symbol_field is None or report_date_field is None:
+            raise RuntimeError(
+                "Alpha Vantage earnings calendar response did not include CSV headers."
+            )
+        records: dict[str, list[date]] = {}
+        for row in reader:
+            symbol = str(row.get(symbol_field, "")).strip().upper()
+            raw_report_date = str(row.get(report_date_field, "")).strip()
+            if not symbol or not raw_report_date:
+                continue
+            try:
+                report_date = date.fromisoformat(raw_report_date)
+            except ValueError:
+                continue
+            records.setdefault(symbol, []).append(report_date)
+        return {
+            symbol: tuple(sorted(set(report_dates)))
+            for symbol, report_dates in records.items()
+        }
+
+    def _read_cached_earnings(self, as_of: datetime) -> tuple[datetime, dict[str, tuple[date, ...]]] | None:
+        try:
+            source_timestamp = datetime.fromtimestamp(
+                self.earnings_cache_path.stat().st_mtime,
+                UTC,
+            )
+        except OSError:
             return None
-        horizon = as_of.date() + timedelta(days=20)
-        response = requests.get(
-            f"{self.massive_base_url}/benzinga/v1/earnings",
+        if source_timestamp > as_of.astimezone(UTC):
+            return None
+        maximum_age = timedelta(hours=PROFILE.maximum_event_source_age_hours)
+        if as_of.astimezone(UTC) - source_timestamp > maximum_age:
+            return None
+        text = self.earnings_cache_path.read_text(encoding="utf-8")
+        return source_timestamp, self._parse_alpha_vantage_earnings_csv(text)
+
+    def _write_cached_earnings(self, text: str) -> None:
+        try:
+            self.earnings_cache_path.parent.mkdir(parents=True, exist_ok=True)
+            self.earnings_cache_path.write_text(text, encoding="utf-8")
+        except OSError:
+            return
+
+    def _earnings_records(self, as_of: datetime) -> tuple[datetime, dict[str, tuple[date, ...]]] | None:
+        if self._earnings_cache is not None:
+            cached_at, cached_records = self._earnings_cache
+            age = as_of.astimezone(UTC) - cached_at
+            if timedelta(0) <= age <= timedelta(hours=12):
+                return cached_at, cached_records
+
+        cached = self._read_cached_earnings(as_of)
+        if cached is not None:
+            self._earnings_cache = cached
+            return cached
+
+        if not self.alpha_vantage_key:
+            return None
+
+        text, headers = self._get(
+            self.alpha_vantage_base_url,
             params={
-                "apiKey": self.massive_key,
-                "ticker": symbol,
-                "date.gte": as_of.date().isoformat(),
-                "date.lte": horizon.isoformat(),
-                "sort": "date.asc",
-                "limit": "10",
+                "function": "EARNINGS_CALENDAR",
+                "horizon": self.alpha_vantage_horizon,
+                "apikey": self.alpha_vantage_key,
             },
-            headers={"User-Agent": _USER_AGENT},
-            timeout=20,
         )
-        response.raise_for_status()
-        source_timestamp = _source_time(response.headers, as_of)
-        payload = response.json()
-        if not isinstance(payload, dict):
-            raise RuntimeError("Massive earnings response must be a mapping.")
-        raw_results = payload.get("results", [])
-        if not isinstance(raw_results, list):
-            raise RuntimeError("Massive earnings results must be a list.")
-        records = [item for item in raw_results if isinstance(item, dict)]
-        if not records:
+        source_timestamp = _source_time(headers, as_of)
+        records = self._parse_alpha_vantage_earnings_csv(text)
+        self._write_cached_earnings(text)
+        self._earnings_cache = (source_timestamp, records)
+        return self._earnings_cache
+
+    def _earnings(self, symbol: str, as_of: datetime) -> EventRisk | None:
+        cached = self._earnings_records(as_of)
+        if cached is None:
+            return None
+        source_timestamp, records = cached
+        horizon = as_of.date() + timedelta(days=95)
+        symbol_dates = tuple(
+            report_date
+            for report_date in records.get(symbol.upper(), ())
+            if as_of.date() <= report_date <= horizon
+        )
+        if not symbol_dates:
             return EventRisk(
                 symbol=symbol,
                 status=EventRiskStatus.CLEAR,
                 earnings_date=None,
-                summary="No earnings event returned inside the v5 research horizon.",
-                source="Massive Benzinga earnings",
+                summary="No expected earnings event returned inside the free calendar horizon.",
+                source="Alpha Vantage earnings calendar",
                 checked_at=as_of,
                 source_timestamp=source_timestamp,
             )
-        raw_date = records[0].get("date")
-        if not raw_date:
-            return None
-        earnings_date = date.fromisoformat(str(raw_date))
+        earnings_date = symbol_dates[0]
         cutoff = _trading_session_cutoff(
             as_of.date(),
             PROFILE.lane(StrategyLane.LEADER_WEEKLY).intended_hold_sessions[1]
             + PROFILE.leader_earnings_buffer_sessions,
         )
         blocked = earnings_date <= cutoff
-        status_text = str(records[0].get("date_status", "unconfirmed"))
-        updated = str(records[0].get("last_updated", "not supplied"))
         event_at = datetime.combine(earnings_date, time(9, 30), NY)
         window = EventWindow(
             event_type=EventType.EARNINGS,
             starts_at=datetime.combine(earnings_date, time(0, 0), NY),
             event_at=event_at,
             blocked_until=datetime.combine(earnings_date, time(16, 0), NY),
-            source="Massive Benzinga earnings",
+            source="Alpha Vantage earnings calendar",
             source_timestamp=source_timestamp,
             summary=(
-                f"Earnings {status_text} for {earnings_date.isoformat()}; record updated {updated}."
+                "Expected earnings "
+                f"for {earnings_date.isoformat()}; calendar refreshed "
+                f"{source_timestamp.astimezone(UTC).strftime('%Y-%m-%d %H:%M UTC')}."
             ),
         )
         return EventRisk(

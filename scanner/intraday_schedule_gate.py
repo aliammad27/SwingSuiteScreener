@@ -25,7 +25,7 @@ def intraday_schedule_decision(
     now: datetime,
     targets: tuple[str, ...],
     *,
-    maximum_late_minutes: int = 30,
+    maximum_late_minutes: int = 45,
 ) -> IntradayScheduleDecision:
     local = now.astimezone(NY)
     if not is_trading_day(local.date()):
@@ -81,7 +81,15 @@ def main() -> int:
     schedule = load_config("schedule")
     raw_targets = schedule.get("intraday_scan_times", [])
     targets = tuple(str(value) for value in raw_targets)
-    decision = intraday_schedule_decision(datetime.now(NY), targets)
+    raw_tolerance = schedule.get("github_schedule_tolerance", {})
+    tolerance = 45
+    if isinstance(raw_tolerance, dict):
+        tolerance = int(raw_tolerance.get("intraday_max_late_minutes", tolerance))
+    decision = intraday_schedule_decision(
+        datetime.now(NY),
+        targets,
+        maximum_late_minutes=tolerance,
+    )
     print(decision.reason)
     _write_github_output(decision)
     return 0 if decision.should_run or not args.require_match else 2

@@ -78,3 +78,18 @@ def test_postgres_storage_requires_configured_dsn(monkeypatch) -> None:
     monkeypatch.delenv("DATABASE_URL", raising=False)
     with pytest.raises(ConfigurationError, match="DATABASE_URL is required"):
         validate_configuration(fixture=True)
+
+
+def test_live_configuration_warns_for_missing_free_earnings_key(monkeypatch) -> None:
+    for name in (
+        "ALPHA_VANTAGE_API_KEY",
+        "ALPHAVANTAGE_API_KEY",
+        "ALPHA_VANTAGE_KEY",
+        "ALPHAVANTAGE_APIKEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    warnings = validate_configuration(fixture=False)
+
+    assert any("Alpha Vantage earnings calendar key is not configured" in item for item in warnings)
+    assert all("Massive" not in item for item in warnings)

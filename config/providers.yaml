@@ -8,6 +8,7 @@ alpaca:
   feed: sip
   option_feed: opra
 research:
-  historical_options: massive
-  require_point_in_time_quotes: true
+  earnings_calendar: alpha_vantage_free
+  historical_options: none
+  require_point_in_time_quotes: false
   conservative_fill_model: true

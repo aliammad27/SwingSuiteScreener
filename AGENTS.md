@@ -152,7 +152,7 @@ cannot repair a failed daily thesis.
 - leaders are blocked when earnings fall inside maximum hold plus two trading sessions
 - index entries are blocked around FOMC, CPI, and Employment Situation releases until
   the first completed post-event hour
-- Massive Benzinga earnings is used when entitled
+- Alpha Vantage free earnings calendar is used when a free key is configured
 - Federal Reserve and U.S. BLS calendars are authoritative for macro windows
 - unavailable, missing, stale, or unknown event evidence fails closed
 

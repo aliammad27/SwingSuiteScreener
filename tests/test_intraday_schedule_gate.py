@@ -33,7 +33,7 @@ def test_intraday_gate_skips_extra_dst_cron_and_late_start() -> None:
         TARGETS,
     )
     late = intraday_schedule_decision(
-        datetime(2026, 7, 16, 11, 16, tzinfo=NY),
+        datetime(2026, 7, 16, 11, 31, tzinfo=NY),
         TARGETS,
     )
     assert not extra.should_run

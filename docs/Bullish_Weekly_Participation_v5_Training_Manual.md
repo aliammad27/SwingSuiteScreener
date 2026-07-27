@@ -891,9 +891,9 @@ This protects against:
 - uncertain announcement timing
 - inability to rely on the daily invalidation through a gap
 
-The system uses Massive Benzinga earnings when the entitlement is available. The
-endpoint is documented in the
-[Massive Partners API](https://massive.com/docs/rest/partners/overview).
+The system uses Alpha Vantage's free earnings calendar when a free key is available.
+If the free earnings key is missing or stale, leader earnings evidence falls back to
+configured events and remains untrusted when unknown.
 
 No leader position should be held through earnings under this process.
 
@@ -1795,7 +1795,7 @@ It does not change the strategy automatically.
 - [ ] Review leader earnings calendar
 - [ ] Confirm SIP entitlement
 - [ ] Confirm OPRA entitlement
-- [ ] Confirm Massive entitlement when used
+- [ ] Confirm Alpha Vantage free earnings key when leader setups matter
 - [ ] Review prior Ready - Verify candidates
 - [ ] Remove candidates with event or structural changes
 - [ ] Confirm report timestamps
@@ -1900,8 +1900,8 @@ Do not weaken thresholds solely to produce candidates.
 
 Likely causes:
 
-- `MASSIVE_API_KEY` missing
-- entitlement unavailable
+- `ALPHA_VANTAGE_API_KEY` missing
+- free calendar unavailable or rate-limited
 - configured fallback is unknown
 - source timestamp missing
 - source older than 24 hours
@@ -2114,7 +2114,7 @@ Market data:
 
 Events:
 
-- [Massive Partners API](https://massive.com/docs/rest/partners/overview)
+- [Alpha Vantage Earnings Calendar](https://www.alphavantage.co/documentation/)
 - [Federal Reserve FOMC Calendars](https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm)
 - [U.S. BLS Release Calendar](https://www.bls.gov/schedule/news_release/bls.ics)
 

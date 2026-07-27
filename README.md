@@ -98,7 +98,7 @@ A fully trusted evidence set requires:
 - option quote age of two minutes or less
 - stable refreshed quotes
 - fresh event-source timestamps
-- Massive Benzinga earnings when entitled
+- Alpha Vantage free earnings calendar
 - official Federal Reserve and U.S. BLS macro calendars
 
 Index contracts require spread at or below 3%, open interest of at least 2,000,
@@ -123,8 +123,10 @@ cp .env.example .env
 ```
 
 Add read-only market-data and notification credentials to `.env`. SIP and OPRA
-entitlements are required for full trust. `MASSIVE_API_KEY` is used for entitled
-earnings and point-in-time historical option research.
+entitlements are required for full trust. `ALPHA_VANTAGE_API_KEY` is used for the
+free earnings calendar; `ALPHAVANTAGE_API_KEY`, `ALPHA_VANTAGE_KEY`, and
+`ALPHAVANTAGE_APIKEY` are also accepted aliases so existing free-key secrets can be
+reused.
 
 Notification deduplication uses atomic local JSON state by default. Hosted deployments
 can set `STORAGE_BACKEND=postgres` and `DATABASE_URL` for durable PostgreSQL or
@@ -149,9 +151,11 @@ blockers, and contract economics when they qualify for asymmetric research. The
 post-close GitHub Action sends one digest every market day. A missing or
 failed Telegram digest fails the workflow instead of producing a false green run.
 
-Intraday scans run at 10:45 AM, 12:30 PM, and 2:15 PM ET on trading days. The
-post-close workflow evaluates completed signal outcomes and rebuilds the research
-evidence report after sending the daily digest.
+Premarket validation targets 8:45 AM ET on market days with backup GitHub wakeups
+that are deduped before Telegram sends. Intraday scans run at 10:45 AM, 12:30 PM,
+and 2:15 PM ET on trading days. The post-close digest targets 4:20 PM ET year-round,
+then evaluates completed signal outcomes and rebuilds the research evidence report
+after sending the daily digest.
 
 ## Commands
 

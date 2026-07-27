@@ -2,13 +2,11 @@ name: Premarket Validation
 
 on:
   schedule:
-    # Primary: fires 30 min before 8:45 AM ET (EDT=12:15 UTC, EST=13:15 UTC).
-    # Gate waits the remaining minutes; rejects if GitHub starts > 30 min late.
-    - cron: "15 12 * * 1-5"
-    # Backup: fires 20 min after target (EDT=13:05 UTC). Same 30-min gate tolerance.
-    # Concurrency hold ensures this is rejected if the primary already succeeded.
-    # If the primary got no runner, this backup delivers the notification instead.
-    - cron: "5 13 * * 1-5"
+    # ET-first backups around 8:45 AM ET across daylight and standard time.
+    # The schedule gate waits when early, rejects stale starts after 10:15 AM ET,
+    # and the success dedupe prevents duplicate Telegram alerts.
+    - cron: "35 12,13 * * 1-5"
+    - cron: "0 14 * * 1-5"
   workflow_dispatch:
 
 permissions:
@@ -31,7 +29,7 @@ jobs:
       ALPACA_OPTION_FEED: ${{ vars.ALPACA_OPTION_FEED || 'indicative' }}
       ALPACA_MIN_REQUEST_INTERVAL_SECONDS: "0.45"
       ALPACA_MAX_RETRIES: "8"
-      MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
+      ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY || secrets.ALPHAVANTAGE_API_KEY || secrets.ALPHA_VANTAGE_KEY || secrets.ALPHAVANTAGE_APIKEY || '' }}
       TELEGRAM_BOT_USERNAME: AlisScreenerBot
       TELEGRAM_BOT_URL: https://t.me/AlisScreenerBot
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -51,6 +49,7 @@ jobs:
           path: |
             data/state
             data/research
+            data/raw
           key: swingsuite-state-${{ github.run_id }}
           restore-keys: |
             swingsuite-state-
@@ -73,13 +72,13 @@ jobs:
           fi
       - name: Wait until 8:45 AM ET
         if: github.event_name == 'schedule' && steps.dedupe.outputs.skip != 'true'
-        run: python -m scanner.schedule_gate --target 08:45 --max-late-minutes 270
+        run: python -m scanner.schedule_gate --target 08:45 --max-late-minutes 90
       - name: Run premarket validation
         if: steps.dedupe.outputs.skip != 'true'
         run: python -m scanner.run_scan premarket
       - name: Hold schedule window
         if: github.event_name == 'schedule' && steps.dedupe.outputs.skip != 'true'
-        run: python -m scanner.schedule_gate --target 08:45 --max-late-minutes 270 --hold-max-late-minutes 90 --hold-window-open
+        run: python -m scanner.schedule_gate --target 08:45 --max-late-minutes 90 --hold-max-late-minutes 95 --hold-window-open
       - name: Save scanner state
         if: always()
         uses: actions/cache/save@v5
@@ -87,6 +86,7 @@ jobs:
           path: |
             data/state
             data/research
+            data/raw
           key: swingsuite-state-${{ github.run_id }}
       - name: Upload report artifact
         if: always()

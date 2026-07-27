@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import requests
 
@@ -103,6 +103,61 @@ def test_source_time_prefers_content_last_modified_timestamp() -> None:
         0,
         tzinfo=UTC,
     )
+
+
+def test_alpha_vantage_earnings_calendar_csv_parser() -> None:
+    payload = """symbol,name,reportDate,fiscalDateEnding,estimate,currency
+NVDA,NVIDIA Corp,2026-08-26,2026-07-31,1.24,USD
+NVDA,NVIDIA Corp,2026-11-18,2026-10-31,1.31,USD
+MSFT,Microsoft Corp,not-a-date,2026-06-30,3.25,USD
+"""
+
+    records = TrustedEventRiskProvider._parse_alpha_vantage_earnings_csv(payload)
+
+    assert records["NVDA"] == (date(2026, 8, 26), date(2026, 11, 18))
+    assert "MSFT" not in records
+
+
+def test_alpha_vantage_earnings_calendar_blocks_leader_and_reuses_cache(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("ALPHA_VANTAGE_API_KEY", "test-key")
+    provider = TrustedEventRiskProvider(
+        earnings_cache_path=tmp_path / "alpha_vantage_earnings_calendar.csv",
+    )
+    as_of = datetime(2026, 7, 16, 12, 0, tzinfo=NY)
+    calls = 0
+    payload = """symbol,name,reportDate,fiscalDateEnding,estimate,currency
+NVDA,NVIDIA Corp,2026-07-21,2026-06-30,1.24,USD
+"""
+
+    def fake_get(
+        url: str,
+        *,
+        params: dict[str, str] | None = None,
+    ) -> tuple[str, dict[str, str]]:
+        nonlocal calls
+        calls += 1
+        assert url == "https://www.alphavantage.co/query"
+        assert params == {
+            "function": "EARNINGS_CALENDAR",
+            "horizon": "3month",
+            "apikey": "test-key",
+        }
+        return payload, {"Date": "Thu, 16 Jul 2026 14:00:00 GMT"}
+
+    monkeypatch.setattr(provider, "_get", fake_get)
+
+    blocked = provider.event_risk("NVDA", as_of, StrategyLane.LEADER_WEEKLY)
+    clear = provider.event_risk("MSFT", as_of, StrategyLane.LEADER_WEEKLY)
+
+    assert calls == 1
+    assert blocked.status == EventRiskStatus.BLOCKED
+    assert blocked.earnings_date == date(2026, 7, 21)
+    assert blocked.source == "Alpha Vantage earnings calendar"
+    assert clear.status == EventRiskStatus.CLEAR
+    assert provider.earnings_cache_path.exists()
 
 
 def test_index_event_trust_uses_oldest_official_source_timestamp(

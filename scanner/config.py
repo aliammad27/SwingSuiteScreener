@@ -45,6 +45,18 @@ def get_env(name: str, default: str | None = None) -> str | None:
     return os.environ.get(name, default)
 
 
+def alpha_vantage_api_key_configured() -> bool:
+    return any(
+        os.environ.get(name)
+        for name in (
+            "ALPHA_VANTAGE_API_KEY",
+            "ALPHAVANTAGE_API_KEY",
+            "ALPHA_VANTAGE_KEY",
+            "ALPHAVANTAGE_APIKEY",
+        )
+    )
+
+
 def validate_configuration(fixture: bool = False) -> list[str]:
     load_local_env()
     required = [
@@ -197,8 +209,9 @@ def validate_configuration(fixture: bool = False) -> list[str]:
         warnings.append(
             "The configured option feed is not OPRA; candidates will require contract verification."
         )
-    if not os.environ.get("MASSIVE_API_KEY"):
+    if not alpha_vantage_api_key_configured():
         warnings.append(
-            "Historical option data is not configured; long-call optimization remains unvalidated."
+            "Alpha Vantage earnings calendar key is not configured; leader earnings checks "
+            "fall back to config/events.yaml and remain untrusted when unknown."
         )
     return warnings

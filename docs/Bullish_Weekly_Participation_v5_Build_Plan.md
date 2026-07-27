@@ -263,16 +263,15 @@ The final 3:35 PM ET scan is management-only.
 
 ### 10.1 Leaders
 
-Use the Massive Benzinga earnings endpoint when entitled. Block when earnings fall
-inside:
+Use the Alpha Vantage free earnings calendar when a free key is configured. Block
+when earnings fall inside:
 
 ```text
 lane maximum hold + 2 trading sessions
 ```
 
-The adapter records source, checked timestamp, source timestamp, event date, event
-status, and summary. Massive documents the partner endpoint at
-[GET /benzinga/v1/earnings](https://massive.com/docs/rest/partners/overview).
+The adapter records source, checked timestamp, source timestamp, event date, and
+summary. Alpha Vantage documents the free CSV calendar as `EARNINGS_CALENDAR`.
 
 ### 10.2 Indexes
 

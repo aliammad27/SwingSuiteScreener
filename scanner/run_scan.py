@@ -10,6 +10,7 @@ from scanner.calendars import is_trading_day
 from scanner.clocks import NY
 from scanner.config import (
     ConfigurationError,
+    alpha_vantage_api_key_configured,
     load_config,
     load_local_env,
     validate_configuration,
@@ -875,8 +876,8 @@ def readiness_check() -> int:
     print(f"Equity feed: {os.environ.get('ALPACA_FEED', 'sip')}")
     print(f"Option feed: {os.environ.get('ALPACA_OPTION_FEED', 'opra')}")
     print(
-        "Historical option research: "
-        + ("Massive key configured" if os.environ.get("MASSIVE_API_KEY") else "not configured")
+        "Free earnings calendar: "
+        + ("Alpha Vantage key configured" if alpha_vantage_api_key_configured() else "not configured")
     )
     for warning in warnings:
         print(f"WARNING: {warning}")
@@ -1000,9 +1001,18 @@ def main() -> int:
                 raise ConfigurationError("--scheduled is only valid for a live intraday scan.")
             from scanner.intraday_schedule_gate import intraday_schedule_decision
 
-            raw_targets = load_config("schedule").get("intraday_scan_times", [])
+            schedule = load_config("schedule")
+            raw_targets = schedule.get("intraday_scan_times", [])
             targets = tuple(str(value) for value in raw_targets)
-            decision = intraday_schedule_decision(datetime.now(NY), targets)
+            raw_tolerance = schedule.get("github_schedule_tolerance", {})
+            tolerance = 45
+            if isinstance(raw_tolerance, dict):
+                tolerance = int(raw_tolerance.get("intraday_max_late_minutes", tolerance))
+            decision = intraday_schedule_decision(
+                datetime.now(NY),
+                targets,
+                maximum_late_minutes=tolerance,
+            )
             print(decision.reason)
             if not decision.should_run:
                 print("Scan skipped safely: no configured ET scan window is active.")

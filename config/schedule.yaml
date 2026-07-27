@@ -5,5 +5,9 @@ intraday_scan_times:
   - "10:45"
   - "12:30"
   - "14:15"
+github_schedule_tolerance:
+  premarket_max_late_minutes: 90
+  post_close_max_late_minutes: 90
+  intraday_max_late_minutes: 45
 respect_holidays: true
 respect_half_days: true
