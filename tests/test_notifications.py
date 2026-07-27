@@ -68,10 +68,13 @@ def test_digest_is_compact_and_contains_required_context() -> None:
     result = run_scan(ScanType.INTRADAY, fixture=True)
     message = completion_message(result, Path("reports/intraday/latest.md"))
     assert len(message) <= 4096
-    assert "Market Supportive" in message
+    assert "Market: Supportive" in message
+    assert "Summary:" in message
+    assert "Decision:" in message
+    assert "Actionable setups:" in message
     assert "Index Weekly" in message
     assert "Leader Weekly" in message
-    assert "Call:" in message
+    assert "Option:" in message
     assert "BULLISH WEEKLY V5" in message
     assert len(message) <= 4096
 
@@ -129,11 +132,12 @@ def test_premium_scenarios_can_be_hidden_without_hiding_underlying_tp() -> None:
 def test_developing_candidates_stay_in_compact_watchlist() -> None:
     result = run_scan(ScanType.INTRADAY, fixture=True, scenario="developing")
     message = completion_message(result, Path("report.md"))
-    assert "WATCHLIST - NOT ENTRY READY" in message
+    assert "Watchlist, not entry ready:" in message
+    assert "Decision: no clean entry right now" in message
     assert result.developing[0].symbol in message
     assert "Asymmetric Research" in message
-    assert "Economics: expected move $" in message
     assert "Needs:" in message
+    assert "Option:" in message
 
 
 def test_asymmetric_research_candidate_receives_a_full_card() -> None:
@@ -147,7 +151,7 @@ def test_asymmetric_research_candidate_receives_a_full_card() -> None:
 
 def test_fixture_digest_is_labeled_simulated() -> None:
     result = run_scan(ScanType.INTRADAY, fixture=True, scenario="ready")
-    assert "SIMULATED FIXTURE - NOT CURRENT MARKET DATA" in completion_message(
+    assert "SIMULATED FIXTURE, NOT CURRENT MARKET DATA" in completion_message(
         result, Path("report.md")
     )
 
@@ -155,7 +159,7 @@ def test_fixture_digest_is_labeled_simulated() -> None:
 def test_no_setups_message_treats_cash_as_a_valid_state() -> None:
     result = run_scan(ScanType.INTRADAY, fixture=True, scenario="zero")
     message = completion_message(result, Path("report.md"))
-    assert "Cash is a valid state" in message
+    assert "cash is a valid state" in message
 
 
 def test_failed_digest_is_retried_before_snapshot_is_recorded(
