@@ -25,7 +25,7 @@ def intraday_schedule_decision(
     now: datetime,
     targets: tuple[str, ...],
     *,
-    maximum_late_minutes: int = 45,
+    maximum_late_minutes: int = 135,
 ) -> IntradayScheduleDecision:
     local = now.astimezone(NY)
     if not is_trading_day(local.date()):
@@ -41,8 +41,20 @@ def intraday_schedule_decision(
             second=0,
             microsecond=0,
         )
-        if target_at <= local <= target_at + timedelta(minutes=maximum_late_minutes):
-            management_only = target_time > entry_end
+        latest_allowed = target_at + timedelta(minutes=maximum_late_minutes)
+        if target_time <= entry_end:
+            entry_end_at = local.replace(
+                hour=entry_end.hour,
+                minute=entry_end.minute,
+                second=0,
+                microsecond=0,
+            )
+            latest_allowed = min(latest_allowed, entry_end_at)
+        if target_at <= local <= latest_allowed:
+            management_only = (
+                target_time > entry_end
+                or local.time().replace(tzinfo=None) > entry_end
+            )
             return IntradayScheduleDecision(
                 True,
                 target_text,

@@ -77,7 +77,7 @@ def gate_decision(
         "late",
         0,
         (
-            "GitHub started this job too late for the intended market window: "
+            "The scheduler started this job too late for the intended market window: "
             f"target was {target_at.strftime('%Y-%m-%d %I:%M %p %Z')}, "
             f"current time is {local_now.strftime('%Y-%m-%d %I:%M %p %Z')}, "
             f"late by {late_by} minutes."

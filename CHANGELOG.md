@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Moved premarket validation to a 6:00 AM ET target with a hard 9:00 AM ET
+  deadline, added DST-safe backup wakeups and intraday recovery deduplication, and
+  prevented delayed intraday runs from crossing the 2:45 PM ET entry cutoff.
 - Replaced the paid Massive earnings dependency with a free Alpha Vantage earnings
   calendar adapter that caches the calendar across ticker checks.
 - Removed the unused Massive historical options adapter and secret wiring.

@@ -20,6 +20,14 @@ def test_configuration_valid_fixture() -> None:
     assert notifications["show_premium_scenarios"] is True
 
 
+def test_schedule_recovery_windows_are_authoritative() -> None:
+    schedule = load_config("schedule")
+
+    assert schedule["premarket_time"] == "06:00"
+    assert schedule["github_schedule_tolerance"]["premarket_max_late_minutes"] == 180
+    assert schedule["github_schedule_tolerance"]["intraday_max_late_minutes"] == 135
+
+
 def test_bullish_weekly_v5_lanes_are_authoritative() -> None:
     assert PROFILE.schema_version == 5
     assert PROFILE.name == "Bullish Weekly Participation v5"

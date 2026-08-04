@@ -20,17 +20,18 @@ def test_intraday_gate_skips_removed_windows_and_late_start() -> None:
         datetime(2026, 7, 16, 10, 50, tzinfo=NY),
         TARGETS,
     )
-    old_final = intraday_schedule_decision(
-        datetime(2026, 7, 16, 14, 20, tzinfo=NY),
+    recovered = intraday_schedule_decision(
+        datetime(2026, 7, 16, 14, 44, tzinfo=NY),
         TARGETS,
     )
-    late = intraday_schedule_decision(
-        datetime(2026, 7, 16, 13, 16, tzinfo=NY),
+    after_cutoff = intraday_schedule_decision(
+        datetime(2026, 7, 16, 14, 46, tzinfo=NY),
         TARGETS,
     )
     assert not old_open.should_run
-    assert not old_final.should_run
-    assert not late.should_run
+    assert recovered.should_run
+    assert recovered.target == "12:30"
+    assert not after_cutoff.should_run
 
 
 def test_intraday_gate_skips_exchange_holiday_and_closed_session() -> None:

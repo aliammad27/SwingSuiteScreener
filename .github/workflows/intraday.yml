@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: swingsuite-intraday
@@ -50,12 +51,29 @@ jobs:
           key: swingsuite-state-${{ github.run_id }}
           restore-keys: |
             swingsuite-state-
+      - name: Skip backup wakeup if already completed
+        if: github.event_name == 'schedule'
+        id: dedupe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cutoff=$(date -u -d '3 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          count=$(gh run list --workflow "${{ github.workflow }}" --event schedule --status success --limit 10 \
+            --json createdAt --jq "[.[] | select(.createdAt >= \"$cutoff\")] | length" 2>/dev/null || echo 0)
+          if [ "${count:-0}" -gt 0 ]; then
+            echo "A scheduled intraday run already completed in the current recovery window."
+            echo "Skipping duplicate backup wakeup cleanly."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No prior successful intraday run in the current recovery window."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Check configured ET scan window
         id: gate
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'schedule' && steps.dedupe.outputs.skip != 'true'
         run: python -m scanner.intraday_schedule_gate
       - name: Run decision-window scan
-        if: github.event_name == 'workflow_dispatch' || steps.gate.outputs.should_run == 'true'
+        if: github.event_name == 'workflow_dispatch' || (steps.dedupe.outputs.skip != 'true' && steps.gate.outputs.should_run == 'true')
         run: python -m scanner.run_scan intraday
       - name: Save scanner state
         if: always()

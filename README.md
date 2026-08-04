@@ -152,11 +152,13 @@ blockers, and contract economics when they qualify for asymmetric research. The
 post-close GitHub Action sends one digest every market day. A missing or
 failed Telegram digest fails the workflow instead of producing a false green run.
 
-Premarket validation targets 8:45 AM ET on market days with backup GitHub wakeups
-that are deduped before Telegram sends. The only intraday scan runs at 12:30 PM ET
-on trading days. The post-close digest targets 6:00 PM ET year-round, then evaluates
-completed signal outcomes and rebuilds the research evidence report after sending
-the daily digest.
+Premarket validation targets 6:00 AM ET on market days, with backup GitHub wakeups
+that are deduped before Telegram sends. The premarket gate has a hard 9:00 AM ET
+deadline and never sends a stale midday digest. The only intraday scan targets 12:30
+PM ET on trading days, with scheduler recovery allowed through the 2:45 PM ET entry
+cutoff. The post-close digest targets 6:00 PM ET year-round, then evaluates completed
+signal outcomes and rebuilds the research evidence report after sending the daily
+digest.
 
 ## Commands
 

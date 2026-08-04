@@ -7,8 +7,8 @@ services:
   - type: cron
     name: swingsuite-premarket
     runtime: docker
-    schedule: "45 12 * * 1-5"
-    dockerCommand: "python -m scanner.schedule_gate --target 08:45 --max-late-minutes 20 && python -m scanner.run_scan premarket"
+    schedule: "0 10 * * 1-5"
+    dockerCommand: "python -m scanner.schedule_gate --target 06:00 --max-late-minutes 180 && python -m scanner.run_scan premarket"
   - type: cron
     name: swingsuite-intraday-midday
     runtime: docker

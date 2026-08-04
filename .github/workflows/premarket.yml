@@ -2,11 +2,10 @@ name: Premarket Validation
 
 on:
   schedule:
-    # ET-first backups around 8:45 AM ET across daylight and standard time.
-    # The schedule gate waits when early, rejects stale starts after 10:15 AM ET,
-    # and the success dedupe prevents duplicate Telegram alerts.
-    - cron: "35 12,13 * * 1-5"
-    - cron: "0 14 * * 1-5"
+    # Early ET-first backups across daylight and standard time. The 6:00 AM ET
+    # gate waits when early, rejects starts after the 9:00 AM deadline, and the
+    # success dedupe prevents duplicate Telegram alerts.
+    - cron: "0 10,11,12,13 * * 1-5"
   workflow_dispatch:
 
 permissions:
@@ -70,15 +69,15 @@ jobs:
             echo "No prior success in the current window; proceeding to the schedule gate."
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Wait until 8:45 AM ET
-        if: github.event_name == 'schedule' && steps.dedupe.outputs.skip != 'true'
-        run: python -m scanner.schedule_gate --target 08:45 --max-late-minutes 90
+      - name: Wait until 6:00 AM ET
+        if: steps.dedupe.outputs.skip != 'true'
+        run: python -m scanner.schedule_gate --target 06:00 --max-late-minutes 180
       - name: Run premarket validation
         if: steps.dedupe.outputs.skip != 'true'
         run: python -m scanner.run_scan premarket
       - name: Hold schedule window
         if: github.event_name == 'schedule' && steps.dedupe.outputs.skip != 'true'
-        run: python -m scanner.schedule_gate --target 08:45 --max-late-minutes 90 --hold-max-late-minutes 95 --hold-window-open
+        run: python -m scanner.schedule_gate --target 06:00 --max-late-minutes 180 --hold-max-late-minutes 95 --hold-window-open
       - name: Save scanner state
         if: always()
         uses: actions/cache/save@v5

@@ -17,6 +17,37 @@ def test_schedule_gate_waits_before_target() -> None:
     assert decision.wait_seconds == 300
 
 
+def test_premarket_gate_waits_before_six_am_target() -> None:
+    decision = gate_decision(
+        now=datetime(2026, 6, 22, 5, 55, tzinfo=NY),
+        target=parse_target_time("06:00"),
+        max_late_minutes=180,
+    )
+
+    assert decision.action == "wait"
+    assert decision.wait_seconds == 300
+
+
+def test_premarket_gate_runs_until_nine_am_deadline() -> None:
+    decision = gate_decision(
+        now=datetime(2026, 6, 22, 8, 59, tzinfo=NY),
+        target=parse_target_time("06:00"),
+        max_late_minutes=180,
+    )
+
+    assert decision.action == "run"
+
+
+def test_premarket_gate_rejects_after_nine_am_deadline() -> None:
+    decision = gate_decision(
+        now=datetime(2026, 6, 22, 9, 1, tzinfo=NY),
+        target=parse_target_time("06:00"),
+        max_late_minutes=180,
+    )
+
+    assert decision.action == "late"
+
+
 def test_schedule_gate_runs_inside_late_window() -> None:
     decision = gate_decision(
         now=datetime(2026, 6, 22, 8, 52, tzinfo=NY),

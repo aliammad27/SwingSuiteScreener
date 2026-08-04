@@ -273,10 +273,28 @@ def _check_deployment_contract(root: Path, errors: list[str]) -> None:
         text = render_path.read_text(encoding="utf-8")
         if "scanner.schedule_gate --target 18:00" not in text:
             errors.append("Render post-close cron must use the Eastern-time schedule gate")
-        if "scanner.schedule_gate --target 08:45" not in text:
+        if "scanner.schedule_gate --target 06:00" not in text:
             errors.append("Render premarket cron must use the Eastern-time schedule gate")
         if "scanner.run_scan intraday --scheduled" not in text:
             errors.append("Render intraday cron must require a configured ET window")
+    premarket_workflow = root / ".github" / "workflows" / "premarket.yml"
+    if premarket_workflow.is_file():
+        text = premarket_workflow.read_text(encoding="utf-8")
+        if 'cron: "0 10,11,12,13 * * 1-5"' not in text:
+            errors.append("GitHub premarket workflow must keep its DST-safe early wakeups")
+        if "scanner.schedule_gate --target 06:00 --max-late-minutes 180" not in text:
+            errors.append("GitHub premarket workflow must enforce the 6:00-9:00 ET window")
+        if (
+            "if: steps.dedupe.outputs.skip != 'true'\n"
+            "        run: python -m scanner.schedule_gate --target 06:00"
+            not in text
+        ):
+            errors.append("GitHub premarket manual dispatches must respect the 9:00 AM ET deadline")
+    intraday_workflow = root / ".github" / "workflows" / "intraday.yml"
+    if intraday_workflow.is_file():
+        text = intraday_workflow.read_text(encoding="utf-8")
+        if "actions: read" not in text or "Skip backup wakeup if already completed" not in text:
+            errors.append("GitHub intraday workflow must deduplicate scheduled backup wakeups")
     deprecated_actions = (
         "actions/checkout@v4",
         "actions/setup-python@v5",

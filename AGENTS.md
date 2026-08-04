@@ -70,7 +70,8 @@ materially stronger.
 - a completed 60-minute bar owns timing
 - only completed candles count
 - new entries are eligible from 10:30 AM through 2:45 PM ET
-- scheduled decision scans run at 10:45 AM, 12:30 PM, and 2:15 PM ET
+- the scheduled decision scan targets 12:30 PM ET, with scheduler recovery allowed
+  through the 2:45 PM ET entry cutoff
 - SPY and QQQ provide market and intraday confirmation
 - price must remain above SMA200
 - market regime must not be hostile
